@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -36,7 +36,7 @@ namespace Telegram.ViewModels.Settings
         EmojiArchived
     }
 
-    public class SettingsStickersViewModel : ViewModelBase, IHandle
+    public partial class SettingsStickersViewModel : ViewModelBase, IHandle
     {
         private StickersType _type;
 
@@ -46,7 +46,7 @@ namespace Telegram.ViewModels.Settings
         public SettingsStickersViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
         {
-            Items = new DiffObservableCollection<StickerSetInfo>(new StickerSetInfoDiffHandler());
+            //Items = new DiffObservableCollection<StickerSetInfo>(new StickerSetInfoDiffHandler());
 
             //StickerSetShareCommand = new RelayCommand<StickerSetInfo>(StickerSetShareExecute);
             //StickerSetCopyCommand = new RelayCommand<StickerSetInfo>(StickerSetCopyExecute);
@@ -100,7 +100,7 @@ namespace Telegram.ViewModels.Settings
 
             if (_type is StickersType.Installed or StickersType.Masks or StickersType.Emoji)
             {
-                Items = new ItemsCollection(ClientService, StickerType);
+                Items ??= new ItemsCollection(ClientService, StickerType);
 
                 ClientService.Send(new GetArchivedStickerSets(StickerType, 0, 1), result =>
                 {
@@ -120,11 +120,11 @@ namespace Telegram.ViewModels.Settings
             }
             else if (_type is StickersType.Archived or StickersType.MasksArchived or StickersType.EmojiArchived)
             {
-                Items = new ArchivedCollection(ClientService, StickerType);
+                Items ??= new ArchivedCollection(ClientService, StickerType);
             }
             else if (_type == StickersType.Trending)
             {
-                Items = new TrendingCollection(ClientService, StickerType);
+                Items ??= new TrendingCollection(ClientService, StickerType);
             }
 
             return Task.CompletedTask;
@@ -169,7 +169,7 @@ namespace Telegram.ViewModels.Settings
                     var union = await ClientService.SendAsync(new GetRecentStickers(_type == StickersType.Masks));
                     if (union is Stickers recents && recents.StickersValue.Count > 0)
                     {
-                        BeginOnUIThread(() => Items.ReplaceDiff(new[] { new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, Array.Empty<ClosedVectorPath>(), false, false, false, false, StickerType, false, false, false, recents.StickersValue.Count, recents.StickersValue) }.Union(stickerSets.Sets)));
+                        BeginOnUIThread(() => Items.ReplaceDiff(new[] { new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, null, false, false, false, false, StickerType, false, false, false, recents.StickersValue.Count, recents.StickersValue) }.Union(stickerSets.Sets)));
                     }
                     else
                     {
@@ -213,7 +213,7 @@ namespace Telegram.ViewModels.Settings
                     {
                         if (resultRecent is Stickers recents && recents.StickersValue.Count > 0)
                         {
-                            BeginOnUIThread(() => Items.ReplaceDiff(new[] { new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, Array.Empty<ClosedVectorPath>(), false, false, false, false, StickerType, false, false, false, recents.StickersValue.Count, recents.StickersValue) }.Union(stickerSets.Sets)));
+                            BeginOnUIThread(() => Items.ReplaceDiff(new[] { new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, null, false, false, false, false, StickerType, false, false, false, recents.StickersValue.Count, recents.StickersValue) }.Union(stickerSets.Sets)));
                         }
                         else
                         {
@@ -353,7 +353,7 @@ namespace Telegram.ViewModels.Settings
             }
             else
             {
-                await StickersPopup.ShowAsync(stickerSet.Id);
+                await StickersPopup.ShowAsync(NavigationService, stickerSet.Id);
             }
         }
 
@@ -411,12 +411,7 @@ namespace Telegram.ViewModels.Settings
             NavigationService.Navigate(typeof(SettingsStickersPage), (int)type);
         }
 
-        public void OpenReaction()
-        {
-            NavigationService.Navigate(typeof(SettingsQuickReactionPage));
-        }
-
-        public class ItemsCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
+        public partial class ItemsCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
         {
             private readonly IClientService _clientService;
             private readonly StickerType _type;
@@ -439,7 +434,7 @@ namespace Telegram.ViewModels.Settings
                         var recentResponse = await _clientService.SendAsync(new GetRecentStickers(_type is StickerTypeMask));
                         if (recentResponse is Stickers stickers && stickers.StickersValue.Count > 0)
                         {
-                            Add(new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, Array.Empty<ClosedVectorPath>(), false, false, false, false, _type, false, false, false, stickers.StickersValue.Count, stickers.StickersValue));
+                            Add(new StickerSetInfo(0, Strings.RecentStickers, "tg/recentlyUsed", null, null, false, false, false, false, _type, false, false, false, stickers.StickersValue.Count, stickers.StickersValue));
                         }
                     }
 
@@ -463,7 +458,7 @@ namespace Telegram.ViewModels.Settings
             public bool HasMoreItems => _hasMoreItems;
         }
 
-        public class ArchivedCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
+        public partial class ArchivedCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
         {
             private readonly IClientService _clientService;
             private readonly StickerType _type;
@@ -509,7 +504,7 @@ namespace Telegram.ViewModels.Settings
             public bool HasMoreItems => _hasMoreItems;
         }
 
-        public class TrendingCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
+        public partial class TrendingCollection : DiffObservableCollection<StickerSetInfo>, ISupportIncrementalLoading
         {
             private readonly IClientService _clientService;
             private readonly StickerType _type;

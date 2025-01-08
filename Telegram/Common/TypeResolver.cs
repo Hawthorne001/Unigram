@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -14,7 +14,7 @@ using Windows.Storage;
 
 namespace Telegram.Views
 {
-    public class TypeResolver
+    public partial class TypeResolver
     {
         private static readonly TypeResolver _instance = new TypeResolver();
 
@@ -188,13 +188,6 @@ namespace Telegram.Views
             }
 
             return result != null;
-        }
-
-        public TService Resolve<TService, TDelegate>(TDelegate delegato)
-            where TService : IDelegable<TDelegate>
-            where TDelegate : IViewModelDelegate
-        {
-            return Resolve<TService, TDelegate>(delegato, int.MaxValue);
         }
 
         public TService Resolve<TService, TDelegate>(TDelegate delegato, int session)

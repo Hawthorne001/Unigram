@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -34,7 +34,7 @@ namespace Telegram.Views.Settings.Password
 
         public PasswordState PasswordState { get; private set; }
 
-        private async void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             try
             {
@@ -43,7 +43,7 @@ namespace Telegram.Views.Settings.Password
 
                 if (string.Equals(password, hint))
                 {
-                    ToastPopup.Show(Strings.PasswordAsHintError);
+                    ToastPopup.Show(XamlRoot, Strings.PasswordAsHintError);
                     args.Cancel = true;
                     return;
                 }
@@ -69,11 +69,11 @@ namespace Telegram.Views.Settings.Password
 
                     if (error.CodeEquals(ErrorCode.FLOOD))
                     {
-                        AlertsService.ShowFloodWaitAlert(error.Message);
+                        AlertsService.ShowFloodWaitAlert(XamlRoot, error.Message);
                     }
                     else
                     {
-                        await MessagePopup.ShowAsync(target: null, error.Message, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                        await MessagePopup.ShowAsync(XamlRoot, target: null, error.Message, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                     }
 
                     args.Cancel = true;
@@ -87,10 +87,6 @@ namespace Telegram.Views.Settings.Password
             }
 
             IsPrimaryButtonEnabled = true;
-        }
-
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
         }
 
         private void Field_TextChanged(object sender, TextChangedEventArgs e)

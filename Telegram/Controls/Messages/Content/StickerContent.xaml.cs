@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -19,7 +19,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class StickerContent : HyperlinkButton, IContent, IPlayerView
+    public sealed partial class StickerContent : HyperlinkButton, IContent, IPlayerView
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -72,13 +72,13 @@ namespace Telegram.Controls.Messages.Content
         {
             _message = message;
 
-            LayoutRoot.Constraint = message;
-
             var sticker = GetContent(message, out bool premium);
             if (sticker == null || !_templateApplied)
             {
                 return;
             }
+
+            LayoutRoot.Constraint = message;
 
             var flip = false;
             var maxSize = 180d;
@@ -210,9 +210,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return true;
             }
-            else if (content is MessageText text && text.WebPage != null && !primary)
+            else if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return text.WebPage.Sticker != null;
+                return text.LinkPreview.Type is LinkPreviewTypeSticker;
             }
 
             return false;
@@ -233,10 +233,10 @@ namespace Telegram.Controls.Messages.Content
                 premium = sticker.IsPremium;
                 return sticker.Sticker;
             }
-            else if (content is MessageText text && text.WebPage != null)
+            else if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeSticker previewSticker)
             {
                 premium = false;
-                return text.WebPage.Sticker;
+                return previewSticker.Sticker;
             }
 
             premium = false;
@@ -265,7 +265,7 @@ namespace Telegram.Controls.Messages.Content
                 }
 
                 var response = await _message.ClientService.SendAsync(new ClickAnimatedEmojiMessage(_message.ChatId, _message.Id));
-                if (response is Sticker interaction)
+                if (response is Sticker interaction && this.IsConnected())
                 {
                     PlayInteraction(_message, interaction);
                 }
@@ -318,9 +318,10 @@ namespace Telegram.Controls.Messages.Content
             {
                 var dispatcher = DispatcherQueue.GetForCurrentThread();
 
+                var height = 180 * message.ClientService.Config.GetNamedNumber("emojies_animated_zoom", 0.625f);
                 var player = new AnimatedImage();
-                player.Width = Player.Height * 3;
-                player.Height = Player.Height * 3;
+                player.Width = height * 3;
+                player.Height = height * 3;
                 //player.IsFlipped = !message.IsOutgoing;
                 player.LoopCount = 1;
                 player.IsHitTestVisible = false;
@@ -343,14 +344,14 @@ namespace Telegram.Controls.Messages.Content
                 };
 
                 var random = new Random();
-                var x = Player.Height * (0.08 - (0.16 * random.NextDouble()));
-                var y = Player.Height * (0.08 - (0.16 * random.NextDouble()));
-                var shift = Player.Width * 0.075;
+                var x = height * (0.08 - (0.16 * random.NextDouble()));
+                var y = height * (0.08 - (0.16 * random.NextDouble()));
+                var shift = height * 0.075;
 
-                var left = (Player.Width * 2) - shift + x;
+                var left = (height * 2) - shift + x;
                 var right = 0 + shift - x;
-                var top = Player.Height + y;
-                var bottom = Player.Height - y;
+                var top = height + y;
+                var bottom = height - y;
 
                 if (message.IsOutgoing)
                 {

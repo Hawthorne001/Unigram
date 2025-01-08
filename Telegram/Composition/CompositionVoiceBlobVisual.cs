@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using Telegram.Common;
+using Telegram.Navigation;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
@@ -8,7 +9,7 @@ using Windows.UI.Xaml.Hosting;
 
 namespace Telegram.Composition
 {
-    public class CompositionVoiceBlobVisual
+    public partial class CompositionVoiceBlobVisual
     {
         private readonly SpriteVisual _visual;
 
@@ -31,10 +32,13 @@ namespace Telegram.Composition
         {
             _maxLevel = maxLevel;
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
+            var owner = ElementCompositionPreview.GetElementVisual(element);
 
             var size = new Vector2(width, height);
             var halfSize = size / 2;
+
+            owner.CenterPoint = new Vector3(halfSize, 0);
 
             var gradient = compositor.CreateRectangleGeometry();
             var small = compositor.CreateEllipseGeometry();

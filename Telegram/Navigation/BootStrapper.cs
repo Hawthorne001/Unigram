@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,11 +12,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Navigation.Services;
-using Telegram.Services.ViewService;
+using Telegram.Services;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
-using Windows.ApplicationModel.ExtendedExecution;
 using Windows.System;
+using Windows.UI.Composition;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
@@ -32,7 +32,7 @@ namespace Telegram.Navigation
         /// If a developer overrides this method, the developer can resolve DataContext or unwrap DataContext 
         /// available for the Page object when using a MVVM pattern that relies on a wrapped/porxy around ViewModels
         /// </summary>
-        public virtual INavigable ViewModelForPage(UIElement page, int sessionId) => null;
+        public virtual ViewModelBase ViewModelForPage(UIElement page, int sessionId) => null;
 
         public static new BootStrapper Current { get; private set; }
 
@@ -44,6 +44,10 @@ namespace Telegram.Navigation
         public UISettings UISettings => _uiSettings ??= new UISettings();
 
         public double TextScaleFactor { get; private set; }
+
+        // This is just a wrapper around current window's compositor.
+        // This is done to simplify the porting to WinUI 3 (as there's no concept of current window)
+        public Compositor Compositor => Window.Current.Compositor;
 
         public BootStrapper()
         {
@@ -89,25 +93,31 @@ namespace Telegram.Navigation
 
         private void OnActivated(object sender, WindowActivatedEventArgs e)
         {
-            OnWindowActivated(e.WindowActivationState != CoreWindowActivationState.Deactivated);
+            if (sender is Window window)
+            {
+                OnWindowActivated(window, e.WindowActivationState != CoreWindowActivationState.Deactivated);
+            }
         }
 
         private void OnClosed(object sender, CoreWindowEventArgs e)
         {
             SystemNavigationManager.GetForCurrentView().BackRequested -= BackHandler;
 
-            Window.Current.Activated -= OnActivated;
-            Window.Current.Closed -= OnClosed;
+            if (sender is Window window)
+            {
+                window.Activated -= OnActivated;
+                window.Closed -= OnClosed;
 
-            OnWindowClosed();
+                OnWindowClosed(window);
+            }
         }
 
-        protected virtual void OnWindowClosed()
+        protected virtual void OnWindowClosed(Window window)
         {
 
         }
 
-        protected virtual void OnWindowActivated(bool active)
+        protected virtual void OnWindowActivated(Window window, bool active)
         {
 
         }
@@ -206,7 +216,7 @@ namespace Telegram.Navigation
             Logger.Info();
 
             // sometimes activate requires a frame to be built
-            if (Window.Current.Content == null)
+            if (Window.Current.Content == null && e is not ShareTargetActivatedEventArgs)
             {
                 Logger.Info("Calling", member: nameof(InternalActivated));
                 InitializeFrame(e);
@@ -330,7 +340,7 @@ namespace Telegram.Navigation
             //}
             var handled = NavigationService?.CanGoBack == false;
 
-            RaiseBackRequested(VirtualKey.GoBack, ref handled);
+            RaiseBackRequested(null, VirtualKey.GoBack, ref handled);
             args.Handled = handled;
         }
 
@@ -339,13 +349,13 @@ namespace Telegram.Navigation
         public void RaiseBackRequested()
         {
             var handled = false;
-            RaiseBackRequested(VirtualKey.GoBack, ref handled);
+            RaiseBackRequested(null, VirtualKey.GoBack, ref handled);
         }
 
-        public void RaiseBackRequested(VirtualKey key)
+        public void RaiseBackRequested(XamlRoot xamlRoot, VirtualKey key)
         {
             var handled = false;
-            RaiseBackRequested(key, ref handled);
+            RaiseBackRequested(xamlRoot, key, ref handled);
         }
 
         /// <summary>
@@ -354,7 +364,7 @@ namespace Telegram.Navigation
         /// Views or Viewodels can override this behavior by handling the BackRequested 
         /// event and setting the Handled property of the BackRequestedEventArgs to true.
         /// </summary>
-        private void RaiseBackRequested(VirtualKey key, ref bool handled)
+        private void RaiseBackRequested(XamlRoot xamlRoot, VirtualKey key, ref bool handled)
         {
             Logger.Info();
 
@@ -365,7 +375,10 @@ namespace Telegram.Navigation
                 return;
             }
 
-            var popups = VisualTreeHelper.GetOpenPopups(Window.Current);
+            var popups = xamlRoot == null
+                ? VisualTreeHelper.GetOpenPopups(Window.Current)
+                : VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
+
             foreach (var popup in popups)
             {
                 if (popup.Child is INavigablePage page)
@@ -530,21 +543,21 @@ namespace Telegram.Navigation
         /// A developer should call this when creating a new/secondary frame.
         /// The shell back button should only be setup one time.
         /// </summary>
-        public INavigationService NavigationServiceFactory(BackButton backButton, int session, string id, bool root)
+        public INavigationService NavigationServiceFactory(WindowContext window, BackButton backButton, int session, string id, bool root)
         {
             Logger.Info($"{nameof(backButton)}: {backButton}");
 
-            return NavigationServiceFactory(backButton, new Frame(), session, id, root);
+            return NavigationServiceFactory(window, backButton, new Frame(), session, id, root);
         }
 
         /// <summary>
         /// Creates the NavigationService instance for given Frame.
         /// </summary>
-        protected virtual INavigationService CreateNavigationService(Frame frame, int session, string id, bool root)
+        protected virtual INavigationService CreateNavigationService(WindowContext window, Frame frame, int session, string id, bool root)
         {
             Logger.Info($"Frame: {frame}");
 
-            return new NavigationService(frame, session, id);
+            return new NavigationService(window, frame, session, id);
         }
 
         /// <summary>
@@ -554,7 +567,7 @@ namespace Telegram.Navigation
         /// A developer should call this when creating a new/secondary frame.
         /// The shell back button should only be setup one time.
         /// </summary>
-        public INavigationService NavigationServiceFactory(BackButton backButton, Frame frame, int session, string id, bool root)
+        public INavigationService NavigationServiceFactory(WindowContext window, BackButton backButton, Frame frame, int session, string id, bool root)
         {
             Logger.Info($"{nameof(backButton)}: {backButton} {nameof(frame)}: {frame}");
 
@@ -569,7 +582,7 @@ namespace Telegram.Navigation
                 }
             }
 
-            var navigationService = CreateNavigationService(frame, session, id, root);
+            var navigationService = CreateNavigationService(window, frame, session, id, root);
             navigationService.FrameFacade.BackButtonHandling = backButton;
             WindowContext.Current.NavigationServices.Add(navigationService);
 
@@ -615,17 +628,9 @@ namespace Telegram.Navigation
 
             CallOnInitialize(false, e);
 
-            if (WindowContext.Current?.Content == null)
+            if (WindowContext.Current.Content == null)
             {
-                // This can happen from ShareTarget
-                if (WindowContext.Current == null)
-                {
-                    Window.Current.Content = CreateRootElement(e);
-                }
-                else
-                {
-                    WindowContext.Current.Content = CreateRootElement(e);
-                }
+                WindowContext.Current.Content = CreateRootElement(e, WindowContext.Current);
             }
             else
             {
@@ -647,7 +652,7 @@ namespace Telegram.Navigation
         ///  By default, Template 10 will setup the root element to be a Template 10
         ///  Modal Dialog control. If you desire something different, you can set it here.
         /// </summary>
-        public abstract UIElement CreateRootElement(IActivatedEventArgs e);
+        public abstract UIElement CreateRootElement(IActivatedEventArgs e, WindowContext window);
 
         public abstract UIElement CreateRootElement(INavigationService navigationService);
 
@@ -683,12 +688,6 @@ namespace Telegram.Navigation
 
         #region lifecycle logic
 
-        public bool AutoRestoreAfterTerminated { get; set; } = true;
-        public bool AutoExtendExecutionSession { get; set; } = true;
-        public bool AutoSuspendAllFrames { get; set; } = true;
-
-        private readonly LifecycleLogic _LifecycleLogic = new LifecycleLogic();
-
         private void OnResuming(object sender, object e)
         {
             Logger.Info();
@@ -715,16 +714,6 @@ namespace Telegram.Navigation
                 //}
             }
             catch { }
-        }
-
-        private async Task<bool> CallAutoRestoreAsync(ILaunchActivatedEventArgs e, bool restored)
-        {
-            if (!AutoRestoreAfterTerminated)
-            {
-                return false;
-            }
-
-            return await _LifecycleLogic.AutoRestoreAsync(e, NavigationService);
         }
 
         private async void OnSuspending(object sender, SuspendingEventArgs e)
@@ -757,92 +746,6 @@ namespace Telegram.Navigation
 
         public enum AdditionalKinds { Primary, Toast, SecondaryTile, Other, JumpListItem }
 
-        /// <summary>
-        /// This determines the simplest case for starting. This should handle 80% of common scenarios. 
-        /// When Other is returned the developer must determine start manually using IActivatedEventArgs.Kind
-        /// </summary>
-        public static AdditionalKinds DetermineStartCause(IActivatedEventArgs args)
-        {
-            Logger.Info($"Kind: {args.Kind}");
-
-            if (args is ToastNotificationActivatedEventArgs)
-            {
-                return AdditionalKinds.Toast;
-            }
-            var e = args as ILaunchActivatedEventArgs;
-            if (e?.TileId == DefaultTileID && string.IsNullOrEmpty(e?.Arguments))
-            {
-                return AdditionalKinds.Primary;
-            }
-            else if (e?.TileId == DefaultTileID && !string.IsNullOrEmpty(e?.Arguments))
-            {
-                return AdditionalKinds.JumpListItem;
-            }
-            else if (!string.IsNullOrEmpty(e?.TileId) && e?.TileId != DefaultTileID)
-            {
-                return AdditionalKinds.SecondaryTile;
-            }
-            else
-            {
-                return AdditionalKinds.Other;
-            }
-        }
-
-        public class LifecycleLogic
-        {
-            public async Task<bool> AutoRestoreAsync(ILaunchActivatedEventArgs e, INavigationService nav)
-            {
-                var restored = false;
-                var launchedEvent = e;
-                if (DetermineStartCause(e) == AdditionalKinds.Primary || launchedEvent?.TileId == "")
-                {
-                    restored = await nav.LoadAsync();
-                    Logger.Info($"{nameof(restored)}: {restored}", member: nameof(nav.LoadAsync));
-                }
-                return restored;
-            }
-
-            public async Task AutoSuspendAllFramesAsync(object sender, SuspendingEventArgs e, bool autoExtendExecutionSession)
-            {
-                Logger.Info($"autoExtendExecutionSession: {autoExtendExecutionSession}");
-
-                if (autoExtendExecutionSession && !ApiInfo.IsDesktop)
-                {
-                    using (var session = new ExtendedExecutionSession { Reason = ExtendedExecutionReason.SavingData })
-                    {
-                        await SuspendAllFramesAsync();
-                    }
-                }
-                else
-                {
-                    await SuspendAllFramesAsync();
-                }
-            }
-
-            private async Task SuspendAllFramesAsync()
-            {
-                Logger.Info();
-
-                //allow only main view NavigationService as others won't be able to use Dispatcher and processing will stuck
-                var services = WindowContext.All.SelectMany(x => x.NavigationServices).Where(x => x.IsInMainView);
-                foreach (INavigationService nav in services.ToArray())
-                {
-                    try
-                    {
-                        // call view model suspend (OnNavigatedfrom)
-                        // date the cache (which marks the date/time it was suspended)
-                        nav.FrameFacade.SetFrameState(CacheDateKey, DateTime.Now.ToString());
-                        Logger.Info($"Nav.FrameId: {nav.FrameFacade.FrameId}");
-                        await nav.Dispatcher.DispatchAsync(async () => await nav.SuspendingAsync());
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error($"FrameId: [{nav.FrameFacade.FrameId}] {ex} {ex.Message}");
-                    }
-                }
-            }
-        }
-
         public enum ActivateWindowSources
         {
             Launching,
@@ -851,7 +754,7 @@ namespace Telegram.Navigation
         }
     }
 
-    public class BackRequestedRoutedEventArgs : HandledEventArgs
+    public partial class BackRequestedRoutedEventArgs : HandledEventArgs
     {
         public BackRequestedRoutedEventArgs(VirtualKey key = VirtualKey.None)
         {
@@ -878,7 +781,7 @@ namespace Telegram.Navigation
 
     public interface IActivablePage
     {
-        void Activate(int sessionId);
+        void Activate(INavigationService navigationService);
         void Deactivate(bool navigating);
 
         void PopupOpened();

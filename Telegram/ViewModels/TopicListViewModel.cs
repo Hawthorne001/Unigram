@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -21,7 +21,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.ViewModels
 {
-    public class TopicListViewModel : ViewModelBase, IDelegable<IChatListDelegate>
+    public partial class TopicListViewModel : ViewModelBase, IDelegable<IChatListDelegate>
     {
         private readonly INotificationsService _notificationsService;
 
@@ -190,7 +190,7 @@ namespace Telegram.ViewModels
         {
             if (Chat is Chat chat)
             {
-                _notificationsService.SetMuteFor(chat, ClientService.Notifications.GetMutedFor(chat, topic) > 0 ? 0 : 632053052);
+                _notificationsService.SetMuteFor(chat, ClientService.Notifications.GetMuteFor(chat, topic) > 0 ? 0 : 632053052, NavigationService.XamlRoot);
             }
         }
 
@@ -433,7 +433,7 @@ namespace Telegram.ViewModels
             }
         }
 
-        public class ItemsCollection : ObservableCollection<ForumTopic>
+        public partial class ItemsCollection : ObservableCollection<ForumTopic>
             , ISupportIncrementalLoading
         //, IHandle<UpdateAuthorizationState>
         //, IHandle<UpdateChatDraftMessage>
@@ -464,8 +464,8 @@ namespace Telegram.ViewModels
                 _clientService = clientService;
                 _aggregator = aggregator;
 
-                _viewModel = viewModel;
-                _viewModel.IsLoading = true;
+                //_viewModel = viewModel;
+                //_viewModel.IsLoading = true;
 
                 _chat = chat;
                 _hasMoreItems = chat != null;
@@ -479,7 +479,7 @@ namespace Telegram.ViewModels
 
             public async Task ReloadAsync(Chat chat)
             {
-                _viewModel.IsLoading = true;
+                //_viewModel.IsLoading = true;
 
                 using (await _loadMoreLock.WaitAsync())
                 {
@@ -543,7 +543,7 @@ namespace Telegram.ViewModels
 
                         _hasMoreItems = topics.Topics.Count > 0;
 
-                        _viewModel.IsLoading = false;
+                        //_viewModel.IsLoading = false;
                         //_viewModel.Delegate?.SetSelectedItems(_viewModel._selectedItems);
 
                         if (_hasMoreItems == false)

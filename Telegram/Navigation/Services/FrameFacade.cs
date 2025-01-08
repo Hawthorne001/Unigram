@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,22 +17,26 @@ using Windows.UI.Xaml.Navigation;
 namespace Telegram.Navigation.Services
 {
     // DOCS: https://github.com/Windows-XAML/Template10/wiki/Docs-%7C-NavigationService
-    public class FrameFacade
+    public partial class FrameFacade
     {
         internal FrameFacade(NavigationService navigationService, Frame frame, string id)
         {
             NavigationService = navigationService;
             Frame = frame;
-            frame.Navigated += FacadeNavigatedEventHandler;
-            frame.Navigating += FacadeNavigatingCancelEventHandler;
 
-            // setup animations
-            var t = new NavigationThemeTransition
+            if (frame != null)
             {
-                DefaultNavigationTransitionInfo = new EntranceNavigationTransitionInfo()
-            };
-            Frame.ContentTransitions = new TransitionCollection { };
-            Frame.ContentTransitions.Add(t);
+                frame.Navigated += FacadeNavigatedEventHandler;
+                frame.Navigating += FacadeNavigatingCancelEventHandler;
+
+                // setup animations
+                var t = new NavigationThemeTransition
+                {
+                    DefaultNavigationTransitionInfo = new EntranceNavigationTransitionInfo()
+                };
+                frame.ContentTransitions = new TransitionCollection { };
+                frame.ContentTransitions.Add(t);
+            }
 
             FrameId = id;
         }
@@ -98,21 +102,6 @@ namespace Telegram.Navigation.Services
             return Telegram.Services.SettingsLegacyService.Create(GetFrameStateKey(), true);
         }
 
-        public void SetFrameState(string key, string value)
-        {
-            FrameStateSettingsService().Write(key, value);
-        }
-
-        public string GetFrameState(string key, string otherwise)
-        {
-            return FrameStateSettingsService().Read(key, otherwise);
-        }
-
-        public void ClearFrameState()
-        {
-            FrameStateSettingsService().Clear();
-        }
-
         private string GetPageStateKey(string frameId, Type type, int backStackDepth, object parameter)
         {
             return $"{frameId}-{type}-{parameter}";
@@ -121,11 +110,6 @@ namespace Telegram.Navigation.Services
         public Telegram.Services.ISettingsLegacyService PageStateSettingsService(Type type, int depth = 0, object parameter = null)
         {
             var key = GetPageStateKey(FrameId, type, BackStackDepth + depth, parameter);
-            return FrameStateSettingsService().Open(key, true);
-        }
-
-        public Telegram.Services.ISettingsLegacyService PageStateSettingsService(string key)
-        {
             return FrameStateSettingsService().Open(key, true);
         }
 

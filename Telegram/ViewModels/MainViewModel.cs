@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,10 +17,10 @@ using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Services.Updates;
-using Telegram.Streams;
 using Telegram.Td;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Folders;
+using Telegram.ViewModels.Profile;
 using Telegram.ViewModels.Stories;
 using Telegram.Views;
 using Telegram.Views.Folders;
@@ -32,21 +32,20 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class MainViewModel : MultiViewModelBase, IDisposable
+    public partial class MainViewModel : MultiViewModelBase, IDisposable
     {
         private readonly IContactsService _contactsService;
         private readonly IPasscodeService _passcodeService;
         private readonly ILifetimeService _lifetimeService;
         private readonly ISessionService _sessionService;
         private readonly IVoipService _voipService;
-        private readonly IVoipGroupService _voipGroupService;
         private readonly ICloudUpdateService _cloudUpdateService;
         private readonly IPlaybackService _playbackService;
         private readonly IShortcutsService _shortcutService;
 
         public bool Refresh { get; set; }
 
-        public MainViewModel(IClientService clientService, ISettingsService settingsService, IStorageService storageService, IEventAggregator aggregator, INotificationsService pushService, IContactsService contactsService, IPasscodeService passcodeService, ILifetimeService lifecycle, ISessionService session, IVoipService voipService, IVoipGroupService voipGroupService, ISettingsSearchService settingsSearchService, ICloudUpdateService cloudUpdateService, IPlaybackService playbackService, IShortcutsService shortcutService)
+        public MainViewModel(IClientService clientService, ISettingsService settingsService, IStorageService storageService, IEventAggregator aggregator, INotificationsService pushService, IContactsService contactsService, IPasscodeService passcodeService, ILifetimeService lifecycle, ISessionService session, IVoipService voipService, ISettingsSearchService settingsSearchService, ICloudUpdateService cloudUpdateService, IPlaybackService playbackService, IShortcutsService shortcutService)
             : base(clientService, settingsService, aggregator)
         {
             _contactsService = contactsService;
@@ -54,7 +53,6 @@ namespace Telegram.ViewModels
             _lifetimeService = lifecycle;
             _sessionService = session;
             _voipService = voipService;
-            _voipGroupService = voipGroupService;
             _cloudUpdateService = cloudUpdateService;
             _playbackService = playbackService;
             _shortcutService = shortcutService;
@@ -65,9 +63,7 @@ namespace Telegram.ViewModels
                 Folders,
                 new ChatFolderViewModel[]
                 {
-                    new ChatFolderViewModel(int.MaxValue - 1, Strings.Contacts, "\uE95E", "\uE95D"),
-                    new ChatFolderViewModel(int.MaxValue - 2, Strings.Calls, "\uE991", "\uE990"),
-                    new ChatFolderViewModel(int.MaxValue - 3, Strings.Settings, "\uE98F", "\uE98E"),
+                    new ChatFolderViewModel(ClientService, int.MaxValue - 1, Strings.Settings, "\uE98F", "\uE98E"),
                 }
             };
 
@@ -79,14 +75,10 @@ namespace Telegram.ViewModels
             SearchChats = new SearchChatsViewModel(clientService, settingsService, aggregator);
             Stories = new StoryListViewModel(clientService, settingsService, aggregator, new StoryListMain());
             Topics = new TopicListViewModel(clientService, settingsService, aggregator, pushService, 0);
-            Contacts = new ContactsViewModel(clientService, settingsService, voipService, aggregator);
-            Calls = new CallsViewModel(clientService, settingsService, aggregator);
             Settings = new SettingsViewModel(clientService, settingsService, storageService, aggregator, settingsSearchService);
 
             // This must represent pivot tabs
             Children.Add(Chats);
-            Children.Add(Contacts);
-            Children.Add(Calls);
             Children.Add(Settings);
 
             // Any additional child
@@ -111,6 +103,14 @@ namespace Telegram.ViewModels
             }
 
             Children.Clear();
+
+            //Chats = null;
+            //SearchChats = null;
+            //Stories = null;
+            //Topics = null;
+            //Contacts = null;
+            //Calls = null;
+            //Settings = null;
         }
 
         public ILifetimeService Lifetime => _lifetimeService;
@@ -123,7 +123,6 @@ namespace Telegram.ViewModels
         public IShortcutsService ShortcutService => _shortcutService;
 
         public IVoipService VoipService => _voipService;
-        public IVoipGroupService VoipGroupService => _voipGroupService;
 
         public void ToggleArchive()
         {
@@ -176,11 +175,6 @@ namespace Telegram.ViewModels
             IsUpdateAvailable = update?.File != null;
         }
 
-        public void Handle(UpdateServiceNotification update)
-        {
-
-        }
-
         public void Handle(UpdateUnreadMessageCount update)
         {
             if (update.ChatList is ChatListMain)
@@ -196,13 +190,17 @@ namespace Telegram.ViewModels
 
         public void Handle(UpdateUnreadChatCount update)
         {
-            foreach (var folder in _folders)
+            BeginOnUIThread(() =>
             {
-                if (folder.ChatList is ChatListFolder && folder.ChatList.AreTheSame(update.ChatList))
+                foreach (var folder in _folders)
                 {
-                    BeginOnUIThread(() => folder.UpdateCount(update));
+                    if (folder.ChatList is ChatListFolder && folder.ChatList.AreTheSame(update.ChatList))
+                    {
+                        folder.UpdateCount(update, base.Settings.Notifications.IncludeMutedChatsInFolderCounters);
+                        return;
+                    }
                 }
-            }
+            });
         }
 
         public void Handle(UpdateDeleteMessages update)
@@ -241,7 +239,7 @@ namespace Telegram.ViewModels
                 folders.Insert(index, new ChatFolderInfo
                 {
                     Id = Constants.ChatListMain,
-                    Title = Strings.FilterAllChats,
+                    Name = new ChatFolderName(new FormattedText(Strings.FilterAllChats, Array.Empty<TextEntity>()), false),
                     Icon = new ChatFolderIcon("All")
                 });
 
@@ -269,7 +267,7 @@ namespace Telegram.ViewModels
                         continue;
                     }
 
-                    folder.UpdateCount(unreadCount.UnreadChatCount);
+                    folder.UpdateCount(unreadCount.UnreadChatCount, base.Settings.Notifications.IncludeMutedChatsInFolderCounters);
                 }
             }
             else
@@ -332,18 +330,18 @@ namespace Telegram.ViewModels
                     if (index > -1 && index != i)
                     {
                         destination.RemoveAt(index);
-                        destination.Insert(Math.Min(i, destination.Count), new ChatFolderViewModel(folder));
+                        destination.Insert(Math.Min(i, destination.Count), new ChatFolderViewModel(ClientService, folder));
                     }
                     else if (index == -1)
                     {
-                        destination.Insert(Math.Min(i, destination.Count), new ChatFolderViewModel(folder));
+                        destination.Insert(Math.Min(i, destination.Count), new ChatFolderViewModel(ClientService, folder));
                     }
                 }
             }
             else
             {
                 destination.Clear();
-                destination.AddRange(origin.Select(x => new ChatFolderViewModel(x)));
+                destination.AddRange(origin.Select(x => new ChatFolderViewModel(ClientService, x)));
             }
         }
 
@@ -365,14 +363,16 @@ namespace Telegram.ViewModels
                 if (Set(ref _selectedFolder, value))
                 {
                     Logger.Info();
-                    Chats.SetFolder(value.ChatList);
+
+                    Chats.SetList(value.ChatList);
+                    Stories.SetList(value.ChatList is ChatListArchive
+                        ? new StoryListArchive()
+                        : new StoryListMain());
                 }
             }
         }
 
-        private static bool _shown;
-
-        protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
+        protected override Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
             //BeginOnUIThread(() => Calls.OnNavigatedToAsync(parameter, mode, state));
             //BeginOnUIThread(() => Settings.OnNavigatedToAsync(parameter, mode, state));
@@ -387,75 +387,19 @@ namespace Telegram.ViewModels
             UnreadCount = unreadCount.UnreadMessageCount.UnreadCount;
             UnreadMutedCount = unreadCount.UnreadMessageCount.UnreadCount - unreadCount.UnreadMessageCount.UnreadUnmutedCount;
 
-            if (_voipService.Call != null)
-            {
-                Aggregator.Publish(new UpdateCallDialog(_voipService.Call));
-            }
-            else if (_voipGroupService.Call != null)
-            {
-                Aggregator.Publish(new UpdateCallDialog(_voipGroupService.Call));
-            }
+            Aggregator.Publish(new UpdateActiveCall());
 
             if (mode == NavigationMode.New)
             {
-                _ = Task.Run(() => _contactsService.JumpListAsync());
+                _ = Task.Run(_contactsService.JumpListAsync);
             }
 
-            if (ApiInfo.IsPackagedRelease && WatchDog.HasCrashedInLastSession && !_shown && DateTime.UtcNow.Date != SettingsService.Current.Diagnostics.LastCrashReported.Date)
-            {
-                _shown = true;
-
-                var layoutCycle = SettingsService.Current.Diagnostics.LastCrashWasLayoutCycle;
-                SettingsService.Current.Diagnostics.LastCrashWasLayoutCycle = false;
-
-                if (layoutCycle)
-                {
-                    var confirm = await ShowPopupAsync("The app terminated unexpectedly due to a layout cycle, please report this problem immediately.", "Something went wrong", "OK", "Cancel");
-                    if (confirm == ContentDialogResult.Primary)
-                    {
-                        var chat = await ClientService.SendAsync(new SearchPublicChat("unigraminsiders")) as Chat;
-                        if (chat != null)
-                        {
-                            var service = new DeviceInfoService();
-                            var payload = "Hi, I just had a layout cycle, can you please help me? My app version is {0}, running {1} on a {2}.";
-                            payload = string.Format(payload, service.ApplicationVersion, service.FullSystemVersion, service.DeviceModel);
-
-                            ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageText(new FormattedText(payload, Array.Empty<TextEntity>()), null, false)));
-                            NavigationService.NavigateToChat(chat);
-                        }
-                    }
-                }
-                else
-                {
-                    // For now, we just ignore any other crash.
-                    return;
-
-                    var confirm = await ShowPopupAsync("It seems that the app terminated unexpectedly. Do you want to report this problem?", "Something went wrong", "OK", "Cancel");
-                    if (confirm == ContentDialogResult.Primary)
-                    {
-                        SettingsService.Current.Diagnostics.LastCrashReported = DateTime.UtcNow;
-
-                        var chat = await ClientService.SendAsync(new SearchPublicChat("unigraminsiders")) as Chat;
-                        if (chat != null)
-                        {
-                            var service = new DeviceInfoService();
-                            var payload = "Hi, I just had a crash, can you please help me? My app version is {0}, running {1} on a {2}.";
-                            payload = string.Format(payload, service.ApplicationVersion, service.FullSystemVersion, service.DeviceModel);
-
-                            ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageText(new FormattedText(payload, Array.Empty<TextEntity>()), null, false)));
-                            NavigationService.NavigateToChat(chat);
-                        }
-                    }
-                }
-            }
-
-            //return base.OnNavigatedToAsync(parameter, mode, state);
+            return Task.CompletedTask;
         }
 
         public override void Subscribe()
         {
-            Aggregator.Subscribe<UpdateServiceNotification>(this, Handle)
-                .Subscribe<UpdateUnreadMessageCount>(Handle)
+            Aggregator.Subscribe<UpdateUnreadMessageCount>(this, Handle)
                 .Subscribe<UpdateUnreadChatCount>(Handle)
                 .Subscribe<UpdateDeleteMessages>(Handle)
                 .Subscribe<UpdateChatFolders>(Handle)
@@ -463,13 +407,11 @@ namespace Telegram.ViewModels
                 .Subscribe<UpdateWindowActivated>(Handle);
         }
 
-        public ChatListViewModel Chats { get; }
-        public SearchChatsViewModel SearchChats { get; }
-        public StoryListViewModel Stories { get; }
-        public TopicListViewModel Topics { get; }
-        public ContactsViewModel Contacts { get; }
-        public CallsViewModel Calls { get; }
-        public SettingsViewModel Settings { get; }
+        public ChatListViewModel Chats { get; private set; }
+        public SearchChatsViewModel SearchChats { get; private set; }
+        public StoryListViewModel Stories { get; private set; }
+        public TopicListViewModel Topics { get; private set; }
+        public SettingsViewModel Settings { get; private set; }
 
 
 
@@ -491,7 +433,7 @@ namespace Telegram.ViewModels
             var markdown = new FormattedText(message, new[] { entity });
             var text = ClientEx.ParseMarkdown(markdown);
 
-            ToastPopup.Show(text, new LocalFileSource("ms-appx:///Assets/Toasts/Success.tgs"));
+            ToastPopup.Show(NavigationService.XamlRoot, text, ToastPopupIcon.Success);
         }
 
         public async void DenySession()
@@ -532,7 +474,7 @@ namespace Telegram.ViewModels
             if (confirm == ContentDialogResult.Primary)
             {
                 ClientService.Send(new SetBirthdate(popup.Value));
-                ToastPopup.Show(Strings.PrivacyBirthdaySetDone, new LocalFileSource("ms-appx:///Assets/Toasts/Success.tgs"));
+                ShowToast(Strings.PrivacyBirthdaySetDone, ToastPopupIcon.Success);
             }
             else if (popup.ShowPrivacySettings)
             {
@@ -547,12 +489,12 @@ namespace Telegram.ViewModels
 
         public async void UpdateApp()
         {
-            await CloudUpdateService.LaunchAsync(Dispatcher, false);
+            await CloudUpdateService.LaunchAsync(NavigationService, false);
         }
 
         public async void CreateSecretChat()
         {
-            var user = await ChooseChatsPopup.PickUserAsync(ClientService, Strings.NewSecretChat, true);
+            var user = await ChooseChatsPopup.PickUserAsync(ClientService, NavigationService, Strings.NewSecretChat, false);
             if (user == null)
             {
                 return;
@@ -568,14 +510,14 @@ namespace Telegram.ViewModels
         // TODO: unify with DialogViewModel.Messages.cs 
         public void OpenMiniApp(AttachmentMenuBot bot, Action<bool> continuation)
         {
-            var user = ClientService.GetUser(bot.BotUserId);
-            if (user == null)
+            if (ClientService.TryGetUser(bot.BotUserId, out User user))
+            {
+                MessageHelper.OpenMiniApp(ClientService, NavigationService, user, bot, string.Empty, null, new InternalLinkTypeAttachmentMenuBot(new TargetChatCurrent(), user.ActiveUsername(), string.Empty), continuation);
+            }
+            else
             {
                 continuation(false);
-                return;
             }
-
-            MessageHelper.OpenMiniApp(ClientService, NavigationService, user, bot, string.Empty, null, continuation);
         }
 
         public async void RemoveMiniApp(AttachmentMenuBot bot)
@@ -603,6 +545,8 @@ namespace Telegram.ViewModels
         public async void AddToFolder(ChatFolderViewModel folder)
         {
             var viewModel = TypeResolver.Current.Resolve<FolderViewModel>(SessionId);
+            viewModel.NavigationService = NavigationService;
+
             await viewModel.NavigatedToAsync(folder.ChatFolderId, NavigationMode.New, null);
 
             if (viewModel.Folder != null)
@@ -647,26 +591,44 @@ namespace Telegram.ViewModels
         {
             ShowPopup(new SettingsArchivePopup(ClientService));
         }
+
+        public async void NavigateToMyProfile(bool savedMessages)
+        {
+            await ClientService.SendAsync(new CreatePrivateChat(ClientService.Options.MyId, false));
+
+            if (savedMessages)
+            {
+                NavigationService.NavigateToChat(ClientService.Options.MyId, force: false);
+            }
+            else
+            {
+                NavigationService.Navigate(typeof(ProfilePage), new ProfileMyArgs());
+            }
+        }
     }
 
-    public class ChatFolderViewModel : BindableBase
+    public partial class ChatFolderViewModel : BindableBase
     {
         public static ChatFolderViewModel Main => new(new ChatListMain())
         {
             ChatFolderId = Constants.ChatListMain,
-            Title = Strings.FilterAllChats
+            Name = new ChatFolderName(new FormattedText(Strings.FilterAllChats, Array.Empty<TextEntity>()), false)
         };
 
         public static ChatFolderViewModel Archive => new(new ChatListArchive())
         {
             ChatFolderId = Constants.ChatListArchive,
-            Title = Strings.ArchivedChats
+            Name = new ChatFolderName(new FormattedText(Strings.ArchivedChats, Array.Empty<TextEntity>()), false)
         };
 
         public bool IsNavigationItem { get; }
 
-        public ChatFolderViewModel(ChatFolderInfo info)
+        public IClientService ClientService { get; private set; }
+
+        public ChatFolderViewModel(IClientService clientService, ChatFolderInfo info)
         {
+            ClientService = clientService;
+
             if (info.Id == Constants.ChatListMain)
             {
                 ChatList = new ChatListMain();
@@ -683,7 +645,7 @@ namespace Telegram.ViewModels
             Info = info;
             ChatFolderId = info.Id;
 
-            _title = info.Title;
+            _name = info.Name;
             _icon = Icons.ParseFolder(info.Icon);
 
             var glyph = Icons.FolderToGlyph(_icon);
@@ -691,12 +653,13 @@ namespace Telegram.ViewModels
             _filledIconGlyph = glyph.Item2;
         }
 
-        public ChatFolderViewModel(int id, string title, string glyph, string filledGlyph)
+        public ChatFolderViewModel(IClientService clientService, int id, string title, string glyph, string filledGlyph)
         {
+            ClientService = clientService;
             ChatFolderId = id;
             IsNavigationItem = true;
 
-            Title = title;
+            Name = new ChatFolderName(new FormattedText(title, Array.Empty<TextEntity>()), false);
             IconGlyph = glyph;
             FilledIconGlyph = filledGlyph;
         }
@@ -708,7 +671,7 @@ namespace Telegram.ViewModels
 
         public void Update(ChatFolderInfo info)
         {
-            Title = info.Title;
+            Name = info.Name;
             Icon = Icons.ParseFolder(info.Icon);
 
             var glyph = Icons.FolderToGlyph(_icon);
@@ -722,11 +685,11 @@ namespace Telegram.ViewModels
 
         public ChatFolderInfo Info { get; }
 
-        private string _title;
-        public string Title
+        private ChatFolderName _name;
+        public ChatFolderName Name
         {
-            get => _title;
-            set => Set(ref _title, value);
+            get => _name;
+            set => Set(ref _name, value);
         }
 
         private ChatFolderIcon2 _icon;
@@ -766,20 +729,20 @@ namespace Telegram.ViewModels
 
         public bool ShowCount => UnreadCount > 0;
 
-        public void UpdateCount(UpdateUnreadChatCount update)
+        public void UpdateCount(UpdateUnreadChatCount update, bool includeMutedChats)
         {
             var unreadCount = update.UnreadCount;
             var unreadUnmutedCount = update.UnreadUnmutedCount;
             var unreadMutedCount = update.UnreadCount - update.UnreadUnmutedCount;
 
-            if (unreadMutedCount > 0 && unreadUnmutedCount == 0)
+            if (unreadMutedCount > 0 && unreadUnmutedCount == 0 && includeMutedChats)
             {
                 UnreadCount = unreadMutedCount;
                 IsUnmuted = false;
             }
             else
             {
-                UnreadCount = unreadCount;
+                UnreadCount = includeMutedChats ? unreadCount : unreadUnmutedCount;
                 IsUnmuted = true;
             }
 
@@ -821,7 +784,7 @@ namespace Telegram.ViewModels
         Setup
     }
 
-    public class ChatFolderCollection : ObservableCollection<ChatFolderViewModel>, IKeyIndexMapping
+    public partial class ChatFolderCollection : ObservableCollection<ChatFolderViewModel>, IKeyIndexMapping
     {
         public ChatFolderCollection()
         {

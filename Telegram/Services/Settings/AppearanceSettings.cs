@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -83,14 +83,14 @@ namespace Telegram.Services.Settings
         }
     }
 
-    public class InstalledEmojiSet
+    public partial class InstalledEmojiSet
     {
         public string Id { get; set; }
         public string Title { get; set; }
         public int Version { get; set; }
     }
 
-    public class AppearanceSettings : SettingsServiceBase
+    public partial class AppearanceSettings : SettingsServiceBase
     {
         private readonly UISettings _uiSettings;
 
@@ -177,7 +177,7 @@ namespace Telegram.Services.Settings
             UpdateNightMode(false);
         }
 
-        public void UpdateNightMode(bool? force = false, bool updateBackground = true)
+        public async void UpdateNightMode(bool? force = false, bool updateBackground = true)
         {
             // Same theme:
             // - false: update dictionaries
@@ -197,7 +197,7 @@ namespace Telegram.Services.Settings
                 ? ElementTheme.Dark
                 : ElementTheme.Light;
 
-            WindowContext.ForEach(window =>
+            await WindowContext.ForEachAsync(window =>
             {
                 if (force is not null)
                 {
@@ -225,8 +225,13 @@ namespace Telegram.Services.Settings
                 var aggregator = TypeResolver.Current.Resolve<IEventAggregator>();
                 var clientService = TypeResolver.Current.Resolve<IClientService>();
 
-                var dark = theme == ElementTheme.Dark;
-                aggregator.Publish(new UpdateDefaultBackground(dark, clientService.GetDefaultBackground(dark)));
+                if (aggregator != null && clientService != null)
+                {
+                    var dark = theme == ElementTheme.Dark;
+                    var background = clientService.GetDefaultBackground(dark);
+
+                    aggregator.Publish(new UpdateDefaultBackground(dark, background));
+                }
             }
         }
 
@@ -478,7 +483,19 @@ namespace Telegram.Services.Settings
                 : ApplicationTheme.Light;
         }
 
+        private static bool? _useDefaultScaling;
+        public bool UseDefaultScaling
+        {
+            get => _useDefaultScaling ??= GetValueOrDefault("UseDefaultScaling", true);
+            set => AddOrUpdateValue(ref _useDefaultScaling, "UseDefaultScaling", value);
+        }
 
+        private static int? _scaling;
+        public int Scaling
+        {
+            get => _scaling ??= GetValueOrDefault("Scaling", 0);
+            set => AddOrUpdateValue(ref _scaling, "Scaling", value);
+        }
 
         private static int? _bubbleRadius;
         public int BubbleRadius
@@ -576,7 +593,7 @@ namespace Telegram.Services.Settings
         }
     }
 
-    public class ThemeTypeSettingsBase : SettingsServiceBase
+    public partial class ThemeTypeSettingsBase : SettingsServiceBase
     {
         public ThemeTypeSettingsBase(ApplicationDataContainer container)
             : base(container)
@@ -595,7 +612,7 @@ namespace Telegram.Services.Settings
         }
     }
 
-    public class ThemeSettingsBase : SettingsServiceBase
+    public partial class ThemeSettingsBase : SettingsServiceBase
     {
         private readonly TelegramTheme _prefix;
 

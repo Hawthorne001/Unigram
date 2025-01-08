@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,12 +8,10 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Telegram.Converters;
 using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Services.Settings;
 using Telegram.Td.Api;
-using Windows.Globalization.Fonts;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Xaml;
@@ -24,7 +22,7 @@ using AcrylicBrush = Microsoft.UI.Xaml.Media.AcrylicBrush;
 
 namespace Telegram.Common
 {
-    public class Theme : ResourceDictionary
+    public partial class Theme : ResourceDictionary
     {
         [ThreadStatic]
         public static Theme Current;
@@ -42,7 +40,6 @@ namespace Telegram.Common
                 Current ??= this;
 
                 this.Add("MessageFontSize", GetValueOrDefault("MessageFontSize", 14d));
-
                 this.Add("ThreadStackLayout", new StackLayout());
 
                 UpdateEmojiSet();
@@ -65,49 +62,63 @@ namespace Telegram.Common
                 xamlAutoFontFamilyValue = "Segoe UI";
             }
 
+            // TODO: including Segoe UI breaks keycap emoji,
+            // not including it breaks persian numerals.
+            //if (xamlAutoFontFamilyValue == "Segoe UI")
+            //{
+            //    xamlAutoFontFamilyValue = string.Empty;
+            //}
+
             var xamlAutoFontFamily = new StringBuilder(xamlAutoFontFamilyValue);
             var comma = ", ";
 
-            if (false)
-            {
-                foreach (var language in Formatter.Languages)
-                {
-                    // We copy XAML behavior, only resolve for Japanese and Korean
-                    if (language == "ja" || language == "ko" || language == "ja-JP" || language == "ko-KR")
-                    {
-                        try
-                        {
-                            var recommendedFonts = new LanguageFontGroup(language);
-                            var family = recommendedFonts.UITextFont.FontFamily;
+            //if (false)
+            //{
+            //    foreach (var language in Formatter.Languages)
+            //    {
+            //        // We copy XAML behavior, only resolve for Japanese and Korean
+            //        if (language == "ja" || language == "ko" || language == "ja-JP" || language == "ko-KR")
+            //        {
+            //            try
+            //            {
+            //                var recommendedFonts = new LanguageFontGroup(language);
+            //                var family = recommendedFonts.UITextFont.FontFamily;
 
-                            xamlAutoFontFamily.Prepend(family, comma);
-                        }
-                        catch
-                        {
-                            // All the remote procedure calls must be wrapped in a try-catch block
-                        }
-                    }
-                }
+            //                xamlAutoFontFamily.Prepend(family, comma);
+            //            }
+            //            catch
+            //            {
+            //                // All the remote procedure calls must be wrapped in a try-catch block
+            //            }
+            //        }
+            //    }
 
-                xamlAutoFontFamily.Prepend("Segoe UI", comma);
-            }
+            //    xamlAutoFontFamily.Prepend("Segoe UI", comma);
+            //}
 
             switch (SettingsService.Current.Appearance.EmojiSet)
             {
                 case "microsoft":
+                    this["EmojiOnlyThemeFontFamily"] = "ms-appx:///Assets/Emoji/microsoft.ttf#Segoe UI Emoji";
                     xamlAutoFontFamily.Prepend("ms-appx:///Assets/Emoji/microsoft.ttf#Segoe UI Emoji", comma);
                     break;
                 default:
+                    this["EmojiOnlyThemeFontFamily"] = "ms-appx:///Assets/Emoji/apple.ttf#Segoe UI Emoji";
                     xamlAutoFontFamily.Prepend("ms-appx:///Assets/Emoji/apple.ttf#Segoe UI Emoji", comma);
                     break;
             }
 
+            XamlAutoFontFamily = xamlAutoFontFamily.ToString();
+
             this["EmojiThemeFontFamily"] = new FontFamily(xamlAutoFontFamily.ToString());
+            this["ContentControlThemeFontFamily"] = new FontFamily(xamlAutoFontFamily.ToString());
 
             xamlAutoFontFamily.Prepend("ms-appx:///Assets/Fonts/Telegram.ttf#Telegram", comma);
 
             this["EmojiThemeFontFamilyWithSymbols"] = new FontFamily(xamlAutoFontFamily.ToString());
         }
+
+        public string XamlAutoFontFamily { get; private set; }
 
         private bool _legacyScrollBars;
         private bool _legacyScrollViewer;
@@ -336,12 +347,13 @@ namespace Telegram.Common
 
                 var themeParameters = new Dictionary<string, int>
                 {
+                    { "ApplicationPageBackgroundThemeBrush", 0 },
                     { "ContentDialogBackground", 0 },
-                    { "ContentDialogForeground", 0 },
+                    { "TextFillColorPrimaryBrush", 0 },
                     { "AccentButtonBackground", 0 },
                     { "AccentButtonForeground", 0 },
                     { "SystemControlDisabledChromeDisabledLowBrush", 0 },
-                    { "HyperlinkForeground", 0 },
+                    { "CardStrokeColorDefaultSolidBrush", 0 },
                     { "DangerButtonBackground", 0xD13438 }
                 };
 
@@ -424,6 +436,9 @@ namespace Telegram.Common
                     }
                 }
 
+                PatchTextControlElevationBorderFocusedBrush(requested, target, lookup, "TextControlElevationBorderFocusedBrush", create, GetShade);
+                PatchTextControlElevationBorderFocusedBrush(requested, target, lookup, "TextControlBorderBrushFocused", create, GetShade);
+
                 if (create)
                 {
                     ThemeDictionaries.Add(requested == TelegramTheme.Light ? "Light" : "Dark", target);
@@ -431,19 +446,21 @@ namespace Telegram.Common
 
                 _parameters[requested == TelegramTheme.Light ? ElementTheme.Light : ElementTheme.Dark] = new ThemeParameters
                 {
-                    BackgroundColor = themeParameters["ContentDialogBackground"],
+                    BackgroundColor = themeParameters["ApplicationPageBackgroundThemeBrush"],
                     SecondaryBackgroundColor = themeParameters["ContentDialogBackground"],
-                    TextColor = themeParameters["ContentDialogForeground"],
+                    BottomBarBackgroundColor = themeParameters["ApplicationPageBackgroundThemeBrush"],
+                    TextColor = themeParameters["TextFillColorPrimaryBrush"],
                     ButtonColor = themeParameters["AccentButtonBackground"],
                     ButtonTextColor = themeParameters["AccentButtonForeground"],
                     HintColor = themeParameters["SystemControlDisabledChromeDisabledLowBrush"],
-                    LinkColor = themeParameters["HyperlinkForeground"],
+                    LinkColor = themeParameters["AccentButtonBackground"],
                     AccentTextColor = themeParameters["AccentButtonBackground"],
                     DestructiveTextColor = themeParameters["DangerButtonBackground"],
-                    HeaderBackgroundColor = themeParameters["ContentDialogBackground"],
-                    SectionBackgroundColor = themeParameters["ContentDialogBackground"],
-                    SectionHeaderTextColor = themeParameters["ContentDialogForeground"],
+                    HeaderBackgroundColor = themeParameters["ApplicationPageBackgroundThemeBrush"],
+                    SectionBackgroundColor = themeParameters["ApplicationPageBackgroundThemeBrush"],
+                    SectionHeaderTextColor = themeParameters["TextFillColorPrimaryBrush"],
                     SubtitleTextColor = themeParameters["SystemControlDisabledChromeDisabledLowBrush"],
+                    SectionSeparatorColor = themeParameters["CardStrokeColorDefaultSolidBrush"],
                 };
             }
             catch (UnauthorizedAccessException)
@@ -458,6 +475,43 @@ namespace Telegram.Common
                 // The exception MIGHT be related to StaticResources
                 // but I'm not able to confirm this.
             }
+        }
+
+        private void PatchTextControlElevationBorderFocusedBrush(TelegramTheme requested, ResourceDictionary target, Dictionary<string, object> lookup, string key, bool create, Func<AccentShade, Color> getShade)
+        {
+            // TextControlElevationBorderFocusedBrush is the only gradient that requires theming,
+            // Hence we hardcode the logic to update this brush as it's not worth it to support this scenario.
+            AddOrUpdate(target, key, create, (LinearGradientBrush brush) =>
+            {
+                if (create)
+                {
+                    brush.MappingMode = BrushMappingMode.Absolute;
+                    brush.StartPoint = new Windows.Foundation.Point(0, 0);
+                    brush.EndPoint = new Windows.Foundation.Point(0, 2);
+                    brush.RelativeTransform = new ScaleTransform
+                    {
+                        ScaleY = -1,
+                        CenterY = 0.5
+                    };
+                    brush.GradientStops = new GradientStopCollection
+                    {
+                        new GradientStop
+                        {
+                            Offset = 1.0
+                        },
+                        new GradientStop
+                        {
+                            Offset = 1.0
+                        }
+                    };
+                }
+
+                if (lookup.TryGet("ControlStrokeColorDefaultBrush", out Color stroke))
+                {
+                    brush.GradientStops[0].Color = getShade(requested == TelegramTheme.Light ? AccentShade.Dark1 : AccentShade.Light1);
+                    brush.GradientStops[1].Color = stroke;
+                }
+            });
         }
 
         private void AddOrUpdate<T>(ResourceDictionary target, string key, bool create, Action<T> callback) where T : new()
@@ -515,6 +569,8 @@ namespace Telegram.Common
             set => AddOrUpdateValue("MessageFontSize", (double)(_messageFontSize = value));
         }
 
+        public int CaptionFontSize => MessageFontSize - 2;
+
         public bool AddOrUpdateValue(string key, object value)
         {
             bool valueChanged = false;
@@ -571,7 +627,7 @@ namespace Telegram.Common
         #endregion
     }
 
-    public class ThemeOutgoing : ResourceDictionary
+    public partial class ThemeOutgoing : ResourceDictionary
     {
         [ThreadStatic]
         private static Dictionary<string, (Color Color, SolidColorBrush Brush)> _light;
@@ -689,7 +745,7 @@ namespace Telegram.Common
         }
     }
 
-    public class ThemeIncoming : ResourceDictionary
+    public partial class ThemeIncoming : ResourceDictionary
     {
         [ThreadStatic]
         private static Dictionary<string, (Color Color, SolidColorBrush Brush)> _light;

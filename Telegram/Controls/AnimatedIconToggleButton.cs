@@ -1,24 +1,42 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Microsoft.UI.Xaml.Controls;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class AnimatedIconToggleButton : AnimatedGlyphToggleButton
+    public partial class AnimatedIconToggleButton : AnimatedGlyphToggleButton
     {
+        private AnimatedIcon Icon;
+
         public AnimatedIconToggleButton()
         {
             DefaultStyleKey = typeof(AnimatedIconToggleButton);
+            Loaded += OnLoaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            if (Icon?.Source is IAnimatedVisualSource2 source && Foreground is SolidColorBrush foreground)
+            {
+                source.SetColorProperty("Foreground", foreground.Color);
+            }
         }
 
         protected override bool IsRuntimeCompatible()
         {
             return Windows.Foundation.Metadata.ApiInformation.IsApiContractPresent("Windows.Foundation.UniversalApiContract", 11);
+        }
+
+        protected override void OnApplyTemplate()
+        {
+            Icon = GetTemplateChild(nameof(Icon)) as AnimatedIcon;
+            base.OnApplyTemplate();
         }
 
         #region Source

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,6 @@ using System.Numerics;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Chats;
-using Telegram.Controls.Gallery;
 using Telegram.Controls.Messages;
 using Telegram.Converters;
 using Telegram.Navigation;
@@ -159,6 +158,10 @@ namespace Telegram.Views
                         {
                             UpdateDateHeader(sendAtDate.SendDate, true);
                         }
+                        else if (message.SchedulingState is MessageSchedulingStateSendWhenVideoProcessed sendWhenVideoProcessed)
+                        {
+                            UpdateDateHeader(sendWhenVideoProcessed.SendDate, true);
+                        }
                         else if (message.SchedulingState is MessageSchedulingStateSendWhenOnline)
                         {
                             UpdateDateHeader(0, true);
@@ -224,6 +227,10 @@ namespace Telegram.Views
                     {
                         bubble.UpdateMessageReactions(message, true);
                     }
+                    else if (root is MessageService service)
+                    {
+                        service.UpdateMessageReactions(message, true);
+                    }
                 }
 
                 if (message.Content is MessageAlbum album)
@@ -252,7 +259,7 @@ namespace Telegram.Views
             ShowHideDateHeader(minDateValue > 0 && minDateIndex > 0, minDateValue > 0 && minDateIndex is > 0 and < int.MaxValue);
 
             // Read and play messages logic:
-            if (messages.Count > 0 && WindowContext.Current.ActivationMode == CoreWindowActivationMode.ActivatedInForeground)
+            if (messages.Count > 0 && ViewModel.NavigationService.Window.ActivationMode != CoreWindowActivationMode.Deactivated && !_fromPreview)
             {
                 MessageSource source = ViewModel.Type switch
                 {
@@ -266,7 +273,7 @@ namespace Telegram.Views
                 ViewModel.ClientService.Send(new ViewMessages(chat.Id, messages, source, false));
             }
 
-            if (animations.Count > 0 && !intermediate)
+            if (animations.Count > 0 && !intermediate && ViewModel.NavigationService.Window.ActivationMode != CoreWindowActivationMode.Deactivated)
             {
                 Play(animations);
             }
@@ -394,7 +401,7 @@ namespace Telegram.Views
         {
             var text = message.Content as MessageText;
 
-            if (PowerSavingPolicy.AutoPlayAnimations && (message.Content is MessageAnimation || (text?.WebPage != null && text.WebPage.Animation != null) || (message.Content is MessageGame game && game.Game.Animation != null)))
+            if (PowerSavingPolicy.AutoPlayAnimations && (message.Content is MessageAnimation || (text?.LinkPreview != null && text.LinkPreview.Type is LinkPreviewTypeAnimation) || (message.Content is MessageGame game && game.Game.Animation != null)))
             {
                 if (_prev.TryGetValue(message.AnimationHash(), out WeakReference reference) && reference.Target is IPlayerView item)
                 {
@@ -405,11 +412,10 @@ namespace Telegram.Views
                     }
                     else
                     {
-                        viewModel = new SingleGalleryViewModel(ViewModel.ClientService, ViewModel.StorageService, ViewModel.Aggregator, new GalleryMessage(ViewModel.ClientService, message));
+                        viewModel = new StandaloneGalleryViewModel(ViewModel.ClientService, ViewModel.StorageService, ViewModel.Aggregator, new GalleryMessage(ViewModel.ClientService, message));
                     }
 
-                    viewModel.NavigationService = ViewModel.NavigationService;
-                    await GalleryWindow.ShowAsync(viewModel, () => target);
+                    ViewModel.NavigationService.ShowGallery(viewModel, target);
                 }
                 else
                 {
@@ -472,6 +478,17 @@ namespace Telegram.Views
                         next ??= new Dictionary<long, IPlayerView>();
                         next[message.AnimationHash()] = player;
                     }
+                }
+
+                if (message.Effect != null && message.GeneratedContentUnread && message.SendingState == null)
+                {
+                    var root = container.ContentTemplateRoot as FrameworkElement;
+                    if (root is not MessageSelector selector || selector.Content is not MessageBubble bubble)
+                    {
+                        continue;
+                    }
+
+                    message.GeneratedContentUnread = !bubble.PlayMessageEffect(message);
                 }
             }
 
@@ -621,6 +638,7 @@ namespace Telegram.Views
                     selector = new ChatHistoryViewItem(Messages, typeName);
                     selector.ContentTemplate = relevantHashSet.ItemTemplate;
                     selector.Style = sender.ItemContainerStyle;
+                    selector.IsHitTestVisible = !_fromPreview;
                     selector.AddHandler(ContextRequestedEvent, _contextRequestedHandler ??= new TypedEventHandler<UIElement, ContextRequestedEventArgs>(Message_ContextRequested), true);
 
                     args.ItemContainer = selector;
@@ -665,33 +683,31 @@ namespace Telegram.Views
                     return;
                 }
 
-                _updateThemeTask?.TrySetResult(true);
-
-                if (content is MessageSelector checkbox)
+                if (content is MessageService service)
+                {
+                    service.UpdateMessage(args.Item as MessageViewModel);
+                    args.Handled = true;
+                }
+                else if (content is MessageSelector checkbox)
                 {
                     // TODO: are there chances that at this point TextArea is not up to date yet?
                     checkbox.PrepareForItemOverride(message,
                         _viewModel.Type is DialogType.History or DialogType.Thread or DialogType.ScheduledMessages
                         && TextArea.Visibility == Visibility.Visible);
 
-                    checkbox.UpdateMessage(message, Messages);
-                    checkbox.UpdateSelectionEnabled(ViewModel.IsSelectionEnabled, false);
+                    if (checkbox.Content is MessageBubble bubble)
+                    {
+                        bubble.UpdateQuery(ViewModel.Search?.Query);
+                        bubble.UpdateMessage(args.Item as MessageViewModel);
 
-                    content = checkbox.Content as FrameworkElement;
-                }
+                        args.RegisterUpdateCallback(2, RegisterEvents);
+                        args.Handled = true;
+                    }
 
-                if (content is MessageBubble bubble)
-                {
-                    bubble.UpdateQuery(ViewModel.Search?.Query);
-                    bubble.UpdateMessage(args.Item as MessageViewModel);
-
-                    args.RegisterUpdateCallback(2, RegisterEvents);
-                    args.Handled = true;
-                }
-                else if (content is MessageService service)
-                {
-                    service.UpdateMessage(args.Item as MessageViewModel);
-                    args.Handled = true;
+                    checkbox.UpdateMessage(message, Messages, ViewModel.IsSelectionEnabled);
+                    checkbox.HorizontalAlignment = message.Date == 0 && message.Id == 0
+                        ? HorizontalAlignment.Center
+                        : HorizontalAlignment.Stretch;
                 }
             }
         }
@@ -760,8 +776,8 @@ namespace Telegram.Views
                 var first = direction == 1 ? panel.FirstCacheIndex : index + 1;
                 var last = direction == 1 ? index : panel.LastCacheIndex;
 
-                var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-                var anim = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+                var anim = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 anim.InsertKeyFrame(0, diff * direction);
                 anim.InsertKeyFrame(1, 0);
                 //anim.Duration = TimeSpan.FromSeconds(5);
@@ -796,9 +812,17 @@ namespace Telegram.Views
 
             if (message.IsService)
             {
-                if (message.Content is MessagePremiumGiftCode)
+                if (message.Content is MessageGiveawayPrizeStars)
+                {
+                    return ChatHistoryViewItemType.ServiceGiftCode;
+                }
+                else if (message.Content is MessageGiftedPremium or MessageGiftedStars or MessageGift or MessagePremiumGiftCode)
                 {
                     return ChatHistoryViewItemType.ServiceGift;
+                }
+                else if (message.Content is MessageUpgradedGift)
+                {
+                    return ChatHistoryViewItemType.ServiceUpgradedGift;
                 }
                 else if (message.Content is MessageChatChangePhoto or MessageSuggestProfilePhoto or MessageAsyncStory)
                 {

@@ -1,20 +1,20 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Microsoft.Graphics.Canvas.Effects;
 using System.Numerics;
+using Telegram.Navigation;
 using Windows.Graphics.Effects;
 using Windows.UI;
 using Windows.UI.Composition;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Media
 {
-    public class TiledBrush : XamlCompositionBrushBase
+    public partial class TiledBrush : XamlCompositionBrushBase
     {
         public LoadedImageSurface ImageSource { get; set; }
 
@@ -23,6 +23,19 @@ namespace Telegram.Controls.Media
         public byte Intensity { get; set; } = 255;
 
         protected override void OnConnected()
+        {
+            try
+            {
+                CreateResources();
+            }
+            catch
+            {
+                OnDisconnected();
+                CreateResources();
+            }
+        }
+
+        private void CreateResources()
         {
             _connected = true;
             _negative = IsNegative;
@@ -35,7 +48,7 @@ namespace Telegram.Controls.Media
                 var logical = surface.DecodedSize.ToVector2();
                 var physical = surface.DecodedPhysicalSize.ToVector2();
 
-                var surfaceBrush = Window.Current.Compositor.CreateSurfaceBrush(surface);
+                var surfaceBrush = BootStrapper.Current.Compositor.CreateSurfaceBrush(surface);
                 surfaceBrush.Stretch = CompositionStretch.None;
                 surfaceBrush.SnapToPixels = true;
                 surfaceBrush.Scale = logical / physical;
@@ -92,13 +105,13 @@ namespace Telegram.Controls.Media
                     //effect = borderEffect;
                 }
 
-                var borderEffectFactory = Window.Current.Compositor.CreateEffectFactory(effect, new[] { "Tint.Color" });
+                var borderEffectFactory = BootStrapper.Current.Compositor.CreateEffectFactory(effect, new[] { "Tint.Color" });
                 var borderEffectBrush = borderEffectFactory.CreateBrush();
                 borderEffectBrush.SetSourceParameter("Source", surfaceBrush);
 
                 if (blend != null)
                 {
-                    var backdrop = Window.Current.Compositor.CreateBackdropBrush();
+                    var backdrop = BootStrapper.Current.Compositor.CreateBackdropBrush();
                     borderEffectBrush.SetSourceParameter("Backdrop", backdrop);
                 }
 
@@ -140,23 +153,31 @@ namespace Telegram.Controls.Media
                     return;
                 }
 
-                var surface = ImageSource;
-                var logical = surface.DecodedSize.ToVector2();
-                var physical = surface.DecodedPhysicalSize.ToVector2();
-
-                var surfaceBrush = Window.Current.Compositor.CreateSurfaceBrush(surface);
-                surfaceBrush.Stretch = CompositionStretch.None;
-                surfaceBrush.SnapToPixels = true;
-                surfaceBrush.Scale = logical / physical;
-
-                if (CompositionBrush is CompositionEffectBrush effectBrush)
+                try
                 {
-                    effectBrush.SetSourceParameter("Source", surfaceBrush);
+                    var surface = ImageSource;
+                    var logical = surface.DecodedSize.ToVector2();
+                    var physical = surface.DecodedPhysicalSize.ToVector2();
 
-                    if (_tintEffect != null)
+                    var surfaceBrush = BootStrapper.Current.Compositor.CreateSurfaceBrush(surface);
+                    surfaceBrush.Stretch = CompositionStretch.None;
+                    surfaceBrush.SnapToPixels = true;
+                    surfaceBrush.Scale = logical / physical;
+
+                    if (CompositionBrush is CompositionEffectBrush effectBrush)
                     {
-                        effectBrush.Properties.InsertColor("Tint.Color", Color.FromArgb(Intensity, 0, 0, 0));
+                        effectBrush.SetSourceParameter("Source", surfaceBrush);
+
+                        if (_tintEffect != null)
+                        {
+                            effectBrush.Properties.InsertColor("Tint.Color", Color.FromArgb(Intensity, 0, 0, 0));
+                        }
                     }
+                }
+                catch
+                {
+                    _recreate = true;
+                    OnConnected();
                 }
             }
         }

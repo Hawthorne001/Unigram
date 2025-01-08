@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -23,7 +23,20 @@ namespace Telegram.Controls
         Angle270
     }
 
-    public class AspectView : Grid
+    public struct FixedSize
+    {
+        public FixedSize(double width, double height)
+        {
+            Width = width;
+            Height = height;
+        }
+
+        public double Width { get; set; }
+
+        public double Height { get; set; }
+    }
+
+    public partial class AspectView : Grid
     {
         #region Constraint
 
@@ -85,11 +98,15 @@ namespace Telegram.Controls
             {
                 return base.MeasureOverride(availableSize);
             }
+            else if (Constraint is FixedSize fixedSize)
+            {
+                base.MeasureOverride(new Size(fixedSize.Width, fixedSize.Height));
+                return new Size(fixedSize.Width, fixedSize.Height);
+            }
 
             var availableWidth = Math.Min(availableSize.Width, Math.Min(double.IsNaN(Width) ? double.PositiveInfinity : Width, MaxWidth));
             var availableHeight = Math.Min(availableSize.Height, Math.Min(double.IsNaN(Height) ? double.PositiveInfinity : Height, MaxHeight));
 
-            var ttl = false;
             var width = 0.0;
             var height = 0.0;
 
@@ -129,27 +146,26 @@ namespace Telegram.Controls
 
             if (constraint is MessageAnimation animationMessage)
             {
-                ttl = animationMessage.IsSecret;
                 constraint = animationMessage.Animation;
             }
             else if (constraint is MessageInvoice invoiceMessage)
             {
-                if (invoiceMessage.ExtendedMedia is MessageExtendedMediaPhoto extendedMediaPhoto)
+                if (invoiceMessage.PaidMedia is PaidMediaPhoto paidMediaPhoto)
                 {
-                    constraint = extendedMediaPhoto.Photo;
+                    constraint = paidMediaPhoto.Photo;
                 }
-                else if (invoiceMessage.ExtendedMedia is MessageExtendedMediaVideo extendedMediaVideo)
+                else if (invoiceMessage.PaidMedia is PaidMediaVideo paidMediaVideo)
                 {
-                    constraint = extendedMediaVideo.Video;
+                    constraint = paidMediaVideo.Video;
                 }
-                else if (invoiceMessage.ExtendedMedia is MessageExtendedMediaPreview extendedMediaPreview)
+                else if (invoiceMessage.PaidMedia is PaidMediaPreview paidMediaPreview)
                 {
-                    width = extendedMediaPreview.Width;
-                    height = extendedMediaPreview.Height;
+                    width = paidMediaPreview.Width;
+                    height = paidMediaPreview.Height;
                 }
                 else
                 {
-                    constraint = invoiceMessage.Photo;
+                    constraint = invoiceMessage.ProductInfo.Photo;
                 }
             }
             else if (constraint is MessageGame gameMessage)
@@ -169,7 +185,6 @@ namespace Telegram.Controls
             }
             else if (constraint is MessagePhoto photoMessage)
             {
-                ttl = photoMessage.IsSecret;
                 constraint = photoMessage.Photo;
             }
             else if (constraint is MessageSticker stickerMessage)
@@ -178,34 +193,76 @@ namespace Telegram.Controls
             }
             else if (constraint is MessageText textMessage)
             {
-                if (string.Equals(textMessage?.WebPage?.Type, "telegram_background", StringComparison.OrdinalIgnoreCase))
+                if (textMessage?.LinkPreview?.Type is LinkPreviewTypeBackground)
                 {
                     width = 900;
                     height = 1600;
                 }
-                else if (textMessage?.WebPage?.Animation != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeAnimation previewAnimation)
                 {
-                    constraint = textMessage?.WebPage?.Animation;
+                    constraint = previewAnimation.Animation;
                 }
-                else if (textMessage?.WebPage?.Document != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeDocument previewDocument)
                 {
-                    constraint = textMessage?.WebPage?.Document;
+                    constraint = previewDocument.Document;
                 }
-                else if (textMessage?.WebPage?.Photo != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeEmbeddedAnimationPlayer previewEmbeddedAnimationPlayer)
                 {
-                    constraint = textMessage?.WebPage?.Photo;
+                    width = previewEmbeddedAnimationPlayer.Width;
+                    height = previewEmbeddedAnimationPlayer.Height;
                 }
-                else if (textMessage?.WebPage?.Sticker != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeEmbeddedVideoPlayer previewEmbeddedVideoPlayer)
                 {
-                    constraint = textMessage?.WebPage?.Sticker;
+                    width = previewEmbeddedVideoPlayer.Width;
+                    height = previewEmbeddedVideoPlayer.Height;
                 }
-                else if (textMessage?.WebPage?.Video != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypePhoto previewPhoto)
                 {
-                    constraint = textMessage?.WebPage?.Video;
+                    constraint = previewPhoto.Photo;
                 }
-                else if (textMessage?.WebPage?.VideoNote != null)
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeSticker previewSticker)
                 {
-                    constraint = textMessage?.WebPage?.VideoNote;
+                    constraint = previewSticker.Sticker;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeVideo previewVideo)
+                {
+                    constraint = previewVideo.Video;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeVideoNote videoNote)
+                {
+                    constraint = videoNote.VideoNote;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeApp app)
+                {
+                    constraint = app.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeArticle article)
+                {
+                    constraint = article.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeChannelBoost channelBoost)
+                {
+                    constraint = channelBoost.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeChat chat)
+                {
+                    constraint = chat.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeSupergroupBoost supergroupBoost)
+                {
+                    constraint = supergroupBoost.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeUser user)
+                {
+                    constraint = user.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeVideoChat videoChat)
+                {
+                    constraint = videoChat.Photo;
+                }
+                else if (textMessage?.LinkPreview?.Type is LinkPreviewTypeWebApp webApp)
+                {
+                    constraint = webApp.Photo;
                 }
             }
             else if (constraint is MessageVenue venueMessage)
@@ -214,22 +271,28 @@ namespace Telegram.Controls
             }
             else if (constraint is MessageVideo videoMessage)
             {
-                ttl = videoMessage.IsSecret;
                 constraint = videoMessage.Video;
             }
             else if (constraint is MessageVideoNote videoNoteMessage)
             {
-                ttl = videoNoteMessage.IsSecret;
                 constraint = videoNoteMessage.VideoNote;
             }
             else if (constraint is MessageChatChangePhoto chatChangePhoto)
             {
                 constraint = chatChangePhoto.Photo;
             }
-            else if (constraint is MessageExtendedMediaPreview extendedMediaPreview)
+            else if (constraint is PaidMediaPhoto paidMediaPhoto)
             {
-                width = extendedMediaPreview.Width;
-                height = extendedMediaPreview.Height;
+                constraint = paidMediaPhoto.Photo;
+            }
+            else if (constraint is PaidMediaVideo paidMediaVideo)
+            {
+                constraint = paidMediaVideo.Video;
+            }
+            else if (constraint is PaidMediaPreview paidMediaPreview)
+            {
+                width = paidMediaPreview.Width;
+                height = paidMediaPreview.Height;
             }
             else if (constraint is MessageAsyncStory asyncStory)
             {
@@ -281,19 +344,11 @@ namespace Telegram.Controls
             }
             else if (constraint is Photo photo)
             {
-                if (ttl)
+                var size = photo.Sizes.Count > 0 ? photo.Sizes[^1] : null;
+                if (size != null)
                 {
-                    width = 240;
-                    height = 240;
-                }
-                else
-                {
-                    var size = photo.Sizes.Count > 0 ? photo.Sizes[^1] : null;
-                    if (size != null)
-                    {
-                        width = size.Width;
-                        height = size.Height;
-                    }
+                    width = size.Width;
+                    height = size.Height;
                 }
             }
             else if (constraint is ChatPhoto chatPhoto)
@@ -317,26 +372,13 @@ namespace Telegram.Controls
             }
             else if (constraint is Video video)
             {
-                if (ttl)
-                {
-                    width = 240;
-                    height = 240;
-                }
-                else
-                {
-                    width = video.Width;
-                    height = video.Height;
-                }
+                width = video.Width;
+                height = video.Height;
             }
             else if (constraint is VideoNote videoNote)
             {
                 width = 200;
                 height = 200;
-            }
-            else if (constraint is WebPage webPage)
-            {
-                width = webPage.EmbedWidth;
-                height = webPage.EmbedHeight;
             }
 
             if (constraint is PhotoSize photoSize)

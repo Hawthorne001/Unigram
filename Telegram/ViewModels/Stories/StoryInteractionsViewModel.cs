@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,6 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Stories;
 using Windows.UI.Xaml;
@@ -28,7 +27,7 @@ namespace Telegram.ViewModels
         Time
     }
 
-    public class StoryInteractionsViewModel : ViewModelBase, IIncrementalCollectionOwner
+    public partial class StoryInteractionsViewModel : ViewModelBase, IIncrementalCollectionOwner
     {
         private string _nextOffset = string.Empty;
         private CancellationTokenSource _nextToken;
@@ -111,7 +110,7 @@ namespace Telegram.ViewModels
         {
             if (ClientService.TryGetUser(interaction.ActorId, out User user))
             {
-                var confirm = await MessagePopup.ShowAsync(
+                var confirm = await ShowPopupAsync(
                     container as FrameworkElement,
                     string.Format(Strings.AreYouSureBlockContact2, user.FirstName),
                     Strings.BlockUser,
@@ -131,7 +130,7 @@ namespace Telegram.ViewModels
         {
             if (ClientService.TryGetUser(interaction.ActorId, out User user))
             {
-                var confirm = await MessagePopup.ShowAsync(
+                var confirm = await ShowPopupAsync(
                     container as FrameworkElement,
                     Strings.AreYouSureDeleteContact,
                     Strings.DeleteContact,
@@ -153,7 +152,7 @@ namespace Telegram.ViewModels
                 interaction.BlockList = new BlockListStories();
 
                 ClientService.Send(new SetMessageSenderBlockList(interaction.ActorId, new BlockListStories()));
-                ToastPopup.Show(string.Format(Strings.StoryHiddenHint, user.FirstName), new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
+                ShowToast(string.Format(Strings.StoryHiddenHint, user.FirstName), ToastPopupIcon.Info);
             }
         }
 
@@ -164,7 +163,7 @@ namespace Telegram.ViewModels
                 interaction.BlockList = null;
 
                 ClientService.Send(new SetMessageSenderBlockList(interaction.ActorId, null));
-                ToastPopup.Show(string.Format(Strings.StoryShownHint, user.FirstName), new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
+                ShowToast(string.Format(Strings.StoryShownHint, user.FirstName), ToastPopupIcon.Info);
             }
         }
 
@@ -175,7 +174,7 @@ namespace Telegram.ViewModels
                 interaction.BlockList = null;
 
                 ClientService.Send(new SetMessageSenderBlockList(interaction.ActorId, null));
-                ToastPopup.Show(string.Format(Strings.StoryShownHint, user.FirstName), new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
+                ShowToast(string.Format(Strings.StoryShownHint, user.FirstName), ToastPopupIcon.Info);
             }
         }
 
@@ -223,6 +222,10 @@ namespace Telegram.ViewModels
             else if (clickedItem is MessageViewer messageViewer)
             {
                 NavigationService.NavigateToUser(messageViewer.UserId);
+            }
+            else if (clickedItem is StoryInteraction interaction)
+            {
+                NavigationService.NavigateToSender(interaction.ActorId);
             }
         }
     }

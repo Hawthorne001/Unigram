@@ -6,9 +6,14 @@
                        xmlns:common="using:Telegram.Common"
                        xmlns:controls="using:Telegram.Controls"
                        mc:Ignorable="d"
-                       Padding="0">
+                       Padding="0"
+                       IsDismissButtonVisible="True">
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <ListView x:Name="ScrollingHost"
                   ItemsSource="{x:Bind ViewModel.Features}"
                   ItemClick="OnItemClick"
@@ -22,32 +27,81 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <controls:AnimatedImage Source="ms-appx:///Assets/Animations/Premium.tgs"
+                    <controls:AnimatedImage x:Name="Animated"
+                                            Source="ms-appx:///Assets/Animations/Premium.tgs"
                                             IsCachingEnabled="False"
                                             AutoPlay="True"
                                             FrameSize="120,120"
                                             DecodeFrameType="Logical"
+                                            LoopCount="1"
                                             Width="120"
                                             Height="120"
                                             Margin="0,24,0,8" />
-                    <TextBlock Text="{x:Bind ConvertTitle(ViewModel.IsPremium, x:True), Mode=OneWay}"
-                               FontSize="20"
-                               FontFamily="XamlAutoFontFamily"
-                               FontWeight="SemiBold"
+                    <controls:AnimatedImage x:Name="Identity"
+                                            Visibility="Collapsed"
+                                            ReplacementColor="{ThemeResource TelegramForegroundAccentBrush}"
+                                            IsCachingEnabled="False"
+                                            AutoPlay="True"
+                                            FrameSize="96,96"
+                                            DecodeFrameType="Logical"
+                                            LoopCount="0"
+                                            Width="96"
+                                            Height="96"
+                                            Margin="0,24,0,8" />
+                    <TextBlock x:Name="PremiumTitle"
+                               Text="{x:Bind ConvertTitle(ViewModel.IsPremium, x:True), Mode=OneWay}"
+                               Style="{StaticResource PopupTextBlockStyle}"
                                TextAlignment="Center"
                                VerticalAlignment="Top"
                                Grid.Row="1" />
-                    <TextBlock common:TextBlockHelper.Markdown="{x:Bind ConvertTitle(ViewModel.IsPremium, x:False), Mode=OneWay}"
-                               Style="{StaticResource InfoCaptionTextBlockStyle}"
+                    <RichTextBlock x:Name="ChatTitle"
+                                   Visibility="Collapsed"
+                                   FontSize="20"
+                                   FontFamily="{StaticResource EmojiThemeFontFamily}"
+                                   FontWeight="SemiBold"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Top"
+                                   IsTextSelectionEnabled="False"
+                                   Grid.Row="1" />
+                    <TextBlock x:Name="PremiumSubtitle"
+                               common:TextBlockHelper.Markdown="{x:Bind ConvertTitle(ViewModel.IsPremium, x:False), Mode=OneWay}"
+                               Style="{StaticResource BodyTextBlockStyle}"
                                TextAlignment="Center"
-                               Margin="12,0,12,24"
+                               Margin="12,8,12,20"
                                Grid.Row="2" />
+                    <TextBlock x:Name="ChatSubtitle"
+                               Visibility="Collapsed"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               TextAlignment="Center"
+                               Margin="12,8,12,20"
+                               Grid.Row="2" />
+
+                    <Grid x:Name="LinkRoot"
+                          Margin="12,-12,12,20"
+                          Visibility="Collapsed"
+                          Grid.Row="3">
+                        <Button Click="CopyLink_Click"
+                                HorizontalAlignment="Stretch"
+                                Padding="24,5,24,6">
+                            <TextBlock x:Name="Link"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Button>
+                        <TextBlock Text="&#xE8C8;"
+                                   FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                   FontSize="20"
+                                   Foreground="{ThemeResource AccentButtonBackground}"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0"
+                                   IsHitTestVisible="False" />
+                    </Grid>
                 </Grid>
             </ListView.Header>
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Padding="12,8,12,16">
+                    <Grid Padding="12,8,12,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -55,7 +109,7 @@
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition />
                         </Grid.RowDefinitions>
                         <Border x:Name="IconPanel"
                                 VerticalAlignment="Top"
@@ -94,7 +148,7 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
             <ListView.Footer>
-                <StackPanel Margin="0,0,0,72">
+                <StackPanel Margin="0,0,0,24">
                     <TextBlock common:TextBlockHelper.FormattedText="{x:Bind ViewModel.State.State, Mode=OneWay}"
                                Visibility="{x:Bind ViewModel.State, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}"
                                Style="{StaticResource InfoCaptionTextBlockStyle}"
@@ -122,17 +176,8 @@
               x:Load="{x:Bind ViewModel.CanPurchase, Mode=OneWay}"
               VerticalAlignment="Bottom"
               HorizontalAlignment="Stretch"
-              Margin="24,12,24,24"
+              Margin="24,0,24,24"
               Grid.Row="1">
-            <Rectangle x:Name="PurchaseShadow"
-                       Loaded="PurchaseShadow_Loaded"
-                       HorizontalAlignment="Stretch"
-                       VerticalAlignment="Stretch"
-                       Fill="White"
-                       Margin="0"
-                       RadiusX="4"
-                       RadiusY="4">
-            </Rectangle>
             <Border Background="{StaticResource PremiumLinearGradientBrush}"
                     CornerRadius="4"
                     Height="32" />
@@ -148,11 +193,5 @@
                                   Margin="0"
                                   Height="32" />
         </Grid>
-
-        <controls:GlyphButton Click="{x:Bind Close}"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Top"
-                              Glyph="&#xE711;"
-                              CornerRadius="20" />
     </Grid>
 </controls:ContentPopup>

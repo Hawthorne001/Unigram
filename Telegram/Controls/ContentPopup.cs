@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,30 +11,38 @@ using Telegram.Composition;
 using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Views.Host;
-using Windows.Foundation;
 using Windows.UI;
 using Windows.UI.Composition;
+using Windows.UI.Core;
 using Windows.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Automation.Provider;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Shapes;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Telegram.Controls
 {
-    public class ContentPopup : ContentDialog
+    public partial class ContentPopup : ContentDialogEx
     {
         private ContentDialogResult _result;
 
+        private Grid LayoutRoot;
         private Border AnimationElement;
         private Border BackgroundElement;
         private Border BorderElement;
         private Border ContentElement;
         private Grid CommandSpace;
+
+        private Button DismissButton;
+
+        private Rectangle Smoke;
 
         public ContentPopup()
         {
@@ -52,14 +60,24 @@ namespace Telegram.Controls
                 }
             }
 
-            Loaded += OnLoaded;
-            Unloaded += OnUnloaded;
+            Connected += OnLoaded;
+            Disconnected += OnUnloaded;
 
-            Opened += OnOpened;
-            Closing += OnClosing;
-            Closed += OnClosed;
+            CloseButtonClick += OnCloseButtonClick;
+        }
 
-            ElementCompositionPreview.SetIsTranslationEnabled(this, true);
+        private void OnCloseButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            // For some weird reason, there's no ContentDialogResult.Close, so we hack it around.
+
+            var result = CloseButtonResult;
+            if (result == ContentDialogResult.None)
+            {
+                return;
+            }
+
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => Hide(result));
+            args.Cancel = true;
         }
 
         private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -73,19 +91,19 @@ namespace Telegram.Controls
             AnimationElement.Width = e.NewSize.Width;
             AnimationElement.Height = e.NewSize.Height;
 
-            if (e.PreviousSize.Height == 0 || e.NewSize.Height == 0 || e.PreviousSize.Height == e.NewSize.Height)
+            if (e.PreviousSize.Height == 0 || e.NewSize.Height == 0 || e.PreviousSize.Height == e.NewSize.Height || VerticalContentAlignment == VerticalAlignment.Stretch)
             {
                 return;
             }
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var prev = e.PreviousSize.ToVector2();
             var next = e.NewSize.ToVector2();
 
             var transform = CommandSpace.TransformToVisual(ContentElement);
-            var point = transform.TransformPoint(new Point()).ToVector2();
+            var point = transform.TransformVector2();
 
-            var visual = ElementComposition.GetElementVisual(this);
+            var visual = ElementComposition.GetElementVisual(LayoutRoot);
             var content = ElementComposition.GetElementVisual(ContentElement);
             var background = ElementComposition.GetElementVisual(BackgroundElement);
             var border = ElementComposition.GetElementVisual(BorderElement);
@@ -93,7 +111,7 @@ namespace Telegram.Controls
             var clip = compositor.CreateInsetClip();
             content.Clip = clip;
 
-            var redirect = compositor.CreateRedirectVisual(CommandSpace, Vector2.Zero, CommandSpace.ActualSize);
+            var redirect = compositor.CreateRedirectVisual(CommandSpace, Vector2.Zero, new Vector2(CommandSpace.ActualSize.X, CommandSpace.ActualSize.Y * 2));
             redirect.Offset = new Vector3(point.X, 0, 0);
 
             var translate = compositor.CreateScalarKeyFrameAnimation();
@@ -115,7 +133,7 @@ namespace Telegram.Controls
             var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += Batch_Completed;
 
-            visual.StartAnimation("Translation.Y", translate);
+            visual.StartAnimation("Offset.Y", translate);
             background.StartAnimation("Scale.Y", scale);
             border.StartAnimation("Scale.Y", scale);
             redirect.StartAnimation("Offset.Y", offset);
@@ -138,7 +156,7 @@ namespace Telegram.Controls
 
         }
 
-        public virtual void OnNavigatedTo()
+        public virtual void OnNavigatedTo(object parameter)
         {
 
         }
@@ -148,40 +166,20 @@ namespace Telegram.Controls
 
         }
 
-        private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
-        {
-            if (Window.Current.Content is RootPage root)
-            {
-                root.PopupOpened();
-            }
-        }
-
-        private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
-        {
-            var canvas = VisualTreeHelper.GetParent(this) as Canvas;
-            if (canvas != null)
-            {
-                foreach (var child in canvas.Children)
-                {
-                    if (child is Rectangle rectangle)
-                    {
-                        rectangle.Visibility = Visibility.Collapsed;
-                    }
-                }
-            }
-        }
-
-        private void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
-        {
-            if (Window.Current.Content is RootPage root)
-            {
-                root.PopupClosed();
-            }
-        }
-
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            WindowContext.Current.InputListener.KeyDown += OnKeyDown;
+            try
+            {
+                if (XamlRoot.Content is IPopupHost host)
+                {
+                    host.PopupOpened();
+                }
+            }
+            catch
+            {
+                // XamlRoot.Content seems to throw a NullReferenceException
+                // whenever corresponding window has been already closed.
+            }
 
             var canvas = VisualTreeHelper.GetParent(this) as Canvas;
             if (canvas != null)
@@ -190,23 +188,52 @@ namespace Telegram.Controls
                 {
                     if (child is Rectangle rectangle)
                     {
-                        rectangle.Visibility = Visibility.Visible;
-                        rectangle.Fill = new SolidColorBrush(ActualTheme == ElementTheme.Light
+                        // TODO: I don't remember why it is needed to show-hide it.
+                        Smoke = rectangle;
+                        Smoke.Fill = new SolidColorBrush(ActualTheme == ElementTheme.Light
                             ? Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)
                             : Color.FromArgb(0x99, 0x00, 0x00, 0x00));
                     }
                 }
             }
+
+            // This won't look great because the smoke will disappear instantly, but at least it won't flash
+            if (Smoke != null && Parent is Popup popup)
+            {
+                popup.Opened += OnOpened;
+                popup.Closed += OnClosed;
+            }
+        }
+
+        private void OnOpened(object sender, object e)
+        {
+            Smoke.Visibility = Visibility.Visible;
+        }
+
+        private void OnClosed(object sender, object e)
+        {
+            Smoke.Visibility = Visibility.Collapsed;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            WindowContext.Current.InputListener.KeyDown -= OnKeyDown;
+            try
+            {
+                if (XamlRoot.Content is IPopupHost host)
+                {
+                    host.PopupClosed();
+                }
+            }
+            catch
+            {
+                // XamlRoot.Content seems to throw a NullReferenceException
+                // whenever corresponding window has been already closed.
+            }
         }
 
-        private void OnKeyDown(Window sender, Services.Keyboard.InputKeyDownEventArgs args)
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
         {
-            if (args.VirtualKey == Windows.System.VirtualKey.Enter && args.OnlyKey && DefaultButton != ContentDialogButton.Primary)
+            if (args.Key == VirtualKey.Enter && args.Modifiers == VirtualKeyModifiers.None && DefaultButton != ContentDialogButton.Primary)
             {
                 // TODO: should the if be simplified to focused is null or not Control?
 
@@ -242,24 +269,51 @@ namespace Telegram.Controls
                 rectangle.PointerReleased += Rectangle_PointerReleased;
             }
 
+            if (IsDismissButtonVisible)
+            {
+                DismissButton = GetTemplateChild(nameof(DismissButton)) as Button;
+                DismissButton.Click += DismissButton_Click;
+            }
+
             CommandSpace = GetTemplateChild(nameof(CommandSpace)) as Grid;
             AnimationElement = GetTemplateChild(nameof(AnimationElement)) as Border;
             BackgroundElement = GetTemplateChild(nameof(BackgroundElement)) as Border;
             BorderElement = GetTemplateChild(nameof(BorderElement)) as Border;
-
             ContentElement = GetTemplateChild(nameof(ContentElement)) as Border;
+            LayoutRoot = GetTemplateChild(nameof(LayoutRoot)) as Grid;
 
             if (ContentElement != null)
             {
                 ContentElement.SizeChanged += OnSizeChanged;
             }
+
+            if (LayoutRoot != null)
+            {
+                LayoutRoot.ProcessKeyboardAccelerators += OnProcessKeyboardAccelerators;
+                ElementCompositionPreview.SetIsTranslationEnabled(LayoutRoot, true);
+            }
+        }
+
+        private void DismissButton_Click(object sender, RoutedEventArgs e)
+        {
+            OnDismissButtonClick();
+        }
+
+        protected virtual void OnDismissButtonClick()
+        {
+            Hide();
         }
 
         private void PrimaryButton_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && FocusPrimaryButton)
             {
-                button.Focus(FocusState.Keyboard);
+                if (button.Focus(FocusState.Keyboard))
+                {
+                    return;
+                }
+
+                this.Focus(FocusState.Programmatic);
             }
         }
 
@@ -272,9 +326,9 @@ namespace Telegram.Controls
             }
         }
 
-        public async Task<ContentDialogResult> OpenAsync()
+        public async Task<ContentDialogResult> OpenAsync(XamlRoot xamlRoot)
         {
-            await this.ShowQueuedAsync();
+            await this.ShowQueuedAsync(xamlRoot);
             return _result;
         }
 
@@ -334,6 +388,56 @@ namespace Telegram.Controls
 
         public static readonly DependencyProperty IsPrimaryButtonSplitProperty =
             DependencyProperty.Register("IsPrimaryButtonSplit", typeof(bool), typeof(ContentPopup), new PropertyMetadata(false));
+
+        #endregion
+
+        #region IsDismissButtonVisible
+
+        public bool IsDismissButtonVisible
+        {
+            get { return (bool)GetValue(IsDismissButtonVisibleProperty); }
+            set { SetValue(IsDismissButtonVisibleProperty, value); }
+        }
+
+        public static readonly DependencyProperty IsDismissButtonVisibleProperty =
+            DependencyProperty.Register("IsDismissButtonVisible", typeof(bool), typeof(ContentPopup), new PropertyMetadata(false, OnDismissButtonVisibleChanged));
+
+        private static void OnDismissButtonVisibleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var sender = d as ContentPopup;
+            if (sender?.DismissButton != null || (bool)e.NewValue)
+            {
+                if (sender.DismissButton == null)
+                {
+                    sender.DismissButton = sender.GetTemplateChild(nameof(sender.DismissButton)) as Button;
+
+                    if (sender.DismissButton != null)
+                    {
+                        sender.DismissButton.Click += sender.DismissButton_Click;
+                    }
+                }
+
+                if (sender.DismissButton != null)
+                {
+                    sender.DismissButton.Visibility = (bool)e.NewValue
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                }
+            }
+        }
+
+        #endregion
+
+        #region CloseButtonResult
+
+        public ContentDialogResult CloseButtonResult
+        {
+            get { return (ContentDialogResult)GetValue(CloseButtonResultProperty); }
+            set { SetValue(CloseButtonResultProperty, value); }
+        }
+
+        public static readonly DependencyProperty CloseButtonResultProperty =
+            DependencyProperty.Register("CloseButtonResult", typeof(ContentDialogResult), typeof(ContentPopup), new PropertyMetadata(ContentDialogResult.None));
 
         #endregion
 
@@ -409,9 +513,27 @@ namespace Telegram.Controls
 
 
 
+        public static bool IsAnyPopupOpen(XamlRoot xamlRoot)
+        {
+            // If XamlRoot is null we aren't in a popup
+            // TODO: Problem persists, because then popup fails to open because of no XamlRoot.
+            if (xamlRoot == null)
+            {
+                return false;
+            }
 
+            foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot))
+            {
+                if (popup.Child is ContentDialog)
+                {
+                    return true;
+                }
+            }
 
-        public static ContentPopup Block()
+            return false;
+        }
+
+        public static ContentPopup Block(XamlRoot xamlRoot)
         {
             var content = new Grid();
             content.Children.Add(new Microsoft.UI.Xaml.Controls.ProgressRing
@@ -438,7 +560,7 @@ namespace Telegram.Controls
 
             toast.Closing += OnBlockedClosing;
 
-            _ = toast.ShowAsync();
+            _ = toast.ShowQueuedAsync(xamlRoot);
             return toast;
         }
 

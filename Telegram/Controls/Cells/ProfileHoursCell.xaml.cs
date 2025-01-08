@@ -137,7 +137,7 @@ namespace Telegram.Controls.Cells
                         {
                             var timeOfWeek = new BusinessDay(today.DayOfWeek).StartMinute + today.TimeOfDay.TotalMinutes;
                             var nextInterval = local.FirstOrDefault(x => x.StartMinute > timeOfWeek);
-                            nextInterval ??= local.LastOrDefault(x => x.EndMinute < timeOfWeek);
+                            nextInterval ??= local.FirstOrDefault(x => x.EndMinute < timeOfWeek);
 
                             if (nextInterval != null)
                             {
@@ -176,7 +176,7 @@ namespace Telegram.Controls.Cells
         {
             _switchToMyTime = !_switchToMyTime;
 
-            if (IsExpanded)
+            if (IsExpanded && _clientService != null && _hours != null)
             {
                 UpdateHours(_clientService, _hours);
             }

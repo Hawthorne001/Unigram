@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -23,7 +23,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Supergroups
 {
-    public class SupergroupEditViewModel : ViewModelBase, IDelegable<ISupergroupEditDelegate>, IHandle
+    public partial class SupergroupEditViewModel : ViewModelBase, IDelegable<ISupergroupEditDelegate>, IHandle
     {
         public ISupergroupEditDelegate Delegate { get; set; }
 
@@ -56,13 +56,6 @@ namespace Telegram.ViewModels.Supergroups
             set => Set(ref _about, value);
         }
 
-        private bool _isSignatures;
-        public bool IsSignatures
-        {
-            get => _isSignatures;
-            set => Set(ref _isSignatures, value);
-        }
-
         private bool _isAllHistoryAvailable;
         public int IsAllHistoryAvailable
         {
@@ -89,9 +82,16 @@ namespace Telegram.ViewModels.Supergroups
             new SettingsOptionItem<bool>(false, Strings.ChatHistoryHidden)
         };
 
+        private int _inviteLinksCount;
+        public int InviteLinksCount
+        {
+            get => _inviteLinksCount;
+            set => Set(ref _inviteLinksCount, value);
+        }
+
         #region Initialize
 
-        protected override Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
+        protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
             var chatId = (long)parameter;
 
@@ -100,7 +100,7 @@ namespace Telegram.ViewModels.Supergroups
             var chat = _chat;
             if (chat == null)
             {
-                return Task.CompletedTask;
+                return;
             }
 
             Delegate?.UpdateChat(chat);
@@ -138,7 +138,11 @@ namespace Telegram.ViewModels.Supergroups
                 }
             }
 
-            return Task.CompletedTask;
+            var response = await ClientService.SendAsync(new GetChatInviteLinks(chatId, ClientService.Options.MyId, false, 0, string.Empty, 1));
+            if (response is ChatInviteLinks inviteLinks)
+            {
+                InviteLinksCount = inviteLinks.TotalCount;
+            }
         }
 
         public override void Subscribe()
@@ -249,15 +253,6 @@ namespace Telegram.ViewModels.Supergroups
                 oldAbout = cache.Description;
                 supergroup = item;
                 fullInfo = cache;
-
-                if (item.IsChannel && _isSignatures != item.SignMessages)
-                {
-                    var response = await ClientService.SendAsync(new ToggleSupergroupSignMessages(item.Id, _isSignatures));
-                    if (response is Error)
-                    {
-                        // TODO:
-                    }
-                }
             }
             else if (chat.Type is ChatTypeBasicGroup basicGroup)
             {
@@ -314,7 +309,7 @@ namespace Telegram.ViewModels.Supergroups
 
         public async void SetPhoto()
         {
-            await _profilePhotoService.SetPhotoAsync(Chat.Id);
+            await _profilePhotoService.SetPhotoAsync(NavigationService, Chat.Id);
         }
 
         public async void CreatePhoto()
@@ -327,23 +322,6 @@ namespace Telegram.ViewModels.Supergroups
             if (_chat is Chat chat)
             {
                 NavigationService.Navigate(typeof(SupergroupEditTypePage), chat.Id);
-            }
-        }
-
-        public async void EditStickerSet()
-        {
-            if (_chat is Chat chat && ClientService.TryGetSupergroup(chat, out Supergroup supergroup))
-            {
-                var tsc = new TaskCompletionSource<object>();
-                var args = new SupergroupEditStickerSetArgs(chat.Id, new StickerTypeCustomEmoji());
-
-                var confirm = await ShowPopupAsync(typeof(SupergroupEditStickerSetPopup), args, tsc);
-                var set = await tsc.Task as StickerSetInfo;
-
-                if (confirm == ContentDialogResult.Primary && set != null)
-                {
-                    ClientService.Send(new SetSupergroupStickerSet(supergroup.Id, set.Id));
-                }
             }
         }
 
@@ -369,11 +347,19 @@ namespace Telegram.ViewModels.Supergroups
             }
         }
 
-        public void Links()
+        public void InviteLinks()
         {
             if (_chat is Chat chat)
             {
-                NavigationService.Navigate(typeof(ChatInviteLinkPage), chat.Id);
+                NavigationService.Navigate(typeof(ChatInviteLinksPage), chat.Id);
+            }
+        }
+
+        public void Statistics()
+        {
+            if (_chat is Chat chat)
+            {
+                NavigationService.Navigate(typeof(RevenuePage), chat.Id);
             }
         }
 
@@ -382,6 +368,14 @@ namespace Telegram.ViewModels.Supergroups
             if (_chat is Chat chat)
             {
                 NavigationService.Navigate(typeof(ChatEventLogPage), chat.Id);
+            }
+        }
+
+        public void AffiliatePrograms()
+        {
+            if (_chat is Chat chat)
+            {
+                NavigationService.Navigate(typeof(ChatAffiliatePage), new AffiliateTypeChannel(chat.Id));
             }
         }
 
@@ -428,7 +422,7 @@ namespace Telegram.ViewModels.Supergroups
         {
             if (_chat is Chat chat)
             {
-                NavigationService.ShowPopupAsync(typeof(SupergroupReactionsPopup), chat.Id);
+                NavigationService.ShowPopupAsync(new SupergroupReactionsPopup(), chat.Id);
             }
         }
 

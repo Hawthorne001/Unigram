@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,11 +7,13 @@
 using Telegram.Collections;
 using Telegram.Common;
 using Telegram.Navigation;
+using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.Views.Popups;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Streams;
+using Windows.UI.Xaml;
 
 namespace Telegram.ViewModels.Gallery
 {
@@ -128,20 +130,30 @@ namespace Telegram.ViewModels.Gallery
         {
             RaisePropertyChanged(nameof(Position));
 
-            if (item == null)
+            if (item == null || NavigationService == null)
             {
                 return;
             }
 
-            if (item.IsProtected && !_hasProtectedContent)
+            if (item.HasProtectedContent && !_hasProtectedContent)
             {
                 _hasProtectedContent = true;
-                WindowContext.Current.DisableScreenCapture(GetHashCode());
+                NavigationService.Window.DisableScreenCapture(GetHashCode());
             }
-            else if (_hasProtectedContent && !item.IsProtected)
+            else if (_hasProtectedContent && !item.HasProtectedContent)
             {
                 _hasProtectedContent = false;
-                WindowContext.Current.EnableScreenCapture(GetHashCode());
+                NavigationService.Window.EnableScreenCapture(GetHashCode());
+            }
+        }
+
+        public override INavigationService NavigationService
+        {
+            get => base.NavigationService;
+            set
+            {
+                base.NavigationService = value;
+                OnSelectedItemChanged(SelectedItem);
             }
         }
 
@@ -157,7 +169,7 @@ namespace Telegram.ViewModels.Gallery
         {
             get
             {
-                if (SelectedItem is GalleryMessage message && message.IsProtected)
+                if (SelectedItem is GalleryMessage message && message.HasProtectedContent)
                 {
                     return false;
                 }
@@ -174,26 +186,26 @@ namespace Telegram.ViewModels.Gallery
                 {
                     if (chatPhoto.Sticker?.Type is ChatPhotoStickerTypeRegularOrMask regularOrMask)
                     {
-                        await StickersPopup.ShowAsync(regularOrMask.StickerSetId);
+                        await StickersPopup.ShowAsync(NavigationService, regularOrMask.StickerSetId);
                     }
                     else if (chatPhoto.Sticker?.Type is ChatPhotoStickerTypeCustomEmoji customEmoji)
                     {
                         var response = await ClientService.SendAsync(new GetCustomEmojiStickers(new[] { customEmoji.CustomEmojiId }));
                         if (response is Stickers stickers && stickers.StickersValue.Count == 1)
                         {
-                            await StickersPopup.ShowAsync(stickers.StickersValue[0].SetId);
+                            await StickersPopup.ShowAsync(NavigationService, stickers.StickersValue[0].SetId);
                         }
                     }
                 }
                 else
                 {
-                    var file = _selectedItem.GetFile();
+                    var file = _selectedItem.File;
                     if (file == null)
                     {
                         return;
                     }
 
-                    await StickersPopup.ShowAsync(new InputFileId(file.Id));
+                    await StickersPopup.ShowAsync(NavigationService, new InputFileId(file.Id));
                 }
             }
         }
@@ -203,7 +215,7 @@ namespace Telegram.ViewModels.Gallery
             FirstItem = null;
 
             var message = _selectedItem as GalleryMessage;
-            if (message == null || !message.CanView)
+            if (message == null || !message.CanBeViewed)
             {
                 return;
             }
@@ -215,7 +227,7 @@ namespace Telegram.ViewModels.Gallery
         {
             if (_selectedItem is GalleryMessage message)
             {
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationShareMessage(message.ChatId, message.Id));
+                await ShowPopupAsync(new ChooseChatsPopup { RequestedTheme = ElementTheme.Dark }, new ChooseChatsConfigurationShareMessage(message.ChatId, message.Id));
             }
             else
             {
@@ -225,7 +237,7 @@ namespace Telegram.ViewModels.Gallery
                     return;
                 }
 
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostMessage(input));
+                await ShowPopupAsync(new ChooseChatsPopup { RequestedTheme = ElementTheme.Dark }, new ChooseChatsConfigurationPostMessage(input));
             }
         }
 
@@ -236,12 +248,12 @@ namespace Telegram.ViewModels.Gallery
         public async void Copy()
         {
             var item = _selectedItem;
-            if (item == null || !item.CanCopy)
+            if (item == null || !item.CanBeCopied)
             {
                 return;
             }
 
-            var file = item.GetFile();
+            var file = item.File;
             if (file == null)
             {
                 return;
@@ -259,12 +271,12 @@ namespace Telegram.ViewModels.Gallery
         public virtual async void Save()
         {
             var item = _selectedItem;
-            if (item == null || !item.CanSave)
+            if (item == null || !item.CanBeSaved)
             {
                 return;
             }
 
-            var file = item.GetFile();
+            var file = item.File;
             if (file != null)
             {
                 await _storageService.SaveFileAsAsync(file);
@@ -279,7 +291,7 @@ namespace Telegram.ViewModels.Gallery
                 return;
             }
 
-            var file = item.GetFile();
+            var file = item.File;
             if (file != null)
             {
                 await _storageService.OpenFileWithAsync(file);

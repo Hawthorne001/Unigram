@@ -1,20 +1,21 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Telegram.Common;
 using Telegram.Converters;
 using Telegram.Navigation;
+using Telegram.Services.Calls;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
@@ -75,20 +76,27 @@ namespace Telegram.Controls.Chats
         public bool UpdateGroupCall(Chat chat, GroupCall call)
         {
             var visible = true;
-            var channel = call?.IsRtmpStream is true || (chat.Type is ChatTypeSupergroup super && super.IsChannel);
+            var activeCallId = ViewModel.VoipService.ActiveCall is VoipGroupCall groupCall ? groupCall.Id : 0;
+            var joined = call != null && (call.ScheduledStartDate > 0 ? call.Id == activeCallId : (call.IsJoined || call.NeedRejoin));
 
-            //if (chat.VideoChat.GroupCallId != call?.Id || !chat.VideoChat.HasParticipants || call == null || call.IsJoined)
-            //{
-            //    ShowHide(false);
-            //    visible = false;
-            //}
-            //else
-            if (call != null && chat.VideoChat.GroupCallId == call.Id && ((chat.VideoChat.HasParticipants && !(call.IsJoined || call.NeedRejoin)) || call.ScheduledStartDate > 0))
+            // TODO: there's currently a bug in TDLib that reports incorrect participant_count while leaving the call.
+
+            if (chat.VideoChat.GroupCallId == call.Id && !joined && (call.ParticipantCount > 0 || call.ScheduledStartDate > 0))
             {
                 ShowHide(true);
 
-                TitleLabel.Text = call.ScheduledStartDate > 0 && call.Title.Length > 0 ? call.Title : channel ? Strings.VoipChannelVoiceChat : Strings.VoipGroupVoiceChat;
-                ServiceLabel.Text = call.ParticipantCount > 0 ? Locale.Declension(Strings.R.Participants, call.ParticipantCount) : Strings.MembersTalkingNobody;
+                if (call.IsRtmpStream is true || chat.Type is ChatTypeSupergroup { IsChannel: true })
+                {
+                    TitleLabel.Text = call.ScheduledStartDate > 0 && call.Title.Length > 0 ? call.Title : call.ScheduledStartDate != 0 ? Strings.VoipChannelScheduledVoiceChat : Strings.VoipChannelVoiceChat;
+                    ServiceLabel.Text = call.ParticipantCount > 0 ? Locale.Declension(Strings.R.ViewersWatching, call.ParticipantCount) : Strings.ViewersWatchingNobody;
+                }
+                else
+                {
+                    TitleLabel.Text = call.ScheduledStartDate > 0 && call.Title.Length > 0 ? call.Title : call.ScheduledStartDate != 0 ? Strings.VoipGroupScheduledVoiceChat : Strings.VoipGroupVoiceChat;
+                    ServiceLabel.Text = call.ParticipantCount > 0 ? Locale.Declension(Strings.R.Participants, call.ParticipantCount) : Strings.MembersTalkingNobody;
+                }
+
+                AutomationProperties.SetName(this, Label.Text);
 
                 if (call.ScheduledStartDate != 0)
                 {
@@ -104,18 +112,14 @@ namespace Telegram.Controls.Chats
                         _scheduledTimer.Stop();
                     }
 
-                    TitleLabel.Text = call.Title.Length > 0 ? call.Title : channel ? Strings.VoipChannelScheduledVoiceChat : Strings.VoipGroupScheduledVoiceChat;
-
-                    JoinButton.Background = BootStrapper.Current.Resources["VideoChatPurpleBrush"] as Brush;
+                    JoinButtonBackground.Background = BootStrapper.Current.Resources["VideoChatPurpleBrush"] as Brush;
                     JoinButton.Content = call.GetStartsIn();
                 }
                 else
                 {
                     _scheduledTimer.Stop();
 
-                    TitleLabel.Text = channel ? Strings.VoipChannelVoiceChat : Strings.VoipGroupVoiceChat;
-
-                    JoinButton.Background = BootStrapper.Current.Resources["StartButtonBackground"] as Brush;
+                    JoinButtonBackground.Background = BootStrapper.Current.Resources["PillButtonBackground"] as Brush;
                     JoinButton.Content = Strings.VoipChatJoin;
                 }
 
@@ -144,18 +148,6 @@ namespace Telegram.Controls.Chats
 
             _call = call;
             return visible;
-        }
-
-        public void UpdateChatActions(IDictionary<int, ChatAction> actions)
-        {
-            if (actions != null && actions.Count > 0)
-            {
-                //MessageLabel.Text = InputChatActionManager.GetSpeakingString(null, actions);
-            }
-            else
-            {
-                MessageLabel.Text = string.Empty;
-            }
         }
 
         private bool _collapsed = true;

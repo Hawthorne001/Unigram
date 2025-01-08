@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -33,10 +33,12 @@ namespace Telegram.ViewModels
             get => _inlineBotResults;
             set
             {
-                Set(ref _inlineBotResults, value);
-                RaisePropertyChanged(nameof(IsInlineBotResultsVisible));
+                if (Set(ref _inlineBotResults, value))
+                {
+                    RaisePropertyChanged(nameof(IsInlineBotResultsVisible));
 
-                _inlineBotResults?.Reset();
+                    _inlineBotResults?.Reset();
+                }
             }
         }
 
@@ -130,14 +132,14 @@ namespace Telegram.ViewModels
 
             // TODO: cache
 
-            if (false)
+            if (false && string.IsNullOrEmpty(query))
             {
-
+                InlineBotResults = null;
             }
             else
             {
-                var collection = new BotResultsCollection(ClientService, _currentInlineBot.Id, chat.Id, null, query);
-                var result = await collection.LoadMoreItemsAsync(0);
+                var collection = new BotResultsCollection(ClientService, _currentInlineBot.Id, chat.Id, null, query, token);
+                await collection.LoadMoreItemsAsync(0);
 
                 if (collection.Results != null && !token.IsCancellationRequested)
                 {
@@ -199,11 +201,29 @@ namespace Telegram.ViewModels
             InlineBotResults = null;
 
             var reply = GetReply(true);
-            var response = await ClientService.SendAsync(new SendInlineQueryResultMessage(chat.Id, ThreadId, reply, options, queryId, queryResult.GetId(), false));
+            Function function;
+
+            if (QuickReplyShortcut != null)
+            {
+                if (reply is InputMessageReplyToMessage replyToMessage)
+                {
+                    function = new AddQuickReplyShortcutInlineQueryResultMessage(QuickReplyShortcut.Name, replyToMessage.MessageId, queryId, queryResult.GetId(), false);
+                }
+                else
+                {
+                    function = new AddQuickReplyShortcutInlineQueryResultMessage(QuickReplyShortcut.Name, 0, queryId, queryResult.GetId(), false);
+                }
+            }
+            else
+            {
+                function = new SendInlineQueryResultMessage(chat.Id, ThreadId, reply, options, queryId, queryResult.GetId(), false);
+            }
+
+            var response = await ClientService.SendAsync(function);
         }
     }
 
-    public class BotResultsCollection : MvxObservableCollection<InlineQueryResult>, ISupportIncrementalLoading
+    public partial class BotResultsCollection : MvxObservableCollection<InlineQueryResult>, ISupportIncrementalLoading
     {
         private readonly IClientService _clientService;
 
@@ -214,10 +234,12 @@ namespace Telegram.ViewModels
         private readonly Location _location;
         private readonly string _query;
 
+        private readonly CancellationToken _cancellationToken;
+
         private InlineQueryResults _results;
         private string _nextOffset;
 
-        public BotResultsCollection(IClientService clientService, long botUserId, long chatId, Location location, string query)
+        public BotResultsCollection(IClientService clientService, long botUserId, long chatId, Location location, string query, CancellationToken cancellationToken)
         {
             _clientService = clientService;
 
@@ -227,6 +249,7 @@ namespace Telegram.ViewModels
             _chatId = chatId;
             _location = location;
             _query = query;
+            _cancellationToken = cancellationToken;
 
             _nextOffset = string.Empty;
         }
@@ -259,6 +282,16 @@ namespace Telegram.ViewModels
 
                 if (_nextOffset != null)
                 {
+                    if (string.IsNullOrEmpty(_nextOffset))
+                    {
+                        await Task.Delay(Constants.TypingTimeout);
+                    }
+
+                    if (_cancellationToken.IsCancellationRequested)
+                    {
+                        goto Cleanup;
+                    }
+
                     var response = await _clientService.SendAsync(new GetInlineQueryResults(_botUserId, _chatId, _location, _query, _nextOffset));
                     if (response is InlineQueryResults results)
                     {
@@ -273,7 +306,11 @@ namespace Telegram.ViewModels
                     }
                 }
 
-                return new LoadMoreItemsResult { Count = totalCount };
+            Cleanup:
+                return new LoadMoreItemsResult
+                {
+                    Count = totalCount
+                };
             });
         }
 

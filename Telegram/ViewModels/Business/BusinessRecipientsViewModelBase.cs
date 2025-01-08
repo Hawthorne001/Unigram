@@ -68,7 +68,7 @@ namespace Telegram.ViewModels.Business
 
         public async void AddExcluded()
         {
-            var result = await ChooseChatsPopup.AddExecute(false, true, true, ExcludedChats.ToList());
+            var result = await ChooseChatsPopup.AddExecute(NavigationService, false, true, true, ExcludedChats.ToList());
             if (result != null)
             {
                 ExcludedChats.ReplaceWith(result);
@@ -78,7 +78,7 @@ namespace Telegram.ViewModels.Business
 
         public async void AddIncluded()
         {
-            var result = await ChooseChatsPopup.AddExecute(true, true, true, IncludedChats.ToList());
+            var result = await ChooseChatsPopup.AddExecute(NavigationService, true, true, true, IncludedChats.ToList());
             if (result != null)
             {
                 IncludedChats.ReplaceWith(result);
@@ -111,14 +111,14 @@ namespace Telegram.ViewModels.Business
                 ? ExcludedChats
                 : IncludedChats;
 
-            if (recipients.SelectExistingChats) target.Add(new FolderFlag { Flag = ChatListFolderFlags.ExistingChats });
-            if (recipients.SelectNewChats) target.Add(new FolderFlag { Flag = ChatListFolderFlags.NewChats });
-            if (recipients.SelectContacts) target.Add(new FolderFlag { Flag = ChatListFolderFlags.IncludeContacts });
-            if (recipients.SelectNonContacts) target.Add(new FolderFlag { Flag = ChatListFolderFlags.IncludeNonContacts });
+            if (recipients.SelectExistingChats) target.Add(new FolderFlag(ChatListFolderFlags.ExistingChats));
+            if (recipients.SelectNewChats) target.Add(new FolderFlag(ChatListFolderFlags.NewChats));
+            if (recipients.SelectContacts) target.Add(new FolderFlag(ChatListFolderFlags.IncludeContacts));
+            if (recipients.SelectNonContacts) target.Add(new FolderFlag(ChatListFolderFlags.IncludeNonContacts));
 
-            foreach (var chat in ClientService.GetChats(recipients.ChatIds))
+            foreach (var chatId in recipients.ChatIds)
             {
-                target.Add(new FolderChat { Chat = chat });
+                target.Add(new FolderChat(chatId));
             }
 
             RaisePropertyChanged(nameof(HasChanged));
@@ -129,7 +129,8 @@ namespace Telegram.ViewModels.Business
             var recipients = new BusinessRecipients
             {
                 ExcludeSelected = RecipientsType == BusinessRecipientsType.Exclude,
-                ChatIds = new List<long>()
+                ChatIds = new List<long>(),
+                ExcludedChatIds = new List<long>()
             };
 
             var target = recipients.ExcludeSelected
@@ -147,7 +148,7 @@ namespace Telegram.ViewModels.Business
                 }
                 else if (item is FolderChat chat)
                 {
-                    recipients.ChatIds.Add(chat.Chat.Id);
+                    recipients.ChatIds.Add(chat.ChatId);
                 }
             }
 

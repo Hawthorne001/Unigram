@@ -1,17 +1,50 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using Windows.UI;
+using Windows.UI.Xaml.Media;
 
 namespace Telegram.Common
 {
     // ColorHelper is a set of color conversion utilities
     public static class ColorsHelper
     {
+        public static LinearGradientBrush LinearGradient(params uint[] colorStops)
+        {
+            var linear = new LinearGradientBrush();
+            linear.StartPoint = new Windows.Foundation.Point(0, 0);
+            linear.EndPoint = new Windows.Foundation.Point(1, 0);
+
+            for (int i = 0; i < colorStops.Length; i++)
+            {
+                linear.GradientStops.Add(new GradientStop
+                {
+                    Offset = i / (colorStops.Length - 1f),
+                    Color = ColorEx.FromHex(colorStops[i])
+                });
+            }
+
+            return linear;
+        }
+
+        public static Color Mix(Color x, Color y, double amount)
+        {
+            static double Mix(double x, double y, double f)
+            {
+                return Math.Sqrt(Math.Pow(x, 2) * (1 - f) + Math.Pow(y, 2) * f);
+            }
+
+            return Color.FromArgb(
+                (byte)Mix(x.A, y.A, amount),
+                (byte)Mix(x.R, y.R, amount),
+                (byte)Mix(x.G, y.G, amount),
+                (byte)Mix(x.B, y.B, amount));
+        }
+
         public static Color AlphaBlend(Color color1, Color color2)
         {
             return AlphaBlend(color1, color2, color2.A);
@@ -19,7 +52,11 @@ namespace Telegram.Common
 
         public static Color AlphaBlend(Color color1, Color color2, byte alpha)
         {
-            float factor = alpha / 255f;
+            return AlphaBlend(color1, color2, alpha / 255f);
+        }
+
+        public static Color AlphaBlend(Color color1, Color color2, float factor)
+        {
             byte red = (byte)(color1.R * (1 - factor) + color2.R * factor);
             byte green = (byte)(color1.G * (1 - factor) + color2.G * factor);
             byte blue = (byte)(color1.B * (1 - factor) + color2.B * factor);

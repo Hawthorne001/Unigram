@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -28,7 +28,7 @@ namespace Telegram.Controls
         Next = 1
     }
 
-    public class CarouselViewChangingEventArgs : EventArgs
+    public partial class CarouselViewChangingEventArgs : EventArgs
     {
         public CarouselViewChangingEventArgs(CarouselDirection direction)
         {
@@ -38,7 +38,7 @@ namespace Telegram.Controls
         public CarouselDirection Direction { get; }
     }
 
-    public class CarouselViewChangedEventArgs : EventArgs
+    public partial class CarouselViewChangedEventArgs : EventArgs
     {
         public CarouselViewChangedEventArgs(CarouselDirection direction)
         {
@@ -51,7 +51,7 @@ namespace Telegram.Controls
     public delegate void CarouselViewChangedEventHandler(object sender, CarouselViewChangedEventArgs e);
     public delegate void CarouselViewChangingEventHandler(object sender, CarouselViewChangingEventArgs e);
 
-    public class CarouselViewer : Grid
+    public partial class CarouselViewer : Grid
     {
         private bool _requiresArrange;
         private ulong _scrolling;
@@ -71,8 +71,8 @@ namespace Telegram.Controls
             {
                 _hasInitialLoadedEventFired = true;
 
-                _hitTest = Window.Current.Compositor.CreateSpriteVisual();
-                _hitTest.Brush = Window.Current.Compositor.CreateColorBrush(Windows.UI.Colors.Transparent);
+                _hitTest = BootStrapper.Current.Compositor.CreateSpriteVisual();
+                _hitTest.Brush = BootStrapper.Current.Compositor.CreateColorBrush(Windows.UI.Colors.Transparent);
 
                 if (ApiInfo.IsWindows11)
                 {
@@ -117,10 +117,10 @@ namespace Telegram.Controls
                 return;
             }
 
-            var ctrl = WindowContext.IsKeyDown(VirtualKey.Control);
+            var modifiers = WindowContext.KeyModifiers();
 
             var point = e.GetCurrentPoint(this);
-            if (point.Properties.IsHorizontalMouseWheel || ctrl)
+            if (point.Properties.IsHorizontalMouseWheel || modifiers != VirtualKeyModifiers.None)
             {
                 return;
             }
@@ -322,7 +322,7 @@ namespace Telegram.Controls
             _trackerOwner = new WeakInteractionTrackerOwner();
 
             //Create tracker and associate interaction source
-            _tracker = InteractionTracker.CreateWithOwner(Window.Current.Compositor, _trackerOwner);
+            _tracker = InteractionTracker.CreateWithOwner(BootStrapper.Current.Compositor, _trackerOwner);
             _tracker.InteractionSources.Add(_interactionSource);
 
             _tracker.Properties.InsertScalar("RestingValue", _restingValue);

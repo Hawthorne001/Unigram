@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class AnimatedIconButton : AnimatedGlyphButton
+    public partial class AnimatedIconButton : AnimatedGlyphButton
     {
         public AnimatedIconButton()
         {
@@ -40,11 +40,11 @@ namespace Telegram.Controls
         }
 
         public static readonly DependencyProperty SourceProperty =
-            DependencyProperty.Register("Source", typeof(IAnimatedVisualSource2), typeof(AnimatedIconToggleButton), new PropertyMetadata(null, OnSourceChanged));
+            DependencyProperty.Register("Source", typeof(IAnimatedVisualSource2), typeof(AnimatedIconButton), new PropertyMetadata(null, OnSourceChanged));
 
         private static void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var sender = d as AnimatedIconToggleButton;
+            var sender = d as AnimatedIconButton;
             var newValue = e.NewValue as IAnimatedVisualSource2;
 
             if (newValue != null && sender?.Foreground is SolidColorBrush foreground)

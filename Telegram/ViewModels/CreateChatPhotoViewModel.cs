@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,35 +11,12 @@ using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
-using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public readonly struct CreateChatPhotoParameters
+    public partial class CreateChatPhotoViewModel : ViewModelBase
     {
-        public long? ChatId { get; }
-
-        public bool IsPublic { get; }
-
-        public bool IsPersonal { get; }
-
-        public CreateChatPhotoParameters(long? chatId, bool isPublic, bool isPersonal)
-        {
-            ChatId = chatId;
-            IsPublic = isPublic;
-            IsPersonal = isPersonal;
-        }
-    }
-
-    public class CreateChatPhotoViewModel : ViewModelBase
-    {
-        private long? _chatId;
-        private bool _isPublic;
-        private bool _isPersonal;
-
-        public TaskCompletionSource<object> Completion { get; set; }
-
         public CreateChatPhotoViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
         {
@@ -60,13 +37,6 @@ namespace Telegram.ViewModels
 
         protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
-            if (parameter is CreateChatPhotoParameters parameters)
-            {
-                _chatId = parameters.ChatId;
-                _isPublic = parameters.IsPublic;
-                _isPersonal = parameters.IsPersonal;
-            }
-
             var foreground = await ClientService.SendAsync(new GetAnimatedEmoji("\U0001F916")) as AnimatedEmoji;
             if (foreground != null)
             {
@@ -90,69 +60,24 @@ namespace Telegram.ViewModels
 
         public ObservableCollection<BackgroundFill> Items { get; private set; }
 
-        public async void Send()
+        public InputChatPhoto Send()
         {
             if (SelectedForeground is not Sticker foreground || SelectedBackground is not BackgroundFill background)
             {
-                Completion?.SetResult(false);
-                return;
-            }
-
-            ChatPhotoStickerType stickerType = foreground.FullType is StickerFullTypeCustomEmoji customEmoji
-                ? new ChatPhotoStickerTypeCustomEmoji(customEmoji.CustomEmojiId)
-                : new ChatPhotoStickerTypeRegularOrMask(foreground.SetId, foreground.Id);
-            InputChatPhoto inputPhoto = new InputChatPhotoSticker(new ChatPhotoSticker(stickerType, background));
-
-            if (_chatId is long chatId)
-            {
-                if (ClientService.TryGetUser(chatId, out User user))
-                {
-                    if (user.Type is UserTypeBot userTypeBot && userTypeBot.CanBeEdited)
-                    {
-                        ClientService.Send(new SetBotProfilePhoto(user.Id, inputPhoto));
-                    }
-                    else if (_isPersonal)
-                    {
-                        var confirm = await ShowPopupAsync(string.Format(Strings.SetUserPhotoAlertMessage, user.FirstName, user.FirstName), Strings.AppName, Strings.SuggestPhotoShort, Strings.Cancel);
-                        if (confirm == ContentDialogResult.Primary)
-                        {
-                            ClientService.Send(new SetUserPersonalProfilePhoto(user.Id, inputPhoto));
-                            Completion?.SetResult(true);
-                        }
-                        else
-                        {
-                            Completion?.SetResult(false);
-                        }
-                    }
-                    else
-                    {
-                        var confirm = await ShowPopupAsync(string.Format(Strings.SuggestPhotoAlertMessage, user.FirstName), Strings.AppName, Strings.SuggestPhotoShort, Strings.Cancel);
-                        if (confirm == ContentDialogResult.Primary)
-                        {
-                            ClientService.Send(new SuggestUserProfilePhoto(user.Id, inputPhoto));
-                            Completion?.SetResult(true);
-                        }
-                        else
-                        {
-                            Completion?.SetResult(false);
-                        }
-                    }
-                }
-                else
-                {
-                    ClientService.Send(new SetChatPhoto(chatId, inputPhoto));
-                    Completion?.SetResult(true);
-                }
+                return null;
             }
             else
             {
-                ClientService.Send(new SetProfilePhoto(inputPhoto, _isPublic));
-                Completion?.SetResult(true);
+                ChatPhotoStickerType stickerType = foreground.FullType is StickerFullTypeCustomEmoji customEmoji
+                    ? new ChatPhotoStickerTypeCustomEmoji(customEmoji.CustomEmojiId)
+                    : new ChatPhotoStickerTypeRegularOrMask(foreground.SetId, foreground.Id);
+                InputChatPhoto inputPhoto = new InputChatPhotoSticker(new ChatPhotoSticker(stickerType, background));
+                return inputPhoto;
             }
         }
     }
 
-    public class BackgroundDiffHandler : IDiffHandler<Background>
+    public partial class BackgroundDiffHandler : IDiffHandler<Background>
     {
         public bool CompareItems(Background oldItem, Background newItem)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -35,7 +35,7 @@ namespace Telegram.Views.Settings.Password
 
         public string Password { get; private set; }
 
-        private void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             var password1 = Field1.Password;
             var password2 = Field2.Password;
@@ -56,16 +56,12 @@ namespace Telegram.Views.Settings.Password
 
             if (!string.Equals(password1, password2))
             {
-                ToastPopup.Show(Strings.PasswordDoNotMatch);
+                ToastPopup.Show(XamlRoot, Strings.PasswordDoNotMatch);
                 args.Cancel = true;
                 return;
             }
 
             Password = password1;
-        }
-
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
         }
 
         private void Password_KeyDown(object sender, KeyRoutedEventArgs e)

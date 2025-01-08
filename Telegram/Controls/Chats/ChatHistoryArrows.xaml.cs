@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -20,13 +20,13 @@ namespace Telegram.Controls.Chats
         {
             InitializeComponent();
 
-            var visual = DropShadowEx.Attach(ArrowShadow, 2);
+            var visual = VisualUtilities.DropShadow(ArrowShadow, 2);
             visual.Offset = new Vector3(0, 1, 0);
 
-            visual = DropShadowEx.Attach(ArrowMentionsShadow, 2);
+            visual = VisualUtilities.DropShadow(ArrowMentionsShadow, 2);
             visual.Offset = new Vector3(0, 1, 0);
 
-            visual = DropShadowEx.Attach(ArrowReactionsShadow, 2);
+            visual = VisualUtilities.DropShadow(ArrowReactionsShadow, 2);
             visual.Offset = new Vector3(0, 1, 0);
 
             var reactions = ElementComposition.GetElementVisual(ReactionsPanel);

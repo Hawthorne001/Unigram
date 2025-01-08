@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,6 +15,7 @@ using Telegram.Td;
 using Telegram.Td.Api;
 using Telegram.Views;
 using Windows.ApplicationModel.Resources;
+using Windows.Globalization;
 using Windows.Storage;
 using Windows.UI.Xaml;
 
@@ -37,7 +38,7 @@ namespace Telegram.Services
         event EventHandler<LocaleChangedEventArgs> Changed;
     }
 
-    public class LocaleChangedEventArgs : EventArgs
+    public partial class LocaleChangedEventArgs : EventArgs
     {
         public IList<LanguagePackString> Strings { get; }
 
@@ -47,7 +48,7 @@ namespace Telegram.Services
         }
     }
 
-    public class LocaleService : ILocaleService
+    public partial class LocaleService : ILocaleService
     {
         public const string LANGPACK = "unigram";
 
@@ -114,6 +115,17 @@ namespace Telegram.Services
 
         private static ILocaleService _current;
         public static ILocaleService Current => _current ??= new LocaleService();
+
+        public static string SystemLanguageId()
+        {
+            var languageId = ApplicationLanguages.Languages[0].Split('-');
+            if (languageId[0] == "pt")
+            {
+                return ApplicationLanguages.Languages[0].ToLower();
+            }
+
+            return languageId[0];
+        }
 
         public CultureInfo CurrentCulture => _currentCulture;
 
@@ -195,6 +207,11 @@ namespace Telegram.Services
             var values = GetLanguagePack(_languageCode);
             if (values.TryGetValue(selector, out string value))
             {
+                if (string.IsNullOrEmpty(value))
+                {
+                    values.TryGetValue(key + "_other", out value);
+                }
+
                 return value;
             }
 
@@ -208,21 +225,22 @@ namespace Telegram.Services
                 values[key + "_many"] = pluralized.ManyValue;
                 values[key + "_other"] = pluralized.OtherValue;
 
-                switch (quantity)
+                value = quantity switch
                 {
-                    case QUANTITY_ZERO:
-                        return pluralized.ZeroValue;
-                    case QUANTITY_ONE:
-                        return pluralized.OneValue;
-                    case QUANTITY_TWO:
-                        return pluralized.TwoValue;
-                    case QUANTITY_FEW:
-                        return pluralized.FewValue;
-                    case QUANTITY_MANY:
-                        return pluralized.ManyValue;
-                    default:
-                        return pluralized.OtherValue;
+                    QUANTITY_ZERO => pluralized.ZeroValue,
+                    QUANTITY_ONE => pluralized.OneValue,
+                    QUANTITY_TWO => pluralized.TwoValue,
+                    QUANTITY_FEW => pluralized.FewValue,
+                    QUANTITY_MANY => pluralized.ManyValue,
+                    _ => pluralized.OtherValue
+                };
+
+                if (string.IsNullOrEmpty(value))
+                {
+                    value = pluralized.OtherValue;
                 }
+
+                return value;
             }
 
 #if zDEBUG

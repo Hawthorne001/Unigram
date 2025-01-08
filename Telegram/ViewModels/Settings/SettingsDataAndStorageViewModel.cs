@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -13,6 +13,7 @@ using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Services.Settings;
+using Telegram.Td.Api;
 using Telegram.Views.Popups;
 using Telegram.Views.Settings;
 using Telegram.Views.Settings.Popups;
@@ -22,7 +23,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsDataAndStorageViewModel : ViewModelBase
+    public partial class SettingsDataAndStorageViewModel : ViewModelBase
     {
         private readonly IStorageService _storageService;
 
@@ -151,7 +152,7 @@ namespace Telegram.ViewModels.Settings
 
         private async void OpenAutoDownload(AutoDownloadType type)
         {
-            await ShowPopupAsync(typeof(SettingsDataAutoPopup), type);
+            await ShowPopupAsync(new SettingsDataAutoPopup(), type);
             RaisePropertyChanged(nameof(AutoDownload));
             RaisePropertyChanged(nameof(AutoDownloadDefault));
         }
@@ -174,6 +175,21 @@ namespace Telegram.ViewModels.Settings
                 RaisePropertyChanged(nameof(AutoDownloadEnabled));
                 RaisePropertyChanged(nameof(AutoDownloadDefault));
                 RaisePropertyChanged(nameof(AutoDownload));
+            }
+        }
+
+        public async void ClearDrafts()
+        {
+            var confirm = await ShowPopupAsync(Strings.AreYouSureClearDrafts, Strings.AppName, Strings.OK, Strings.Cancel);
+            if (confirm != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            var clear = await ClientService.SendAsync(new ClearAllDraftMessages(true));
+            if (clear is Error)
+            {
+                // TODO
             }
         }
 

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,17 +8,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using Telegram.Navigation;
 using Telegram.Td.Api;
 using Windows.Foundation;
 using Windows.UI;
 using Windows.UI.Composition;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Hosting;
 
 namespace Telegram.Controls
 {
-    public class StorageChart : Control
+    public partial class StorageChart : Control
     {
         private const float MIN_TRIM = 0.0001f;
         private const float PAD_TRIM = 0.03f;
@@ -37,7 +37,7 @@ namespace Telegram.Controls
         {
             DefaultStyleKey = typeof(StorageChart);
 
-            _visual = Window.Current.Compositor.CreateShapeVisual();
+            _visual = BootStrapper.Current.Compositor.CreateShapeVisual();
             ElementCompositionPreview.SetElementChildVisual(this, _visual);
         }
 
@@ -80,12 +80,12 @@ namespace Telegram.Controls
 
             for (int i = 0; i < _values.Length; i++)
             {
-                var ellipse = Window.Current.Compositor.CreateEllipseGeometry();
+                var ellipse = BootStrapper.Current.Compositor.CreateEllipseGeometry();
                 ellipse.Radius = new Vector2(width / 2 - THICKNESS / 2);
                 ellipse.Center = new Vector2(width / 2);
 
-                var shape = Window.Current.Compositor.CreateSpriteShape(ellipse);
-                shape.StrokeBrush = Window.Current.Compositor.CreateColorBrush(items[i].Stroke);
+                var shape = BootStrapper.Current.Compositor.CreateSpriteShape(ellipse);
+                shape.StrokeBrush = BootStrapper.Current.Compositor.CreateColorBrush(items[i].Stroke);
                 shape.StrokeThickness = THICKNESS;
                 shape.StrokeStartCap = CompositionStrokeCap.Round;
                 shape.StrokeEndCap = CompositionStrokeCap.Round;
@@ -148,11 +148,11 @@ namespace Telegram.Controls
                     prevEnd = 0;
                 }
 
-                var trimStart = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                var trimStart = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 trimStart.InsertKeyFrame(0, prevOffset);
                 trimStart.InsertKeyFrame(1, nextOffset);
 
-                var trimEnd = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                var trimEnd = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 trimEnd.InsertKeyFrame(0, prevEnd);
                 trimEnd.InsertKeyFrame(1, nextEnd);
 
@@ -226,7 +226,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class StorageChartItem
+    public partial class StorageChartItem
     {
         public string Name { get; set; }
 

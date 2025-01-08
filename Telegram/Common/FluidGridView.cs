@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Common
 {
-    public class FluidGridView
+    public partial class FluidGridView
     {
         private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
@@ -234,20 +234,13 @@ namespace Telegram.Common
             {
                 get
                 {
-                    if (Owner is WrapGrid)
+                    return Owner switch
                     {
-                        return (Owner as WrapGrid).Orientation;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        return (Owner as ItemsWrapGrid).Orientation;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        return (Owner as VariableSizedWrapGrid).Orientation;
-                    }
-
-                    return Orientation.Horizontal;
+                        WrapGrid wrapGrid => wrapGrid.Orientation,
+                        ItemsWrapGrid itemsWrapGrid => itemsWrapGrid.Orientation,
+                        VariableSizedWrapGrid variableSizedWrapGrid => variableSizedWrapGrid.Orientation,
+                        _ => Orientation.Horizontal
+                    };
                 }
             }
 
@@ -255,34 +248,27 @@ namespace Telegram.Common
             {
                 get
                 {
-                    if (Owner is WrapGrid)
+                    return Owner switch
                     {
-                        return (Owner as WrapGrid).ItemWidth;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        return (Owner as ItemsWrapGrid).ItemWidth;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        return (Owner as VariableSizedWrapGrid).ItemWidth;
-                    }
-
-                    return double.NaN;
+                        WrapGrid wrapGrid => wrapGrid.ItemWidth,
+                        ItemsWrapGrid itemsWrapGrid => itemsWrapGrid.ItemWidth,
+                        VariableSizedWrapGrid variableSizedWrapGrid => variableSizedWrapGrid.ItemWidth,
+                        _ => double.NaN
+                    };
                 }
                 set
                 {
-                    if (Owner is WrapGrid)
+                    switch (Owner)
                     {
-                        (Owner as WrapGrid).ItemWidth = value;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        (Owner as ItemsWrapGrid).ItemWidth = value;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        (Owner as VariableSizedWrapGrid).ItemWidth = value;
+                        case WrapGrid wrapGrid:
+                            wrapGrid.ItemWidth = value;
+                            break;
+                        case ItemsWrapGrid itemsWrapGrid:
+                            itemsWrapGrid.ItemWidth = value;
+                            break;
+                        case VariableSizedWrapGrid variableSizedWrapGrid:
+                            variableSizedWrapGrid.ItemWidth = value;
+                            break;
                     }
                 }
             }
@@ -291,34 +277,27 @@ namespace Telegram.Common
             {
                 get
                 {
-                    if (Owner is WrapGrid)
+                    return Owner switch
                     {
-                        return (Owner as WrapGrid).ItemHeight;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        return (Owner as ItemsWrapGrid).ItemHeight;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        return (Owner as VariableSizedWrapGrid).ItemHeight;
-                    }
-
-                    return double.NaN;
+                        WrapGrid wrapGrid => wrapGrid.ItemHeight,
+                        ItemsWrapGrid itemsWrapGrid => itemsWrapGrid.ItemHeight,
+                        VariableSizedWrapGrid variableSizedWrapGrid => variableSizedWrapGrid.ItemHeight,
+                        _ => double.NaN
+                    };
                 }
                 set
                 {
-                    if (Owner is WrapGrid)
+                    switch (Owner)
                     {
-                        (Owner as WrapGrid).ItemHeight = value;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        (Owner as ItemsWrapGrid).ItemHeight = value;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        (Owner as VariableSizedWrapGrid).ItemHeight = value;
+                        case WrapGrid wrapGrid:
+                            wrapGrid.ItemHeight = value;
+                            break;
+                        case ItemsWrapGrid itemsWrapGrid:
+                            itemsWrapGrid.ItemHeight = value;
+                            break;
+                        case VariableSizedWrapGrid variableSizedWrapGrid:
+                            variableSizedWrapGrid.ItemHeight = value;
+                            break;
                     }
                 }
             }
@@ -327,34 +306,27 @@ namespace Telegram.Common
             {
                 get
                 {
-                    if (Owner is WrapGrid)
+                    return Owner switch
                     {
-                        return (Owner as WrapGrid).MaximumRowsOrColumns;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        return (Owner as ItemsWrapGrid).MaximumRowsOrColumns;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        return (Owner as VariableSizedWrapGrid).MaximumRowsOrColumns;
-                    }
-
-                    return 0;
+                        WrapGrid wrapGrid => wrapGrid.MaximumRowsOrColumns,
+                        ItemsWrapGrid itemsWrapGrid => itemsWrapGrid.MaximumRowsOrColumns,
+                        VariableSizedWrapGrid variableSizedWrapGrid => variableSizedWrapGrid.MaximumRowsOrColumns,
+                        _ => 0
+                    };
                 }
                 set
                 {
-                    if (Owner is WrapGrid)
+                    switch (Owner)
                     {
-                        (Owner as WrapGrid).MaximumRowsOrColumns = value;
-                    }
-                    else if (Owner is ItemsWrapGrid)
-                    {
-                        (Owner as ItemsWrapGrid).MaximumRowsOrColumns = value;
-                    }
-                    else if (Owner is VariableSizedWrapGrid)
-                    {
-                        (Owner as VariableSizedWrapGrid).MaximumRowsOrColumns = value;
+                        case WrapGrid wrapGrid:
+                            wrapGrid.MaximumRowsOrColumns = value;
+                            break;
+                        case ItemsWrapGrid itemsWrapGrid:
+                            itemsWrapGrid.MaximumRowsOrColumns = value;
+                            break;
+                        case VariableSizedWrapGrid variableSizedWrapGrid:
+                            variableSizedWrapGrid.MaximumRowsOrColumns = value;
+                            break;
                     }
                 }
             }
@@ -367,7 +339,7 @@ namespace Telegram.Common
         #endregion
     }
 
-    public class FluidGridViewTriggerCollection : ObservableCollection<FluidGridViewTriggerBase>
+    public partial class FluidGridViewTriggerCollection : ObservableCollection<FluidGridViewTriggerBase>
     {
         public ItemsControl Owner { get; private set; }
 
@@ -441,7 +413,7 @@ namespace Telegram.Common
         #endregion
     }
 
-    public class FluidGridViewTrigger : FluidGridViewTriggerBase
+    public partial class FluidGridViewTrigger : FluidGridViewTriggerBase
     {
         #region RowsOrColumns
         public int RowsOrColumns
@@ -504,7 +476,7 @@ namespace Telegram.Common
         #endregion
     }
 
-    public class FixedGridViewTrigger : FluidGridViewTriggerBase
+    public partial class FixedGridViewTrigger : FluidGridViewTriggerBase
     {
         #region ItemLength
         public double ItemLength
@@ -537,7 +509,7 @@ namespace Telegram.Common
         #endregion
     }
 
-    public class LengthGridViewTrigger : FluidGridViewTriggerBase
+    public partial class LengthGridViewTrigger : FluidGridViewTriggerBase
     {
         #region ItemLength
         public double ItemLength

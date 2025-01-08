@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.props')" />
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.props')" />
   <PropertyGroup Label="Globals">
     <CppWinRTOptimized>true</CppWinRTOptimized>
     <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
@@ -14,7 +14,7 @@
     <AppContainerApplication>true</AppContainerApplication>
     <ApplicationType>Windows Store</ApplicationType>
     <ApplicationTypeRevision>10.0</ApplicationTypeRevision>
-    <WindowsTargetPlatformVersion Condition=" '$(WindowsTargetPlatformVersion)' == '' ">10.0.22621.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformMinVersion>10.0.18362.0</WindowsTargetPlatformMinVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Version>1.0.0</Version>
@@ -25,6 +25,7 @@
     </CppWinRTLibs>
     <CppWinRTModernIDL>true</CppWinRTModernIDL>
     <CppWinRTUsePrefixes>true</CppWinRTUsePrefixes>
+    <VcpkgEnableClassic>true</VcpkgEnableClassic>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
@@ -135,7 +136,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">_DEBUG;USE_AURA=1;_HAS_EXCEPTIONS=0;__STD_C;_CRT_RAND_S;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_ATL_NO_OPENGL;_WINDOWS;CERT_CHAIN_PARA_HAS_EXTRA_FIELDS;PSAPI_VERSION=2;WIN32;_SECURE_ATL;_USING_V110_SDK71_;WINUWP;__WRL_NO_DEFAULT_LIB__;WINAPI_FAMILY=WINAPI_FAMILY_PC_APP;WIN10=_WIN32_WINNT_WIN10;WIN32_LEAN_AND_MEAN;NOMINMAX;_UNICODE;UNICODE;NTDDI_VERSION=NTDDI_WIN10_RS2;_WIN32_WINNT=0x0A00;WINVER=0x0A00;_DEBUG;DYNAMIC_ANNOTATIONS_ENABLED=1;_HAS_ITERATOR_DEBUGGING=0;WEBRTC_ENABLE_PROTOBUF=1;WEBRTC_INCLUDE_INTERNAL_AUDIO_DEVICE;RTC_ENABLE_VP9;HAVE_SCTP;WEBRTC_ARCH_ARM64;WEBRTC_HAS_NEON;WEBRTC_LIBRARY_IMPL;WEBRTC_NON_STATIC_TRACE_EVENT_HANDLERS=0;WEBRTC_WIN;ABSL_ALLOCATOR_NOTHROW=1;HAVE_SCTP;GOOGLE_PROTOBUF_NO_RTTI;GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">$(WebRTC_Root);$(WebRTC_Output)\$(Platform)\$(Configuration)\gen;$(WebRTC_Root)\third_party\abseil-cpp;$(WebRTC_Root)\third_party\libyuv\include;$(WebRTC_Root)\third_party\protobuf\src;$(WebRTC_Output)\$(Platform)\$(Configuration)\gen\protoc_out;$(WebRTC_Root)\third_party\protobuf\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">$(WebRTC_Root);$(WebRTC_Output)\$(Platform)\$(Configuration)\gen;$(WebRTC_Root)\third_party\abseil-cpp;$(WebRTC_Root)\third_party\libyuv\include;$(WebRTC_Root)\third_party\protobuf\src;$(WebRTC_Output)\$(Platform)\$(Configuration)\gen\protoc_out;$(WebRTC_Root)\third_party\protobuf\src;%(AdditionalIncludeDirectories);.\rnnoise\include;..\Libraries\tgcalls\tgcalls;..\Libraries\tgcalls;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">$(WebRTC_Output)\$(Platform)\$(Configuration)\obj;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -224,10 +225,16 @@
       <DependentUpon>BroadcastPartRequestedEventArgs.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClInclude>
+    <ClInclude Include="FrameReceivedEventArgs.h">
+      <DependentUpon>FrameReceivedEventArgs.idl</DependentUpon>
+      <SubType>Code</SubType>
+    </ClInclude>
     <ClInclude Include="GroupNetworkStateChangedEventArgs.h">
       <DependentUpon>GroupNetworkStateChangedEventArgs.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClInclude>
+    <ClInclude Include="LoopbackCapture.h" />
+    <ClInclude Include="MediaChannelDescriptionsRequestedEventArgs.h" />
     <ClInclude Include="RemoteMediaStateUpdatedEventArgs.h">
       <DependentUpon>RemoteMediaStateUpdatedEventArgs.idl</DependentUpon>
     </ClInclude>
@@ -272,11 +279,11 @@
       <DependentUpon>VoipVideoChannelInfo.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClInclude>
-    <ClInclude Include="VoipVideoRenderer.h" />
-    <ClInclude Include="VoipVideoRendererToken.h">
-      <DependentUpon>VoipVideoRendererToken.idl</DependentUpon>
+    <ClInclude Include="VoipVideoOutputSink.h">
+      <DependentUpon>VoipVideoOutputSink.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClInclude>
+    <ClInclude Include="VoipVideoOutput.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\ChannelManager.cpp">
@@ -431,10 +438,16 @@
       <DependentUpon>BroadcastPartRequestedEventArgs.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClCompile>
+    <ClCompile Include="FrameReceivedEventArgs.cpp">
+      <DependentUpon>FrameReceivedEventArgs.idl</DependentUpon>
+      <SubType>Code</SubType>
+    </ClCompile>
     <ClCompile Include="GroupNetworkStateChangedEventArgs.cpp">
       <DependentUpon>GroupNetworkStateChangedEventArgs.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClCompile>
+    <ClCompile Include="LoopbackCapture.cpp" />
+    <ClCompile Include="MediaChannelDescriptionsRequestedEventArgs.cpp" />
     <ClCompile Include="RemoteMediaStateUpdatedEventArgs.cpp">
       <DependentUpon>RemoteMediaStateUpdatedEventArgs.idl</DependentUpon>
     </ClCompile>
@@ -491,8 +504,8 @@
       <DependentUpon>VoipVideoChannelInfo.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClCompile>
-    <ClCompile Include="VoipVideoRendererToken.cpp">
-      <DependentUpon>VoipVideoRendererToken.idl</DependentUpon>
+    <ClCompile Include="VoipVideoOutputSink.cpp">
+      <DependentUpon>VoipVideoOutputSink.idl</DependentUpon>
       <SubType>Code</SubType>
     </ClCompile>
   </ItemGroup>
@@ -501,9 +514,13 @@
       <SubType>Designer</SubType>
     </Midl>
     <Midl Include="BroadcastTimeRequestedEventArgs.idl" />
+    <Midl Include="FrameReceivedEventArgs.idl">
+      <SubType>Designer</SubType>
+    </Midl>
     <Midl Include="GroupNetworkStateChangedEventArgs.idl">
       <SubType>Designer</SubType>
     </Midl>
+    <Midl Include="MediaChannelDescriptionsRequestedEventArgs.idl" />
     <Midl Include="RemoteMediaStateUpdatedEventArgs.idl" />
     <Midl Include="SignalingDataEmittedEventArgs.idl" />
     <Midl Include="Telegram.Native.Calls.idl" />
@@ -522,9 +539,7 @@
     <Midl Include="VoipVideoChannelInfo.idl">
       <SubType>Designer</SubType>
     </Midl>
-    <Midl Include="VoipVideoRendererToken.idl">
-      <SubType>Designer</SubType>
-    </Midl>
+    <Midl Include="VoipVideoOutputSink.idl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="VoipManager.def" />
@@ -536,17 +551,19 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="..\packages\Win2D.uwp.1.26.0\build\native\Win2D.uwp.targets" Condition="Exists('..\packages\Win2D.uwp.1.26.0\build\native\Win2D.uwp.targets')" />
-    <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
-    <Import Project="..\packages\Telegram.Td.UWP.1.8.28\build\native\Telegram.Td.UWP.targets" Condition="Exists('..\packages\Telegram.Td.UWP.1.8.28\build\native\Telegram.Td.UWP.targets')" />
+    <Import Project="..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets')" />
+    <Import Project="..\packages\Win2D.uwp.1.28.0\build\native\Win2D.uwp.targets" Condition="Exists('..\packages\Win2D.uwp.1.28.0\build\native\Win2D.uwp.targets')" />
+    <Import Project="..\packages\Microsoft.Windows.ImplementationLibrary.1.0.240803.1\build\native\Microsoft.Windows.ImplementationLibrary.targets" Condition="Exists('..\packages\Microsoft.Windows.ImplementationLibrary.1.0.240803.1\build\native\Microsoft.Windows.ImplementationLibrary.targets')" />
+    <Import Project="..\packages\Telegram.Td.UWP.1.8.42\build\native\Telegram.Td.UWP.targets" Condition="Exists('..\packages\Telegram.Td.UWP.1.8.42\build\native\Telegram.Td.UWP.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Win2D.uwp.1.26.0\build\native\Win2D.uwp.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Win2D.uwp.1.26.0\build\native\Win2D.uwp.targets'))" />
-    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
-    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.230706.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
-    <Error Condition="!Exists('..\packages\Telegram.Td.UWP.1.8.28\build\native\Telegram.Td.UWP.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Telegram.Td.UWP.1.8.28\build\native\Telegram.Td.UWP.targets'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.240405.15\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+    <Error Condition="!Exists('..\packages\Win2D.uwp.1.28.0\build\native\Win2D.uwp.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Win2D.uwp.1.28.0\build\native\Win2D.uwp.targets'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.ImplementationLibrary.1.0.240803.1\build\native\Microsoft.Windows.ImplementationLibrary.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.ImplementationLibrary.1.0.240803.1\build\native\Microsoft.Windows.ImplementationLibrary.targets'))" />
+    <Error Condition="!Exists('..\packages\Telegram.Td.UWP.1.8.42\build\native\Telegram.Td.UWP.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Telegram.Td.UWP.1.8.42\build\native\Telegram.Td.UWP.targets'))" />
   </Target>
 </Project>

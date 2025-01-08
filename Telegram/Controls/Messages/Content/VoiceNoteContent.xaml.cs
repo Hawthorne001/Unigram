@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -24,7 +24,7 @@ using Windows.UI.Xaml.Hosting;
 namespace Telegram.Controls.Messages.Content
 {
     // TODO: turn the whole control into a Button
-    public sealed class VoiceNoteContent : ControlEx, IContentWithFile
+    public sealed partial class VoiceNoteContent : ControlEx, IContentWithFile
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -79,6 +79,8 @@ namespace Telegram.Controls.Messages.Content
 
             ButtonDrag = new AutomaticDragHelper(Button, true);
             ButtonDrag.StartDetectingDrag();
+
+            Progress.ValueChanged += Progress_ValueChanged;
 
             Button.Click += Button_Click;
             Button.DragStarting += Button_DragStarting;
@@ -183,7 +185,7 @@ namespace Telegram.Controls.Messages.Content
             RecognizedIcon ??= GetTemplateChild(nameof(RecognizedIcon)) as Border;
             RecognizedIcon.Visibility = Visibility.Visible;
 
-            _previous = GetVisual(Window.Current.Compositor, Colors.Black, out _props);
+            _previous = GetVisual(BootStrapper.Current.Compositor, Colors.Black, out _props);
             ElementCompositionPreview.SetElementChildVisual(RecognizedIcon, _previous.RootVisual);
         }
 
@@ -300,7 +302,7 @@ namespace Telegram.Controls.Messages.Content
         private void UpdatePosition(TimeSpan position, TimeSpan duration)
         {
             var message = _message;
-            if (message == null)
+            if (message == null || Progress.IsChanging)
             {
                 return;
             }
@@ -308,8 +310,8 @@ namespace Telegram.Controls.Messages.Content
             if (message.AreTheSame(message.PlaybackService.CurrentItem) /*&& !_pressed*/)
             {
                 Subtitle.Text = FormatTime(position) + " / " + FormatTime(duration);
-                Progress.Maximum = /*Slider.Maximum =*/ duration.TotalMilliseconds;
-                Progress.Value = /*Slider.Value =*/ position.TotalMilliseconds;
+                Progress.Maximum = /*Slider.Maximum =*/ duration.TotalSeconds;
+                Progress.Value = /*Slider.Value =*/ position.TotalSeconds;
             }
         }
 
@@ -368,7 +370,7 @@ namespace Telegram.Controls.Messages.Content
                 Button.SetGlyph(file.Id, MessageContentState.Downloading);
                 Button.Progress = (double)file.Local.DownloadedSize / size;
             }
-            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed)
+            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed || (message.SendingState is MessageSendingStatePending && !file.Remote.IsUploadingCompleted))
             {
                 Button.SetGlyph(file.Id, MessageContentState.Uploading);
                 Button.Progress = (double)file.Remote.UploadedSize / size;
@@ -433,9 +435,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return true;
             }
-            else if (content is MessageText text && text.WebPage != null && !primary)
+            else if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return text.WebPage.VoiceNote != null;
+                return text.LinkPreview.Type is LinkPreviewTypeVoiceNote;
             }
 
             return false;
@@ -453,12 +455,17 @@ namespace Telegram.Controls.Messages.Content
             {
                 return voiceNote.VoiceNote;
             }
-            else if (content is MessageText text && text.WebPage != null)
+            else if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeVoiceNote previewVoiceNote)
             {
-                return text.WebPage.VoiceNote;
+                return previewVoiceNote.VoiceNote;
             }
 
             return null;
+        }
+
+        private void Progress_ValueChanged(ProgressVoice sender, ProgressVoiceValueChanged args)
+        {
+            _message?.PlaybackService.Seek(TimeSpan.FromSeconds(args.NewValue));
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)

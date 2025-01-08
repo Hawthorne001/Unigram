@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -21,8 +21,7 @@ namespace Telegram.Controls.Messages
 {
     public partial class ReactionsPanel : Panel, IDiffEqualityComparer<MessageReaction>
     {
-        private readonly Dictionary<string, ReactionButton> _reactions = new();
-        private readonly Dictionary<long, ReactionButton> _customReactions = new();
+        private readonly Dictionary<ReactionType, ReactionButton> _cache = new(new ReactionTypeEqualityComparer());
 
         private long _chatId;
         private long _messageId;
@@ -45,18 +44,16 @@ namespace Telegram.Controls.Messages
             return new ReactionsPanelAutomationPeer(this);
         }
 
-        public bool HasReactions => _reactions.Count > 0 || _customReactions.Count > 0;
+        public bool HasReactions => _cache.Count > 0;
 
-        public async void UpdateMessageReactions(MessageViewModel message, bool animate = false)
+        public void UpdateMessageReactions(MessageViewModel message, bool animate = false)
         {
             var reactions = message?.InteractionInfo?.Reactions;
             if (reactions == null || reactions.AreTags != _prevAsTags || message?.ChatId != _chatId || message?.Id != _messageId)
             {
                 _prevValue = null;
 
-                _reactions.Clear();
-                _customReactions.Clear();
-
+                _cache.Clear();
                 Children.Clear();
             }
 
@@ -67,12 +64,9 @@ namespace Telegram.Controls.Messages
                     Padding = new Thickness(reactions.AreTags ? 8 : 4, 0, 4, 4);
                 }
 
-                List<long> missingCustomEmoji = null;
-                List<string> missingEmoji = null;
-
                 message.UnreadReactions
                     .Select(x => x.Type)
-                    .Discern(out var unreadEmoji, out var unreadCustomEmoji);
+                    .Discern(out bool paid, out var unreadEmoji, out var unreadCustomEmoji);
 
                 bool Animate(ReactionType reaction)
                 {
@@ -88,6 +82,10 @@ namespace Telegram.Controls.Messages
                             && unreadCustomEmoji != null
                             && unreadCustomEmoji.Contains(customEmoji.CustomEmojiId);
                     }
+                    else if (reaction is ReactionTypePaid)
+                    {
+                        return animate && paid;
+                    }
 
                     return false;
                 }
@@ -102,25 +100,7 @@ namespace Telegram.Controls.Messages
                     }
 
                     var changed = Animate(oldItem.Type);
-
-                    if (oldItem.Type is ReactionTypeEmoji emoji)
-                    {
-                        var required = UpdateButton<string, EmojiReaction>(_reactions, emoji.Emoji, message, oldItem, reactions.AreTags, message.ClientService.TryGetCachedReaction, changed, index);
-                        if (required)
-                        {
-                            missingEmoji ??= new List<string>();
-                            missingEmoji.Add(emoji.Emoji);
-                        }
-                    }
-                    else if (oldItem.Type is ReactionTypeCustomEmoji customEmoji)
-                    {
-                        var required = UpdateButton<long, Sticker>(_customReactions, customEmoji.CustomEmojiId, message, oldItem, reactions.AreTags, EmojiCache.TryGet, changed, index);
-                        if (required)
-                        {
-                            missingCustomEmoji ??= new List<long>();
-                            missingCustomEmoji.Add(customEmoji.CustomEmojiId);
-                        }
-                    }
+                    UpdateButton(message, oldItem, reactions.AreTags, changed, index);
                 }
 
                 if (_prevValue == null)
@@ -151,14 +131,7 @@ namespace Telegram.Controls.Messages
                         {
                             if (step.Items[0].OldValue is MessageReaction oldReaction)
                             {
-                                if (oldReaction.Type is ReactionTypeEmoji oldEmoji)
-                                {
-                                    _reactions.Remove(oldEmoji.Emoji);
-                                }
-                                else if (oldReaction.Type is ReactionTypeCustomEmoji oldCustomEmoji)
-                                {
-                                    _customReactions.Remove(oldCustomEmoji.CustomEmojiId);
-                                }
+                                _cache.Remove(oldReaction.Type);
                             }
 
                             Children.RemoveAt(step.OldStartIndex);
@@ -176,113 +149,34 @@ namespace Telegram.Controls.Messages
 
                 _prevValue = reactions?.Reactions.ToArray();
                 _prevAsTags = reactions?.AreTags ?? false;
-
-                if (missingCustomEmoji != null)
-                {
-                    var response = await EmojiCache.GetAsync(message.ClientService, missingCustomEmoji);
-                    if (response != null)
-                    {
-                        foreach (var sticker in response)
-                        {
-                            if (sticker.FullType is not StickerFullTypeCustomEmoji customEmoji)
-                            {
-                                continue;
-                            }
-
-                            EmojiCache.AddOrUpdate(sticker);
-                            UpdateButton<long, Sticker>(_customReactions, customEmoji.CustomEmojiId, message, sticker, reactions.AreTags, Animate);
-                        }
-                    }
-                }
-
-                if (missingEmoji != null)
-                {
-                    foreach (var emoji in missingEmoji)
-                    {
-                        var response = await message.ClientService.SendAsync(new GetEmojiReaction(emoji));
-                        if (response is EmojiReaction reaction)
-                        {
-                            UpdateButton<string, EmojiReaction>(_reactions, emoji, message, reaction, reactions.AreTags, Animate);
-                        }
-                    }
-                }
             }
         }
 
-        delegate bool TryGetValue<TKey, T>(TKey key, out T value);
-
-        private void UpdateButton<T, TValue>(IDictionary<T, ReactionButton> cache, T key, MessageViewModel message, object value, bool isTag, Func<ReactionType, bool> animate)
+        private void UpdateButton(MessageViewModel message, MessageReaction item, bool isTag, bool animate, int index)
         {
-            if (cache.TryGetValue(key, out ReactionButton button))
-            {
-                if (value is EmojiReaction reaction)
-                {
-                    button.SetReaction(message, button.Reaction, reaction);
-                }
-                else if (value is Sticker sticker)
-                {
-                    button.SetReaction(message, button.Reaction, sticker);
-                }
-
-                if (animate(button.Reaction.Type))
-                {
-                    button.SetUnread(new UnreadReaction(button.Reaction.Type, null, false));
-                }
-            }
-        }
-
-        private bool UpdateButton<T, TValue>(IDictionary<T, ReactionButton> cache, T key, MessageViewModel message, MessageReaction item, bool isTag, TryGetValue<T, TValue> tryGet, bool animate, int index)
-        {
-            var required = false;
-
-            var button = GetOrCreateButton(cache, key, isTag, index);
-            if (button.EmojiReaction != null)
-            {
-                button.SetReaction(message, item, button.EmojiReaction);
-            }
-            else if (button.CustomReaction != null)
-            {
-                button.SetReaction(message, item, button.CustomReaction);
-            }
-            else if (tryGet(key, out TValue value))
-            {
-                if (value is EmojiReaction reaction)
-                {
-                    button.SetReaction(message, item, reaction);
-                }
-                else if (value is Sticker sticker)
-                {
-                    button.SetReaction(message, item, sticker);
-                }
-            }
-            else
-            {
-                button.SetReaction(message, item, null as EmojiReaction);
-
-                animate = false;
-                required = true;
-            }
+            var button = GetOrCreateButton(item.Type, isTag, index);
+            button.SetReaction(message, item);
 
             if (animate)
             {
                 button.SetUnread(new UnreadReaction(item.Type, null, false));
             }
-
-            return required;
         }
 
-        private ReactionButton GetOrCreateButton<T>(IDictionary<T, ReactionButton> cache, T key, bool isTag, int index)
+        private ReactionButton GetOrCreateButton(ReactionType key, bool isTag, int index)
         {
-            if (cache.TryGetValue(key, out ReactionButton button))
+            if (_cache.TryGetValue(key, out ReactionButton button))
             {
                 return button;
             }
 
             button = isTag
                 ? new ReactionAsTagButton()
+                : key is ReactionTypePaid
+                ? new ReactionAsPaidButton()
                 : new ReactionButton();
 
-            cache[key] = button;
+            _cache[key] = button;
             Children.Insert(Math.Min(index, Children.Count), button);
 
             return button;
@@ -304,16 +198,17 @@ namespace Telegram.Controls.Messages
 
         public Size Footer { get; set; }
 
+        public HorizontalAlignment HorizontalContentAlignment { get; set; } = HorizontalAlignment.Left;
+
         protected override Size MeasureOverride(Size availableSize)
         {
             var totalMeasure = new Size();
-            var parentMeasure = new Size(availableSize.Width, availableSize.Height);
             var lineMeasure = new Size(Padding.Left, 0);
             var count = 0;
 
             void Measure(double currentWidth, double currentHeight)
             {
-                if (parentMeasure.Width > currentWidth + lineMeasure.Width)
+                if (availableSize.Width > currentWidth + lineMeasure.Width)
                 {
                     lineMeasure.Width += currentWidth + Spacing;
                     lineMeasure.Height = Math.Max(lineMeasure.Height, currentHeight);
@@ -326,7 +221,7 @@ namespace Telegram.Controls.Messages
                     totalMeasure.Height += lineMeasure.Height + Spacing;
 
                     // if the next new row still can handle more controls
-                    if (parentMeasure.Width > currentWidth)
+                    if (availableSize.Width > currentWidth)
                     {
                         // set lineMeasure initial values to the currentMeasure to be calculated later on the new loop
                         lineMeasure.Width = currentWidth;
@@ -381,24 +276,44 @@ namespace Telegram.Controls.Messages
         /// <inheritdoc />
         protected override Size ArrangeOverride(Size finalSize)
         {
-            var parentMeasure = new Size(finalSize.Width, finalSize.Height);
             var position = new Size(Padding.Left, Padding.Top);
             var count = 0;
+
+            var center = HorizontalContentAlignment == HorizontalAlignment.Center;
+            var rows = center
+                ? new List<List<Rect>>()
+                : null;
+            var row = center
+                ? new List<Rect>()
+                : null;
 
             double currentV = 0;
             foreach (var child in Children)
             {
                 var desiredMeasure = new Size(child.DesiredSize.Width, child.DesiredSize.Height);
-                if ((desiredMeasure.Width + position.Width) > parentMeasure.Width)
+                if ((desiredMeasure.Width + position.Width) > finalSize.Width)
                 {
                     // next row!
                     position.Width = Padding.Left;
                     position.Height += currentV + Spacing;
                     currentV = 0;
+
+                    if (center)
+                    {
+                        rows.Add(row);
+                        row = new List<Rect>();
+                    }
                 }
 
                 // Place the item
-                child.Arrange(new Rect(position.Width, position.Height, child.DesiredSize.Width, child.DesiredSize.Height));
+                if (center)
+                {
+                    row.Add(new Rect(position.Width, position.Height, child.DesiredSize.Width, child.DesiredSize.Height));
+                }
+                else
+                {
+                    child.Arrange(new Rect(position.Width, position.Height, child.DesiredSize.Width, child.DesiredSize.Height));
+                }
 
                 // adjust the location for the next items
                 position.Width += desiredMeasure.Width + Spacing;
@@ -406,11 +321,32 @@ namespace Telegram.Controls.Messages
                 count++;
             }
 
+            if (center)
+            {
+                if (row.Count > 0)
+                {
+                    rows.Add(row);
+                }
+
+                var i = 0;
+
+                foreach (var item in rows)
+                {
+                    var width = item[^1].Right;
+                    var diff = (finalSize.Width - width) / 2;
+
+                    foreach (var child in item)
+                    {
+                        Children[i++].Arrange(new Rect(child.X + diff, child.Y, child.Width, child.Height));
+                    }
+                }
+            }
+
             return finalSize;
         }
     }
 
-    public class ReactionsPanelAutomationPeer : FrameworkElementAutomationPeer
+    public partial class ReactionsPanelAutomationPeer : FrameworkElementAutomationPeer
     {
         public ReactionsPanelAutomationPeer(ReactionsPanel owner)
             : base(owner)

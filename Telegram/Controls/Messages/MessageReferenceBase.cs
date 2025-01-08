@@ -1,10 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Telegram.Common;
 using Telegram.Controls.Media;
@@ -59,7 +60,7 @@ namespace Telegram.Controls.Messages
                 return;
             }
 
-            if (embedded.WebPagePreview != null && !embedded.WebPageDisabled)
+            if (embedded.LinkPreview != null && !embedded.LinkPreviewDisabled)
             {
                 MessageId = 0;
                 Visibility = Visibility.Visible;
@@ -67,23 +68,23 @@ namespace Telegram.Controls.Messages
                 HideThumbnail();
 
                 string message;
-                if (!string.IsNullOrEmpty(embedded.WebPagePreview.Title))
+                if (!string.IsNullOrEmpty(embedded.LinkPreview.Title))
                 {
-                    message = embedded.WebPagePreview.Title;
+                    message = embedded.LinkPreview.Title;
                 }
-                else if (!string.IsNullOrEmpty(embedded.WebPagePreview.Author))
+                else if (!string.IsNullOrEmpty(embedded.LinkPreview.Author))
                 {
-                    message = embedded.WebPagePreview.Author;
+                    message = embedded.LinkPreview.Author;
                 }
                 else
                 {
-                    message = embedded.WebPagePreview.Url;
+                    message = embedded.LinkPreview.Url;
                 }
 
                 SetText(null,
                     true,
                     null,
-                    embedded.WebPagePreview.SiteName,
+                    embedded.LinkPreview.SiteName,
                     string.Empty,
                     new FormattedText { Text = message });
             }
@@ -312,8 +313,20 @@ namespace Telegram.Controls.Messages
                 case MessageGame game:
                     SetGameTemplate(clientService, sender, game, title, outgoing, white);
                     break;
+                case MessageGiveaway giveaway:
+                    SetGiveawayTemplate(clientService, sender, giveaway, title, outgoing, white);
+                    break;
+                case MessageGiveawayWinners giveawayWinners:
+                    SetGiveawayWinnersTemplate(clientService, sender, giveawayWinners, title, outgoing, white);
+                    break;
                 case MessageInvoice invoice:
                     SetInvoiceTemplate(clientService, sender, invoice, title, outgoing, white);
+                    break;
+                case MessagePaidAlbum paidAlbum:
+                    SetPaidMediaTemplate(clientService, sender, paidAlbum, title, outgoing, white);
+                    break;
+                case MessagePaidMedia paidMedia:
+                    SetPaidMediaTemplate(clientService, sender, paidMedia, title, outgoing, white);
                     break;
                 case MessageLocation location:
                     SetLocationTemplate(clientService, sender, location, title, outgoing, white);
@@ -344,9 +357,6 @@ namespace Telegram.Controls.Messages
                     break;
                 case MessageVoiceNote voiceNote:
                     SetVoiceNoteTemplate(clientService, sender, text, quote, voiceNote, title, outgoing, white);
-                    break;
-                case MessagePremiumGiveaway premiumGiveaway:
-                    SetPremiumGiveawayTemplate(clientService, sender, premiumGiveaway, title, outgoing, white);
                     break;
                 default:
                     SetServiceTextTemplate(clientService, message, title, outgoing, white);
@@ -391,6 +401,12 @@ namespace Telegram.Controls.Messages
                     break;
                 case MessageInvoice invoice:
                     SetInvoiceTemplate(clientService, sender, invoice, title, outgoing, white);
+                    break;
+                case MessagePaidAlbum paidAlbum:
+                    SetPaidMediaTemplate(clientService, sender, paidAlbum, title, outgoing, white);
+                    break;
+                case MessagePaidMedia paidMedia:
+                    SetPaidMediaTemplate(clientService, sender, paidMedia, title, outgoing, white);
                     break;
                 case MessageLocation location:
                     SetLocationTemplate(clientService, sender, location, title, outgoing, white);
@@ -518,15 +534,7 @@ namespace Telegram.Controls.Messages
         {
             HideThumbnail();
 
-            var caption = invoice.ExtendedMedia switch
-            {
-                MessageExtendedMediaPreview preview => preview.Caption,
-                MessageExtendedMediaPhoto photo => photo.Caption,
-                MessageExtendedMediaVideo video => video.Caption,
-                MessageExtendedMediaUnsupported unsupported => unsupported.Caption,
-                _ => null,
-            };
-
+            var caption = invoice.PaidMediaCaption;
             if (caption != null && !string.IsNullOrEmpty(caption.Text))
             {
                 SetText(clientService,
@@ -544,7 +552,93 @@ namespace Telegram.Controls.Messages
                     outgoing,
                     sender,
                     title,
-                    invoice.Title,
+                    invoice.ProductInfo.Title,
+                    null,
+                    false,
+                    white);
+            }
+        }
+
+        private void SetPaidMediaTemplate(IClientService clientService, MessageSender sender, MessagePaidMedia paidMedia, string title, bool outgoing, bool white)
+        {
+            HideThumbnail();
+
+            var caption = paidMedia.Caption;
+            if (caption != null && !string.IsNullOrEmpty(caption.Text))
+            {
+                SetText(clientService,
+                    outgoing,
+                    sender,
+                    title,
+                    Icons.Premium,
+                    caption,
+                    false,
+                    white);
+            }
+            else
+            {
+                string text;
+                if (paidMedia.Media.All(x => x.IsPhoto()))
+                {
+                    text = Icons.Premium + "\u2004" + (paidMedia.Media.Count > 1 ? Locale.Declension(Strings.R.Photos, paidMedia.Media.Count) : Strings.AttachPhoto);
+                }
+                else if (paidMedia.Media.All(x => x.IsVideo()))
+                {
+                    text = Icons.Premium + "\u2004" + (paidMedia.Media.Count > 1 ? Locale.Declension(Strings.R.Videos, paidMedia.Media.Count) : Strings.AttachVideo);
+                }
+                else
+                {
+                    text = Icons.Premium + "\u2004" + Locale.Declension(Strings.R.Media, paidMedia.Media.Count);
+                }
+
+                SetText(clientService,
+                    outgoing,
+                    sender,
+                    title,
+                    text,
+                    null,
+                    false,
+                    white);
+            }
+        }
+
+        private void SetPaidMediaTemplate(IClientService clientService, MessageSender sender, MessagePaidAlbum paidMedia, string title, bool outgoing, bool white)
+        {
+            HideThumbnail();
+
+            var caption = paidMedia.Caption;
+            if (caption != null && !string.IsNullOrEmpty(caption.Text))
+            {
+                SetText(clientService,
+                    outgoing,
+                    sender,
+                    title,
+                    Icons.Premium,
+                    caption,
+                    false,
+                    white);
+            }
+            else
+            {
+                string text;
+                if (paidMedia.Media.All(x => x.IsPhoto()))
+                {
+                    text = Icons.Premium + "\u2004" + (paidMedia.Media.Count > 1 ? Locale.Declension(Strings.R.Photos, paidMedia.Media.Count) : Strings.AttachPhoto);
+                }
+                else if (paidMedia.Media.All(x => x.IsVideo()))
+                {
+                    text = Icons.Premium + "\u2004" + (paidMedia.Media.Count > 1 ? Locale.Declension(Strings.R.Videos, paidMedia.Media.Count) : Strings.AttachVideo);
+                }
+                else
+                {
+                    text = Icons.Premium + "\u2004" + Locale.Declension(Strings.R.Media, paidMedia.Media.Count);
+                }
+
+                SetText(clientService,
+                    outgoing,
+                    sender,
+                    title,
+                    text,
                     null,
                     false,
                     white);
@@ -656,8 +750,8 @@ namespace Telegram.Controls.Messages
                 outgoing,
                 sender,
                 title,
-                $"\uD83D\uDCCA {poll.Poll.Question.Replace('\n', ' ')}",
-                null,
+                $"\uD83D\uDCCA",
+                poll.Poll.Question,
                 false,
                 white);
         }
@@ -676,7 +770,7 @@ namespace Telegram.Controls.Messages
                 white);
         }
 
-        private void SetPremiumGiveawayTemplate(IClientService clientService, MessageSender sender, MessagePremiumGiveaway premiumGiveaway, string title, bool outgoing, bool white)
+        private void SetGiveawayTemplate(IClientService clientService, MessageSender sender, MessageGiveaway giveaway, string title, bool outgoing, bool white)
         {
             HideThumbnail();
 
@@ -685,6 +779,20 @@ namespace Telegram.Controls.Messages
                 sender,
                 title,
                 Strings.BoostingGiveaway,
+                null,
+                false,
+                white);
+        }
+
+        private void SetGiveawayWinnersTemplate(IClientService clientService, MessageSender sender, MessageGiveawayWinners giveaway, string title, bool outgoing, bool white)
+        {
+            HideThumbnail();
+
+            SetText(clientService,
+                outgoing,
+                sender,
+                title,
+                Strings.BoostingGiveawayResults,
                 null,
                 false,
                 white);
@@ -940,7 +1048,7 @@ namespace Telegram.Controls.Messages
                     return message.ImportInfo.SenderName;
                 }
             }
-            
+
             if (clientService.TryGetChat(message.SenderId, out Chat senderChat))
             {
                 sender = message.SenderId;

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Telegram.Navigation;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
@@ -19,7 +20,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class BadgeButton : GlyphButton
+    public partial class BadgeButton : GlyphButton
     {
         private BadgeButtonAutomationPeer _peer;
 
@@ -214,7 +215,7 @@ namespace Telegram.Controls
                 return;
             }
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var rectangle = compositor.CreateRoundedRectangleGeometry();
             rectangle.Size = new Vector2(ActualSize.X - 2, ActualSize.Y - 2);
             rectangle.Offset = new Vector2(1, 1);
@@ -256,13 +257,13 @@ namespace Telegram.Controls
 
         public void HideSkeleton()
         {
-            ElementCompositionPreview.SetElementChildVisual(this, Window.Current.Compositor.CreateSpriteVisual());
+            ElementCompositionPreview.SetElementChildVisual(this, BootStrapper.Current.Compositor.CreateSpriteVisual());
         }
 
         #endregion
     }
 
-    public class BadgeButtonWithImage : BadgeButton
+    public partial class BadgeButtonWithImage : BadgeButton
     {
 
 
@@ -279,7 +280,7 @@ namespace Telegram.Controls
 
     }
 
-    public class BadgeButtonAutomationPeer : ButtonAutomationPeer, IValueProvider
+    public partial class BadgeButtonAutomationPeer : ButtonAutomationPeer, IValueProvider
     {
         private readonly BadgeButton _owner;
 

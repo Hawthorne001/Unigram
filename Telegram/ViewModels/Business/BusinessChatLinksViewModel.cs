@@ -14,7 +14,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Business
 {
-    public class BusinessChatLinksViewModel : ViewModelBase, IDelegable<IBusinessChatLinksDelegate>
+    public partial class BusinessChatLinksViewModel : ViewModelBase, IDelegable<IBusinessChatLinksDelegate>
     {
         public IBusinessChatLinksDelegate Delegate { get; set; }
 
@@ -55,7 +55,7 @@ namespace Telegram.ViewModels.Business
 
         public void Copy(BusinessChatLink chatLink)
         {
-            MessageHelper.CopyLink(chatLink.Link);
+            MessageHelper.CopyLink(XamlRoot, chatLink.Link);
         }
 
         public void Share(BusinessChatLink chatLink)

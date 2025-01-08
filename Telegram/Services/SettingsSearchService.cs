@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ namespace Telegram.Services
         IEnumerable<SettingsSearchEntry> Search(string query);
     }
 
-    public class SettingsSearchService : ISettingsSearchService
+    public partial class SettingsSearchService : ISettingsSearchService
     {
         private readonly IClientService _clientService;
         private List<SettingsSearchEntry> _searchIndex;
@@ -102,12 +102,12 @@ namespace Telegram.Services
 
             // FAQ indexing is done asyncronously
             var response = await _clientService.SendAsync(new GetWebPageInstantView(Strings.TelegramFaqUrl, true));
-            if (response is WebPageInstantView webPage)
+            if (response is WebPageInstantView linkPreview)
             {
                 var title = string.Empty;
                 var cicci = new List<SettingsSearchEntry>();
 
-                foreach (var block in webPage.PageBlocks)
+                foreach (var block in linkPreview.PageBlocks)
                 {
                     if (block is PageBlockList list)
                     {
@@ -126,11 +126,11 @@ namespace Telegram.Services
                             cicci.Add(new SettingsSearchPage(null, title, new Assets.Icons.FAQ(), items.ToArray()));
                         }
                     }
-                    else if (block is PageBlockParagraph para)
+                    else if (block is PageBlockTitle blockTitle)
                     {
-                        title = para.Text.ToPlainText();
+                        title = blockTitle.Title.ToPlainText();
                     }
-                    else if (block is PageBlockDivider)
+                    else if (block is PageBlockAnchor)
                     {
                         break;
                     }
@@ -288,7 +288,7 @@ namespace Telegram.Services
         }
     }
 
-    public class SettingsSearchPage : SettingsSearchEntry
+    public partial class SettingsSearchPage : SettingsSearchEntry
     {
         public SettingsSearchPage(Type page, string text, IAnimatedVisualSource2 icon = null, SettingsSearchEntry[] items = null)
             : base(text, icon)
@@ -348,7 +348,7 @@ namespace Telegram.Services
         public override bool IsValid => Page != null;
     }
 
-    public class SettingsSearchAction : SettingsSearchEntry
+    public partial class SettingsSearchAction : SettingsSearchEntry
     {
         public SettingsSearchAction(Action action, string text)
             : base(text, null)
@@ -366,7 +366,7 @@ namespace Telegram.Services
         public override bool IsValid => true;
     }
 
-    public class SettingsSearchFaq : SettingsSearchEntry
+    public partial class SettingsSearchFaq : SettingsSearchEntry
     {
         public SettingsSearchFaq(string url, string text, IAnimatedVisualSource2 icon = null)
             : base(text, icon)

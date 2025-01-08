@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Primitives
 {
-    public class ScrollBarManager : VisualStateManager
+    public partial class ScrollBarManager : VisualStateManager
     {
         protected override bool GoToStateCore(Control control, FrameworkElement templateRoot, string stateName, VisualStateGroup group, VisualState state, bool useTransitions)
         {

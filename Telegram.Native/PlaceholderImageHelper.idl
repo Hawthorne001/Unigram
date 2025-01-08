@@ -1,4 +1,5 @@
 import "SurfaceImage.idl";
+import "TextFormat.idl";
 
 namespace Telegram.Native
 {
@@ -23,9 +24,12 @@ namespace Telegram.Native
 		SurfaceImage Create(Int32 pixelWidth, Int32 pixelHeight);
 		void Invalidate(SurfaceImage imageSource, Windows.Storage.Streams.IBuffer buffer);
 
+		TextFormat CreateTextFormat2(String text, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width);
+
 		Windows.Foundation.Numerics.Vector2 ContentEnd(String text, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width);
 		Windows.Foundation.Collections.IVector<Windows.Foundation.Rect> LineMetrics(String text, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width, Boolean rtl);
 		Windows.Foundation.Collections.IVector<Windows.Foundation.Rect> RangeMetrics(String text, Int32 offset, Int32 length, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width, Boolean rtl);
+		Int32 TrimMetrics(String text, Int32 offset, Int32 length, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width, Double height, Boolean rtl);
 		//Windows.Foundation.Collections.IVector<Windows.Foundation.Rect> EntityMetrics(String text, Windows.Foundation.Collections.IVector<Telegram.Td.Api.TextEntity> entities, Double fontSize, Double width, Boolean rtl);
 	}
 } // namespace Telegram.Native

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -13,10 +13,11 @@ using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Documents;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class PollContent : ControlEx, IContent
+    public sealed partial class PollContent : ControlEx, IContent
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -41,7 +42,8 @@ namespace Telegram.Controls.Messages.Content
 
         #region InitializeComponent
 
-        private TextBlock Question;
+        private RichTextBlock QuestionText;
+        private Paragraph Question;
         private TextBlock Type;
         private RecentUserHeads RecentVoters;
         private StackPanel TimeoutLabel;
@@ -56,7 +58,8 @@ namespace Telegram.Controls.Messages.Content
 
         protected override void OnApplyTemplate()
         {
-            Question = GetTemplateChild(nameof(Question)) as TextBlock;
+            QuestionText = GetTemplateChild(nameof(QuestionText)) as RichTextBlock;
+            Question = GetTemplateChild(nameof(Question)) as Paragraph;
             Type = GetTemplateChild(nameof(Type)) as TextBlock;
             RecentVoters = GetTemplateChild(nameof(RecentVoters)) as RecentUserHeads;
             TimeoutLabel = GetTemplateChild(nameof(TimeoutLabel)) as StackPanel;
@@ -129,7 +132,8 @@ namespace Telegram.Controls.Messages.Content
                 TimeoutLabel.Visibility = Visibility.Collapsed;
             }
 
-            Question.Text = poll.Poll.Question;
+            CustomEmojiIcon.Add(QuestionText, Question.Inlines, message.ClientService, poll.Poll.Question);
+
             Votes.Text = poll.Poll.TotalVoterCount > 0
                 ? Locale.Declension(poll.Poll.Type is PollTypeQuiz ? Strings.R.Answer : Strings.R.Vote, poll.Poll.TotalVoterCount)
                 : poll.Poll.Type is PollTypeQuiz
@@ -187,7 +191,7 @@ namespace Telegram.Controls.Messages.Content
 
                     if (i < poll.Poll.Options.Count)
                     {
-                        button.UpdatePollOption(poll.Poll, poll.Poll.Options[i]);
+                        button.UpdatePollOption(message.ClientService, poll.Poll, poll.Poll.Options[i]);
 
                         if (poll.Poll.Type is PollTypeRegular regular && regular.AllowMultipleAnswers)
                         {
@@ -207,7 +211,7 @@ namespace Telegram.Controls.Messages.Content
                 else
                 {
                     var button = new PollOptionControl();
-                    button.UpdatePollOption(poll.Poll, poll.Poll.Options[i]);
+                    button.UpdatePollOption(message.ClientService, poll.Poll, poll.Poll.Options[i]);
 
                     if (poll.Poll.Type is PollTypeRegular regular && regular.AllowMultipleAnswers)
                     {
@@ -241,11 +245,11 @@ namespace Telegram.Controls.Messages.Content
         {
             if (_message.ClientService.TryGetUser(sender, out User user))
             {
-                photo.SetUser(_message.ClientService, user, 20);
+                photo.SetUser(_message.ClientService, user, 18);
             }
             else if (_message.ClientService.TryGetChat(sender, out Chat chat))
             {
-                photo.SetChat(_message.ClientService, chat, 20);
+                photo.SetChat(_message.ClientService, chat, 18);
             }
             else
             {
@@ -301,7 +305,7 @@ namespace Telegram.Controls.Messages.Content
         {
             if (_message?.SchedulingState != null)
             {
-                await MessagePopup.ShowAsync(Strings.MessageScheduledVote, Strings.AppName, Strings.OK);
+                await MessagePopup.ShowAsync(XamlRoot, Strings.MessageScheduledVote, Strings.AppName, Strings.OK);
                 return;
             }
 
@@ -380,12 +384,17 @@ namespace Telegram.Controls.Messages.Content
             }
 
             var quiz = poll.Poll.Type as PollTypeQuiz;
-            if (quiz == null)
+            if (string.IsNullOrEmpty(quiz?.Explanation.Text))
             {
                 return;
             }
 
             ToastPopup.Show(Explanation, quiz.Explanation, TeachingTipPlacementMode.TopLeft);
+        }
+
+        public void ShowExplanation()
+        {
+            Explanation_Click(null, null);
         }
     }
 }

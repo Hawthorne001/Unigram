@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,16 +9,20 @@ using Telegram.Common;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
+using Telegram.Views.Chats;
+using Telegram.Views.Supergroups;
 using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Supergroups
 {
-    public class SupergroupEditTypeViewModel : SupergroupEditViewModelBase
+    public partial class SupergroupEditTypeViewModel : SupergroupEditViewModelBase
     {
         public SupergroupEditTypeViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
         {
         }
+
+        private bool _navigateToChat;
 
         private bool _joinToSendMessages;
         public bool JoinToSendMessages
@@ -50,6 +54,12 @@ namespace Telegram.ViewModels.Supergroups
 
         protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
+            if (parameter is SupergroupEditTypeArgs args)
+            {
+                _navigateToChat = args.IsNewChat;
+                parameter = args.ChatId;
+            }
+
             await base.OnNavigatedToAsync(parameter, mode, state);
             HasProtectedContent = Chat?.HasProtectedContent ?? false;
 
@@ -58,6 +68,11 @@ namespace Telegram.ViewModels.Supergroups
                 JoinToSendMessages = supergroup.JoinToSendMessages;
                 JoinByRequest = supergroup.JoinByRequest;
             }
+        }
+
+        public void InviteLinks()
+        {
+            NavigationService.Navigate(typeof(ChatInviteLinksPage), Chat.Id);
         }
 
         public override async void Continue()
@@ -117,7 +132,14 @@ namespace Telegram.ViewModels.Supergroups
                         return;
                     }
                 }
+            }
 
+            if (_navigateToChat)
+            {
+                NavigationService.NavigateToChat(chat);
+            }
+            else
+            {
                 NavigationService.GoBack();
             }
         }

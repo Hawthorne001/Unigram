@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -31,7 +31,7 @@ namespace Telegram.Services
         List
     }
 
-    public class PlaybackPositionChangedEventArgs
+    public partial class PlaybackPositionChangedEventArgs
     {
         public TimeSpan Position { get; set; }
         public TimeSpan Duration { get; set; }
@@ -81,7 +81,7 @@ namespace Telegram.Services
         event TypedEventHandler<IPlaybackService, object> PlaylistChanged;
     }
 
-    public class PlaybackService : IPlaybackService
+    public partial class PlaybackService : IPlaybackService
     {
         private readonly ISettingsService _settingsService;
 
@@ -168,7 +168,7 @@ namespace Telegram.Services
                 if (item != null)
                 {
                     var message = item.Message;
-                    var webPage = message.Content is MessageText text ? text.WebPage : null;
+                    var linkPreview = message.Content is MessageText text ? text.LinkPreview : null;
 
                     if ((message.Content is MessageVideoNote videoNote && !videoNote.IsViewed && !message.IsOutgoing) || (message.Content is MessageVoiceNote voiceNote && !voiceNote.IsListened && !message.IsOutgoing))
                     {
@@ -221,6 +221,12 @@ namespace Telegram.Services
                     PlaybackState = PlaybackState.None;
                     break;
             }
+        }
+
+        private void OnVolumeChanged(AsyncMediaPlayer sender, MediaPlayerVolumeChangedEventArgs args)
+        {
+            sender.VolumeChanged -= OnVolumeChanged;
+            sender.Volume = (int)Math.Round(_settingsService.VolumeLevel * 100);
         }
 
         private void OnTimeChanged(AsyncMediaPlayer sender, MediaPlayerTimeChangedEventArgs args)
@@ -562,7 +568,14 @@ namespace Telegram.Services
 
         public async void Play(MessageWithOwner message, long threadId, long savedMessagesTopicId)
         {
-            _transport ??= WM.SystemMediaTransportControls.GetForCurrentView();
+            try
+            {
+                _transport ??= WM.SystemMediaTransportControls.GetForCurrentView();
+            }
+            catch
+            {
+                // All the remote procedure calls must be wrapped in a try-catch block
+            }
 
             if (message == null)
             {
@@ -679,21 +692,21 @@ namespace Telegram.Services
                 file = videoNote.VideoNote.Video;
                 speed = true;
             }
-            else if (message.Content is MessageText text && text.WebPage != null)
+            else if (message.Content is MessageText text && text.LinkPreview != null)
             {
-                if (text.WebPage.Audio != null)
+                if (text.LinkPreview.Type is LinkPreviewTypeAudio previewAudio)
                 {
-                    file = text.WebPage.Audio.AudioValue;
-                    speed = text.WebPage.Audio.Duration >= 10 * 60;
+                    file = previewAudio.Audio.AudioValue;
+                    speed = previewAudio.Audio.Duration >= 10 * 60;
                 }
-                else if (text.WebPage.VoiceNote != null)
+                else if (text.LinkPreview.Type is LinkPreviewTypeVoiceNote previewVoiceNote)
                 {
-                    file = text.WebPage.VoiceNote.Voice;
+                    file = previewVoiceNote.VoiceNote.Voice;
                     speed = true;
                 }
-                else if (text.WebPage.VideoNote != null)
+                else if (text.LinkPreview.Type is LinkPreviewTypeVideoNote previewVideoNote)
                 {
-                    file = text.WebPage.VideoNote.Video;
+                    file = previewVideoNote.VideoNote.Video;
                     speed = true;
                 }
             }
@@ -711,6 +724,7 @@ namespace Telegram.Services
 
                     //_mediaPlayer.SystemMediaTransportControls.ButtonPressed -= Transport_ButtonPressed;
                     //_mediaPlayer.PlaybackSession.PlaybackStateChanged -= OnPlaybackStateChanged;
+                    _player.VolumeChanged -= OnVolumeChanged;
                     _player.TimeChanged -= OnTimeChanged;
                     _player.LengthChanged -= OnLengthChanged;
                     _player.EncounteredError -= OnEncounteredError;
@@ -740,13 +754,13 @@ namespace Telegram.Services
                 //_mediaPlayer.SystemMediaTransportControls.AutoRepeatMode = _settingsService.Playback.RepeatMode;
                 //_mediaPlayer.SystemMediaTransportControls.ButtonPressed += Transport_ButtonPressed;
                 //_mediaPlayer.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
+                _player.VolumeChanged += OnVolumeChanged;
                 _player.TimeChanged += OnTimeChanged;
                 _player.LengthChanged += OnLengthChanged;
                 _player.EncounteredError += OnEncounteredError;
                 _player.EndReached += OnEndReached;
                 _player.Buffering += OnBuffering;
                 //_mediaPlayer.CommandManager.IsEnabled = false;
-                _player.Volume = (int)Math.Round(_settingsService.VolumeLevel * 100);
 
                 _transport.ButtonPressed += Transport_ButtonPressed;
             }
@@ -755,7 +769,7 @@ namespace Telegram.Services
         }
     }
 
-    public class PlaybackItem
+    public partial class PlaybackItem
     {
         public IClientService ClientService => Message.ClientService;
 

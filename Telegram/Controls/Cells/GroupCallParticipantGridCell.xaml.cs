@@ -1,15 +1,16 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Microsoft.Graphics.Canvas.Effects;
-using Microsoft.Graphics.Canvas.UI.Xaml;
 using System;
 using System.Numerics;
+using Telegram.Common;
 using Telegram.Controls.Media;
 using Telegram.Native.Calls;
+using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.Views.Calls;
@@ -33,34 +34,53 @@ namespace Telegram.Controls.Cells
         private SpriteVisual _pausedVisual;
         private CompositionEffectBrush _pausedBrush;
 
+        private readonly SpriteVisual _visual;
+        private readonly bool _needArrange;
+
         private readonly bool _screenSharing;
 
         public GroupCallParticipantGridCell(IClientService clientService, GroupCallParticipant participant, GroupCallParticipantVideoInfo videoInfo, bool screenSharing)
         {
-            _screenSharing = screenSharing;
-
             InitializeComponent();
             UpdateGroupCallParticipant(clientService, participant, videoInfo);
 
+            _screenSharing = screenSharing;
+
             if (screenSharing)
             {
+                if (participant.IsCurrentUser)
+                {
+                    OverlayRoot.Visibility = Visibility.Visible;
+                    OverlayGlyph.Text = Icons.ShareScreenStartFilled24;
+                    OverlayTitle.Text = Strings.VoipVideoScreenSharing;
+                }
+
                 ScreenSharing.Text = Icons.SmallScreencastFilled;
             }
 
             var header = ElementComposition.GetElementVisual(Header);
             header.Opacity = 0;
+
+            _visual = BootStrapper.Current.Compositor.CreateSpriteVisual();
+
+            if (ApiInfo.IsWindows11)
+            {
+                _visual.RelativeSizeAdjustment = Vector2.One;
+            }
+            else
+            {
+                _needArrange = true;
+            }
+
+            ElementCompositionPreview.SetElementChildVisual(CanvasRoot, _visual);
         }
 
-        public bool IsMatch(GroupCallParticipant participant, GroupCallParticipantVideoInfo videoInfo)
+        public bool Matches(GroupCallParticipant participant, GroupCallParticipantVideoInfo videoInfo)
         {
             return participant != null && participant.ParticipantId.AreTheSame(ParticipantId) && _videoInfo.EndpointId == _videoInfo.EndpointId;
         }
 
-        public CanvasControl Surface
-        {
-            get => CanvasRoot.Child as CanvasControl;
-            set => CanvasRoot.Child = value;
-        }
+        public SpriteVisual Visual => _visual;
 
         public VoipVideoChannelQuality Quality => ActualHeight switch
         {
@@ -69,6 +89,7 @@ namespace Telegram.Controls.Cells
             _ => VoipVideoChannelQuality.Thumbnail
         };
 
+        // TODO: this is currently not supported
         public Stretch GetStretch(ParticipantsGridMode mode, bool list)
         {
             if (_screenSharing || IsSelected || IsPinned)
@@ -124,7 +145,7 @@ namespace Telegram.Controls.Cells
 
             if (participant.IsSpeaking)
             {
-                Speaking.BorderBrush = new SolidColorBrush { Color = Color.FromArgb(0xFF, 0x33, 0xc6, 0x59) };
+                Speaking.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0xc6, 0x59));
                 Glyph.Text = Icons.MicOn;
             }
             else
@@ -145,7 +166,7 @@ namespace Telegram.Controls.Cells
 
             _infoCollapsed = !show;
 
-            var anim = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var anim = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             //anim.InsertKeyFrame(0, show ? 0 : 1);
             anim.InsertKeyFrame(1, show ? 1 : 0);
 
@@ -181,7 +202,7 @@ namespace Telegram.Controls.Cells
 
             Back.IsEnabled = Mode.IsEnabled = Pin.IsEnabled = show;
 
-            var anim = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var anim = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             anim.InsertKeyFrame(1, show ? 1 : 0);
 
             var header = ElementComposition.GetElementVisual(Header);
@@ -201,7 +222,7 @@ namespace Telegram.Controls.Cells
 
             if (show)
             {
-                var paused = ElementComposition.GetElementVisual(PausedRoot);
+                var paused = ElementComposition.GetElementVisual(OverlayRoot);
 
                 var graphicsEffect = new GaussianBlurEffect
                 {
@@ -211,25 +232,25 @@ namespace Telegram.Controls.Cells
                     Source = new CompositionEffectSourceParameter("backdrop")
                 };
 
-                var effectFactory = Window.Current.Compositor.CreateEffectFactory(graphicsEffect, new[] { "Blur.BlurAmount" });
+                var effectFactory = BootStrapper.Current.Compositor.CreateEffectFactory(graphicsEffect, new[] { "Blur.BlurAmount" });
                 var effectBrush = effectFactory.CreateBrush();
-                var backdrop = Window.Current.Compositor.CreateBackdropBrush();
+                var backdrop = BootStrapper.Current.Compositor.CreateBackdropBrush();
                 effectBrush.SetSourceParameter("backdrop", backdrop);
 
                 _pausedBrush = effectBrush;
-                _pausedVisual = Window.Current.Compositor.CreateSpriteVisual();
+                _pausedVisual = BootStrapper.Current.Compositor.CreateSpriteVisual();
                 _pausedVisual.Size = ActualSize;
                 _pausedVisual.Brush = effectBrush;
 
-                ElementCompositionPreview.SetElementChildVisual(CanvasRoot, _pausedVisual);
-                PausedRoot.Visibility = Visibility.Visible;
+                ElementCompositionPreview.SetElementChildVisual(OverlayBlur, _pausedVisual);
+                OverlayRoot.Visibility = Visibility.Visible;
                 Scrim.Visibility = Visibility.Collapsed;
 
-                //var blur = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                //var blur = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 //blur.Duration = TimeSpan.FromMilliseconds(300);
                 //blur.InsertKeyFrame(1, 10);
 
-                //var anim = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                //var anim = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 //anim.InsertKeyFrame(0, show ? 0 : 1);
                 //anim.InsertKeyFrame(1, show ? 1 : 0);
 
@@ -238,8 +259,12 @@ namespace Telegram.Controls.Cells
             }
             else
             {
-                ElementCompositionPreview.SetElementChildVisual(CanvasRoot, null);
-                PausedRoot.Visibility = Visibility.Collapsed;
+                if (_pausedVisual != null)
+                {
+                    _pausedVisual.Brush = null;
+                }
+
+                OverlayRoot.Visibility = Visibility.Collapsed;
                 Scrim.Visibility = Visibility.Visible;
 
                 _pausedBrush = null;
@@ -249,6 +274,11 @@ namespace Telegram.Controls.Cells
 
         protected override Size ArrangeOverride(Size finalSize)
         {
+            if (_needArrange)
+            {
+                _visual.Size = finalSize.ToVector2();
+            }
+
             if (_pausedVisual != null)
             {
                 _pausedVisual.Size = finalSize.ToVector2();

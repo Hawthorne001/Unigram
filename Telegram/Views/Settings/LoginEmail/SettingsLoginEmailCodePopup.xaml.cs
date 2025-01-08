@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -30,7 +30,7 @@ namespace Telegram.Views.Settings.LoginEmail
             SecondaryButtonText = Strings.Cancel;
         }
 
-        private async void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             var code = PrimaryInput.Text;
             if (string.IsNullOrEmpty(code) || code.Length < _codeInfo.Length)
@@ -51,19 +51,15 @@ namespace Telegram.Views.Settings.LoginEmail
 
                 if (error.MessageEquals(ErrorType.EMAIL_VERIFY_EXPIRED))
                 {
-                    await MessagePopup.ShowAsync(target: null, Strings.CodeExpired, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                    await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.CodeExpired, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                 }
                 else if (error.MessageEquals(ErrorType.CODE_INVALID))
                 {
-                    await MessagePopup.ShowAsync(target: null, Strings.InvalidCode, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                    await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.InvalidCode, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                 }
             }
 
             deferral.Complete();
-        }
-
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
         }
 
         private void PrimaryInput_KeyDown(object sender, Windows.UI.Xaml.Input.KeyRoutedEventArgs e)

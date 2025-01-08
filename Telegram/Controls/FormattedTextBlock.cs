@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -28,7 +28,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class TextEntityClickEventArgs : EventArgs
+    public partial class TextEntityClickEventArgs : EventArgs
     {
         public TextEntityClickEventArgs(int offset, int length, TextEntityType type, object data)
         {
@@ -47,7 +47,7 @@ namespace Telegram.Controls
         public object Data { get; }
     }
 
-    public class FormattedParagraph
+    public partial class FormattedParagraph
     {
         public Paragraph Paragraph { get; }
 
@@ -60,7 +60,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class FormattedTextBlock : Control
+    public partial class FormattedTextBlock : Control
     {
         private IClientService _clientService;
         private StyledText _text;
@@ -499,7 +499,7 @@ namespace Telegram.Controls
                     var last = part == styled.Paragraphs[^1];
                     var temp = direct.GetObject(paragraph) as Paragraph;
                     temp.Margin = new Thickness(11, 6, 24, last ? 0 : 8);
-                    temp.FontSize = Theme.Current.MessageFontSize - 2;
+                    temp.FontSize = Theme.Current.CaptionFontSize;
 
                     _codeBlocks.Add(new FormattedParagraph(temp, part.Type));
                 }
@@ -528,12 +528,12 @@ namespace Telegram.Controls
                             hyperlink.Foreground = TextBlock.Foreground;
                             hyperlink.UnderlineStyle = UnderlineStyle.None;
 
-                            hyperlink.Inlines.Add(CreateRun(data, direction, fontFamily: new FontFamily("Consolas"), fontSize: fontSize));
+                            hyperlink.Inlines.Add(CreateRun(data, direction, fontFamily: new FontFamily("Consolas, " + Theme.Current.XamlAutoFontFamily), fontSize: fontSize));
                             direct.AddToCollection(inlines, direct.GetXamlDirectObject(hyperlink));
                         }
                         else
                         {
-                            direct.SetObjectProperty(paragraph, XamlPropertyIndex.TextElement_FontFamily, new FontFamily("Consolas"));
+                            direct.SetObjectProperty(paragraph, XamlPropertyIndex.TextElement_FontFamily, new FontFamily("Consolas, " + Theme.Current.XamlAutoFontFamily));
                             direct.AddToCollection(inlines, CreateDirectRun(direct, data, direction));
 
                             preformatted = true;
@@ -672,13 +672,14 @@ namespace Telegram.Controls
                             if (entity.Offset == 0 && direction != locale)
                             {
                                 direct.AddToCollection(inlines, CreateDirectRun(direct, direction == FlowDirection.RightToLeft ? Icons.RTL : Icons.LTR, direction));
+                                workaround++;
                             }
 
                             // TODO: see if there's a better way
                             direct.AddToCollection(inlines, direct.GetXamlDirectObject(inline));
                             direct.AddToCollection(inlines, CreateDirectRun(direct, Icons.ZWNJ, direction));
 
-                            workaround++;
+                            workaround += data.Length - 1;
                         }
                         else
                         {
@@ -887,11 +888,18 @@ namespace Telegram.Controls
 
         private async void ProcessCodeBlock(InlineCollection inlines, string text, string language)
         {
-            var tokens = await SyntaxToken.TokenizeAsync(language.ToLowerInvariant(), text);
+            try
+            {
+                var tokens = await SyntaxToken.TokenizeAsync(language.ToLowerInvariant(), text);
 
-            inlines.Clear();
-            ProcessCodeBlock(inlines, tokens.Children);
-            inlines.Add(Icons.ZWJ);
+                inlines.Clear();
+                ProcessCodeBlock(inlines, tokens.Children);
+                inlines.Add(Icons.ZWJ);
+            }
+            catch
+            {
+                // Tokenization may fail
+            }
         }
 
         private void ProcessCodeBlock(InlineCollection inlines, IList<Token> tokens)

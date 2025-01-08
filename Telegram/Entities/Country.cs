@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,7 @@ using Windows.Globalization;
 
 namespace Telegram.Entities
 {
-    public class Country
+    public partial class Country
     {
         public Country(string code, string phoneCode, string name)
         {
@@ -314,7 +314,7 @@ namespace Telegram.Entities
         #endregion
     }
 
-    public class CountryDiffHandler : IDiffHandler<Country>
+    public partial class CountryDiffHandler : IDiffHandler<Country>
     {
         public bool CompareItems(Country oldItem, Country newItem)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -13,7 +13,7 @@ using Telegram.ViewModels.Gallery;
 
 namespace Telegram.ViewModels.Chats
 {
-    public class ChatGalleryViewModel : GalleryViewModelBase
+    public partial class ChatGalleryViewModel : GalleryViewModelBase
     {
         private readonly DisposableMutex _loadMoreLock = new DisposableMutex();
 
@@ -103,7 +103,7 @@ namespace Telegram.ViewModels.Chats
                 var response = await ClientService.SendAsync(new GetChatMessagePosition(first.ChatId, first.Id, _filter, _threadId, _savedMessagesTopicId));
                 if (response is Count count)
                 {
-                    _firstPosition = count.CountValue;
+                    _firstPosition = count.CountValue - 1;
                 }
                 else
                 {
@@ -197,7 +197,7 @@ namespace Telegram.ViewModels.Chats
                 var currentIndex = Items.IndexOf(_selectedItem);
 
                 var position = _firstPosition + (firstIndex - currentIndex);
-                return _isMirrored ? position : TotalItems - position;
+                return _isMirrored ? position + 1 : TotalItems - position;
             }
         }
 
@@ -208,7 +208,7 @@ namespace Telegram.ViewModels.Chats
             FirstItem = null;
 
             var message = _selectedItem as GalleryMessage;
-            if (message == null || !message.CanView)
+            if (message == null || !message.CanBeViewed)
             {
                 return;
             }

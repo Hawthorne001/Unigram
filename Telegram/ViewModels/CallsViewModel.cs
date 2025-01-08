@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -21,7 +21,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.ViewModels
 {
-    public class CallsViewModel : ViewModelBase, IIncrementalCollectionOwner
+    public partial class CallsViewModel : ViewModelBase, IIncrementalCollectionOwner
     {
         public CallsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -30,6 +30,13 @@ namespace Telegram.ViewModels
         }
 
         public IncrementalCollection<TLCallGroup> Items { get; }
+
+        private bool _isEmpty;
+        public bool IsEmpty
+        {
+            get => _isEmpty;
+            set => Set(ref _isEmpty, value);
+        }
 
         private string _nextOffset = string.Empty;
         private bool _hasMoreItems = true;
@@ -103,7 +110,12 @@ namespace Telegram.ViewModels
                 }
             }
 
-            return new LoadMoreItemsResult { Count = totalCount };
+            IsEmpty = Items.Empty();
+
+            return new LoadMoreItemsResult
+            {
+                Count = totalCount
+            };
         }
 
         public bool HasMoreItems => _hasMoreItems;
@@ -112,22 +124,18 @@ namespace Telegram.ViewModels
 
         public async void DeleteCall(TLCallGroup group)
         {
-            var popup = new MessagePopup
+            var everyone = new CheckBox
             {
-                Title = Strings.DeleteCalls,
-                Message = Strings.DeleteSelectedCallsText,
-                PrimaryButtonText = Strings.Delete,
-                SecondaryButtonText = Strings.Cancel,
-                CheckBoxLabel = Strings.DeleteCallsForEveryone
+                Content = Strings.DeleteCallsForEveryone,
             };
 
-            var confirm = await ShowPopupAsync(popup);
+            var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.DeleteSelectedCallsText, Strings.DeleteCalls, everyone, Strings.Delete, Strings.Cancel, destructive: true);
             if (confirm != ContentDialogResult.Primary)
             {
                 return;
             }
 
-            var response = await ClientService.SendAsync(new DeleteMessages(group.ChatId, group.Items.Select(x => x.Id).ToArray(), popup.IsChecked == true));
+            var response = await ClientService.SendAsync(new DeleteMessages(group.ChatId, group.Items.Select(x => x.Id).ToArray(), everyone.IsChecked == true));
             if (response is Ok)
             {
                 Items.Remove(group);
@@ -137,7 +145,7 @@ namespace Telegram.ViewModels
         #endregion
     }
 
-    public class TLCallGroup
+    public partial class TLCallGroup
     {
         public TLCallGroup(IEnumerable<Message> messages, long chatId, User peer, bool failed)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -33,7 +33,7 @@ using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls.Cells
 {
-    public sealed class ForumTopicCell : ControlEx, IMultipleElement
+    public sealed partial class ForumTopicCell : ControlEx, IMultipleElement
     {
         private bool _selected;
 
@@ -206,7 +206,7 @@ namespace Telegram.Controls.Cells
             }
 
             //if (!message.IsOutgoing && message.SenderUserId != 0 && !message.IsService())
-            if (ShowFrom(clientService, topic, message, out User fromUser, out Chat fromChat))
+            if (ChatCell.ShowFrom(clientService, null, message, out User fromUser, out Chat fromChat))
             {
                 if (message.IsOutgoing)
                 {
@@ -310,7 +310,7 @@ namespace Telegram.Controls.Cells
                 return;
             }
 
-            var muted = _clientService.Notifications.GetMutedFor(_chat, topic) > 0;
+            var muted = _clientService.Notifications.GetMuteFor(_chat, topic) > 0;
             VisualStateManager.GoToState(this, muted ? "Muted" : "Unmuted", false);
             MutedIcon.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -543,14 +543,7 @@ namespace Telegram.Controls.Cells
                 MessageText text => text.Text,
                 MessageAnimatedEmoji animatedEmoji => new FormattedText(animatedEmoji.Emoji, Array.Empty<TextEntity>()),
                 MessageDice dice => new FormattedText(dice.Emoji, Array.Empty<TextEntity>()),
-                MessageInvoice invoice => invoice.ExtendedMedia switch
-                {
-                    MessageExtendedMediaPreview preview => preview.Caption,
-                    MessageExtendedMediaPhoto photo => photo.Caption,
-                    MessageExtendedMediaVideo video => video.Caption,
-                    MessageExtendedMediaUnsupported unsupported => unsupported.Caption,
-                    _ => new FormattedText(string.Empty, Array.Empty<TextEntity>())
-                },
+                MessageInvoice invoice => invoice.PaidMediaCaption,
                 _ => new FormattedText(string.Empty, Array.Empty<TextEntity>()),
             };
         }
@@ -586,174 +579,7 @@ namespace Telegram.Controls.Cells
                 return string.Empty;
             }
 
-            return UpdateFromLabel(chat, topic, message);
-        }
-
-        private string UpdateFromLabel(Chat chat, ForumTopic topic, Message message)
-        {
-            if (message.IsService())
-            {
-                return MessageService.GetText(new ViewModels.MessageViewModel(_clientService, null, null, chat, message));
-            }
-
-            var format = "{0}: ";
-            var result = string.Empty;
-
-            if (ShowFrom(_clientService, topic, message, out User fromUser, out Chat fromChat))
-            {
-                if (message.IsSaved(_clientService.Options.MyId))
-                {
-                    result = string.Format(format, _clientService.GetTitle(message.ForwardInfo?.Origin, message.ImportInfo));
-                }
-                else if (message.SenderId.IsUser(_clientService.Options.MyId))
-                {
-                    result = string.Format(format, Strings.FromYou);
-                }
-                else if (fromUser != null)
-                {
-                    if (!string.IsNullOrEmpty(fromUser.FirstName))
-                    {
-                        result = string.Format(format, fromUser.FirstName.Trim());
-                    }
-                    else if (!string.IsNullOrEmpty(fromUser.LastName))
-                    {
-                        result = string.Format(format, fromUser.LastName.Trim());
-                    }
-                    else if (fromUser.Type is UserTypeDeleted)
-                    {
-                        result = string.Format(format, Strings.HiddenName);
-                    }
-                    else
-                    {
-                        result = string.Format(format, fromUser.Id);
-                    }
-                }
-                else if (fromChat != null && fromChat.Id != chat.Id)
-                {
-                    result = string.Format(format, fromChat.Title);
-                }
-            }
-
-            if (message.Content is MessageGame gameMedia)
-            {
-                return result + "\uD83C\uDFAE " + gameMedia.Game.Title;
-            }
-            if (message.Content is MessageExpiredVideo)
-            {
-                return result + Strings.AttachVideoExpired;
-            }
-            else if (message.Content is MessageExpiredPhoto)
-            {
-                return result + Strings.AttachPhotoExpired;
-            }
-            else if (message.Content is MessageVideoNote)
-            {
-                return result + Strings.AttachRound;
-            }
-            else if (message.Content is MessageSticker sticker)
-            {
-                if (string.IsNullOrEmpty(sticker.Sticker.Emoji))
-                {
-                    return result + Strings.AttachSticker;
-                }
-
-                return result + $"{sticker.Sticker.Emoji} {Strings.AttachSticker}";
-            }
-
-            static string GetCaption(string caption)
-            {
-                return string.IsNullOrEmpty(caption) ? string.Empty : ", ";
-            }
-
-            if (message.Content is MessageVoiceNote voiceNote)
-            {
-                return result + Strings.AttachAudio + GetCaption(voiceNote.Caption.Text);
-            }
-            else if (message.Content is MessageVideo video)
-            {
-                return result + (video.IsSecret ? Strings.AttachDestructingVideo : Strings.AttachVideo) + GetCaption(video.Caption.Text);
-            }
-            else if (message.Content is MessageAnimation animation)
-            {
-                return result + Strings.AttachGif + GetCaption(animation.Caption.Text);
-            }
-            else if (message.Content is MessageAudio audio)
-            {
-                var performer = string.IsNullOrEmpty(audio.Audio.Performer) ? null : audio.Audio.Performer;
-                var title = string.IsNullOrEmpty(audio.Audio.Title) ? null : audio.Audio.Title;
-
-                if (performer == null || title == null)
-                {
-                    return result + Strings.AttachMusic + GetCaption(audio.Caption.Text);
-                }
-                else
-                {
-                    return $"{result}\uD83C\uDFB5 {performer} - {title}" + GetCaption(audio.Caption.Text);
-                }
-            }
-            else if (message.Content is MessageDocument document)
-            {
-                if (string.IsNullOrEmpty(document.Document.FileName))
-                {
-                    return result + Strings.AttachDocument + GetCaption(document.Caption.Text);
-                }
-
-                return result + document.Document.FileName + GetCaption(document.Caption.Text);
-            }
-            else if (message.Content is MessageInvoice invoice)
-            {
-                if (invoice.ExtendedMedia != null && invoice.HasCaption())
-                {
-                    return result;
-                }
-
-                return result + invoice.Title;
-            }
-            else if (message.Content is MessageContact)
-            {
-                return result + Strings.AttachContact;
-            }
-            else if (message.Content is MessageLocation location)
-            {
-                return result + (location.LivePeriod > 0 ? Strings.AttachLiveLocation : Strings.AttachLocation);
-            }
-            else if (message.Content is MessageVenue)
-            {
-                return result + Strings.AttachLocation;
-            }
-            else if (message.Content is MessagePhoto photo)
-            {
-                return result + (photo.IsSecret ? Strings.AttachDestructingPhoto : Strings.AttachPhoto) + GetCaption(photo.Caption.Text);
-            }
-            else if (message.Content is MessagePoll poll)
-            {
-                return result + "\uD83D\uDCCA " + poll.Poll.Question;
-            }
-            else if (message.Content is MessageCall call)
-            {
-                return result + call.ToOutcomeText(message.IsOutgoing);
-            }
-            else if (message.Content is MessageUnsupported)
-            {
-                return result + Strings.UnsupportedAttachment;
-            }
-
-            return result;
-        }
-
-        private bool ShowFrom(IClientService clientService, ForumTopic topic, Message message, out User senderUser, out Chat senderChat)
-        {
-            if (message.IsService())
-            {
-                senderUser = null;
-                senderChat = null;
-                return false;
-            }
-
-            senderUser = null;
-            senderChat = null;
-            return clientService.TryGetUser(message.SenderId, out senderUser)
-                || clientService.TryGetChat(message.SenderId, out senderChat);
+            return ChatCell.UpdateFromLabel(_clientService, null, message);
         }
 
         private string UpdateStateIcon(long maxId, ForumTopic topic, DraftMessage draft, Message message, MessageSendingState state)
@@ -946,7 +772,7 @@ namespace Telegram.Controls.Cells
                 return;
             }
 
-            _stroke.FillBrush = Window.Current.Compositor.CreateColorBrush(newValue.Color);
+            _stroke.FillBrush = BootStrapper.Current.Compositor.CreateColorBrush(newValue.Color);
 
             if (IsConnected)
             {
@@ -962,7 +788,7 @@ namespace Telegram.Controls.Cells
                 return;
             }
 
-            _stroke.FillBrush = Window.Current.Compositor.CreateColorBrush(solid.Color);
+            _stroke.FillBrush = BootStrapper.Current.Compositor.CreateColorBrush(solid.Color);
         }
 
         #endregion
@@ -996,7 +822,7 @@ namespace Telegram.Controls.Cells
                 return new CompositionPath(result);
             }
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             //12.711,5.352 11.648,4.289 6.5,9.438 4.352,7.289 3.289,8.352 6.5,11.563
 
             var polygon = compositor.CreatePathGeometry();
@@ -1054,7 +880,7 @@ namespace Telegram.Controls.Cells
 
             if (animate)
             {
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
 
                 var anim3 = compositor.CreateScalarKeyFrameAnimation();
                 anim3.InsertKeyFrame(selected ? 0 : 1, 0);
@@ -1143,7 +969,7 @@ namespace Telegram.Controls.Cells
                 return;
             }
 
-            var brush = Window.Current.Compositor.CreateColorBrush(newValue.Color);
+            var brush = BootStrapper.Current.Compositor.CreateColorBrush(newValue.Color);
 
             if (_shapes != null)
             {
@@ -1172,7 +998,7 @@ namespace Telegram.Controls.Cells
                 return;
             }
 
-            var brush = Window.Current.Compositor.CreateColorBrush(solid.Color);
+            var brush = BootStrapper.Current.Compositor.CreateColorBrush(solid.Color);
 
             if (_shapes != null)
             {
@@ -1200,10 +1026,10 @@ namespace Telegram.Controls.Cells
                     solid.RegisterColorChangedCallback(callback, ref token);
                 }
 
-                return Window.Current.Compositor.CreateColorBrush(solid.Color);
+                return BootStrapper.Current.Compositor.CreateColorBrush(solid.Color);
             }
 
-            return Window.Current.Compositor.CreateColorBrush(Colors.Black);
+            return BootStrapper.Current.Compositor.CreateColorBrush(Colors.Black);
         }
 
         private void InitializeTicks()
@@ -1221,8 +1047,10 @@ namespace Telegram.Controls.Cells
 
             var join = stroke / 2 * sqrt;
 
-            var line11 = Window.Current.Compositor.CreateLineGeometry();
-            var line12 = Window.Current.Compositor.CreateLineGeometry();
+            var compositor = BootStrapper.Current.Compositor;
+
+            var line11 = compositor.CreateLineGeometry();
+            var line12 = compositor.CreateLineGeometry();
 
             line11.Start = new Vector2(width - height + side + join - length - distance, height - side - length);
             line11.End = new Vector2(width - height + side + join - distance, height - side);
@@ -1230,27 +1058,27 @@ namespace Telegram.Controls.Cells
             line12.Start = new Vector2(width - height + side - distance, height - side);
             line12.End = new Vector2(width - side - distance, side);
 
-            var shape11 = Window.Current.Compositor.CreateSpriteShape(line11);
+            var shape11 = compositor.CreateSpriteShape(line11);
             shape11.StrokeThickness = stroke;
             shape11.StrokeBrush = GetBrush(StrokeProperty, ref _strokeToken, OnStrokeChanged);
             shape11.IsStrokeNonScaling = true;
             shape11.StrokeStartCap = CompositionStrokeCap.Round;
 
-            var shape12 = Window.Current.Compositor.CreateSpriteShape(line12);
+            var shape12 = compositor.CreateSpriteShape(line12);
             shape12.StrokeThickness = stroke;
             shape12.StrokeBrush = GetBrush(StrokeProperty, ref _strokeToken, OnStrokeChanged);
             shape12.IsStrokeNonScaling = true;
             shape12.StrokeEndCap = CompositionStrokeCap.Round;
 
-            var visual1 = Window.Current.Compositor.CreateShapeVisual();
+            var visual1 = compositor.CreateShapeVisual();
             visual1.Shapes.Add(shape12);
             visual1.Shapes.Add(shape11);
             visual1.Size = new Vector2(width, height);
             visual1.CenterPoint = new Vector3(width, height / 2f, 0);
 
 
-            var line21 = Window.Current.Compositor.CreateLineGeometry();
-            var line22 = Window.Current.Compositor.CreateLineGeometry();
+            var line21 = compositor.CreateLineGeometry();
+            var line22 = compositor.CreateLineGeometry();
 
             line21.Start = new Vector2(width - height + side + join - length, height - side - length);
             line21.End = new Vector2(width - height + side + join, height - side);
@@ -1258,23 +1086,23 @@ namespace Telegram.Controls.Cells
             line22.Start = new Vector2(width - height + side, height - side);
             line22.End = new Vector2(width - side, side);
 
-            var shape21 = Window.Current.Compositor.CreateSpriteShape(line21);
+            var shape21 = compositor.CreateSpriteShape(line21);
             shape21.StrokeThickness = stroke;
             shape21.StrokeBrush = GetBrush(StrokeProperty, ref _strokeToken, OnStrokeChanged);
             shape21.StrokeStartCap = CompositionStrokeCap.Round;
 
-            var shape22 = Window.Current.Compositor.CreateSpriteShape(line22);
+            var shape22 = compositor.CreateSpriteShape(line22);
             shape22.StrokeThickness = stroke;
             shape22.StrokeBrush = GetBrush(StrokeProperty, ref _strokeToken, OnStrokeChanged);
             shape22.StrokeEndCap = CompositionStrokeCap.Round;
 
-            var visual2 = Window.Current.Compositor.CreateShapeVisual();
+            var visual2 = compositor.CreateShapeVisual();
             visual2.Shapes.Add(shape22);
             visual2.Shapes.Add(shape21);
             visual2.Size = new Vector2(width, height);
 
 
-            var container = Window.Current.Compositor.CreateSpriteVisual();
+            var container = compositor.CreateSpriteVisual();
             container.Children.InsertAtTop(visual2);
             container.Children.InsertAtTop(visual1);
             container.Size = new Vector2(width, height);
@@ -1338,21 +1166,23 @@ namespace Telegram.Controls.Cells
             var duration = 250;
             var percent = stroke / length;
 
-            var linear = Window.Current.Compositor.CreateLinearEasingFunction();
+            var compositor = BootStrapper.Current.Compositor;
 
-            var anim11 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var linear = compositor.CreateLinearEasingFunction();
+
+            var anim11 = compositor.CreateScalarKeyFrameAnimation();
             anim11.InsertKeyFrame(0, 0);
             anim11.InsertKeyFrame(1, 1, linear);
             anim11.Duration = TimeSpan.FromMilliseconds(duration - percent * duration);
 
-            var anim12 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var anim12 = compositor.CreateScalarKeyFrameAnimation();
             anim12.InsertKeyFrame(0, 0);
             anim12.InsertKeyFrame(1, 1);
             anim12.DelayBehavior = AnimationDelayBehavior.SetInitialValueBeforeDelay;
             anim12.DelayTime = anim11.Duration;
             anim12.Duration = TimeSpan.FromMilliseconds(400);
 
-            var anim22 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var anim22 = compositor.CreateVector3KeyFrameAnimation();
             anim22.InsertKeyFrame(0, new Vector3(1));
             anim22.InsertKeyFrame(0.2f, new Vector3(1.1f));
             anim22.InsertKeyFrame(1, new Vector3(1));
@@ -1364,7 +1194,7 @@ namespace Telegram.Controls.Cells
                 _line12.StartAnimation("TrimEnd", anim12);
                 _visual1.StartAnimation("Scale", anim22);
 
-                var anim21 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                var anim21 = compositor.CreateScalarKeyFrameAnimation();
                 anim21.InsertKeyFrame(0, 0);
                 anim21.InsertKeyFrame(1, 1, linear);
                 anim11.Duration = TimeSpan.FromMilliseconds(duration);
@@ -1388,7 +1218,7 @@ namespace Telegram.Controls.Cells
 
     }
 
-    public class ForumTopicCellPanel : Panel
+    public partial class ForumTopicCellPanel : Panel
     {
         protected override Size MeasureOverride(Size availableSize)
         {

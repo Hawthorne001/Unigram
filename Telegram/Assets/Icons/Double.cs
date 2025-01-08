@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -71,7 +71,7 @@ namespace Telegram.Assets.Icons
     // | #000000        | Color_000000 | Color | #FF000000 Black |
     // | #E877FF        | Color_E877FF | Color |    #FFE877FF    |
     // -----------------------------------------------------------
-    public sealed class Double
+    public sealed partial class Double
         : Microsoft.UI.Xaml.Controls.IAnimatedVisualSource
         , Microsoft.UI.Xaml.Controls.IAnimatedVisualSource2
     {

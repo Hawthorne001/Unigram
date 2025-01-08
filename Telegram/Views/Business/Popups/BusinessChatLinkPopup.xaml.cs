@@ -1,7 +1,6 @@
 ﻿using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Media;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Business;
 using Telegram.ViewModels.Drawers;
@@ -34,15 +33,8 @@ namespace Telegram.Views.Business.Popups
 
             EmojiPanel.DataContext = EmojiDrawerViewModel.Create(viewModel.SessionId);
             CaptionInput.DataContext = viewModel;
+            CaptionInput.CustomEmoji = CustomEmoji;
             CaptionInput.SetText(chatLink.Text);
-        }
-
-        private void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
-        }
-
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
         }
 
         private void Emoji_Click(object sender, RoutedEventArgs e)
@@ -56,15 +48,11 @@ namespace Telegram.Views.Business.Popups
         {
             if (e.ClickedItem is EmojiData emoji)
             {
-                EmojiFlyout.Hide();
-
                 CaptionInput.InsertText(emoji.Value);
                 CaptionInput.Focus(FocusState.Programmatic);
             }
             else if (e.ClickedItem is StickerViewModel sticker)
             {
-                EmojiFlyout.Hide();
-
                 CaptionInput.InsertEmoji(sticker);
                 CaptionInput.Focus(FocusState.Programmatic);
             }
@@ -72,7 +60,7 @@ namespace Telegram.Views.Business.Popups
 
         private void Link_Click(object sender, RoutedEventArgs e)
         {
-            MessageHelper.CopyLink(_chatLink.Link);
+            MessageHelper.CopyLink(XamlRoot, _chatLink.Link);
         }
 
         private void More_Click(object sender, RoutedEventArgs e)
@@ -89,7 +77,7 @@ namespace Telegram.Views.Business.Popups
 
         private async void Edit_Click(object sender, RoutedEventArgs e)
         {
-            ToastPopup.Show(Strings.BusinessLinkSaved, new LocalFileSource("ms-appx:///Assets/Toasts/Success.tgs"));
+            ToastPopup.Show(XamlRoot, Strings.BusinessLinkSaved, ToastPopupIcon.Success);
 
             var text = CaptionInput.GetFormattedText();
 

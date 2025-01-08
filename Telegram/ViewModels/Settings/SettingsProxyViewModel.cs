@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -27,7 +27,7 @@ namespace Telegram.ViewModels.Settings
         Custom
     }
 
-    public class SettingsProxyViewModel : ViewModelBase, IHandle
+    public partial class SettingsProxyViewModel : ViewModelBase, IHandle
     {
         private readonly INetworkService _networkService;
         private int _systemProxyId;
@@ -145,7 +145,7 @@ namespace Telegram.ViewModels.Settings
 
         public void Handle(UpdateOption update)
         {
-            if (string.Equals(update.Name, "enabled_proxy_id", StringComparison.OrdinalIgnoreCase))
+            if (update.Name == OptionsService.R.EnabledProxyId)
             {
                 BeginOnUIThread(() => Handle(ClientService.ConnectionState, ClientService.Options.EnabledProxyId));
             }
@@ -301,7 +301,7 @@ namespace Telegram.ViewModels.Settings
 
         public async void Add()
         {
-            var popup = new ProxyPopup();
+            var popup = new ProxyPopup(ClientService);
 
             var confirm = await ShowPopupAsync2(popup);
             if (confirm != ContentDialogResult.Primary)
@@ -338,7 +338,7 @@ namespace Telegram.ViewModels.Settings
         {
             SelectedItems.Clear();
 
-            var popup = new ProxyPopup(connection);
+            var popup = new ProxyPopup(ClientService, connection);
 
             var confirm = await ShowPopupAsync2(popup);
             if (confirm != ContentDialogResult.Primary)
@@ -414,7 +414,18 @@ namespace Telegram.ViewModels.Settings
             var response = await ClientService.SendAsync(new GetProxyLink(proxy.Id));
             if (response is HttpUrl httpUrl)
             {
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostLink(httpUrl));
+                await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostLink(httpUrl));
+            }
+        }
+
+        public async void Copy(ProxyViewModel proxy)
+        {
+            SelectedItems.Clear();
+
+            var response = await ClientService.SendAsync(new GetProxyLink(proxy.Id));
+            if (response is HttpUrl httpUrl)
+            {
+                MessageHelper.CopyLink(XamlRoot, httpUrl.Url);
             }
         }
 
@@ -422,7 +433,7 @@ namespace Telegram.ViewModels.Settings
         {
             if (Popup == null)
             {
-                return await ShowPopupAsync(message, title, primary, secondary, destructive);
+                return await ShowPopupAsync(message, title, primary, secondary, null, destructive);
             }
 
             if (Popup != null)
@@ -436,7 +447,7 @@ namespace Telegram.ViewModels.Settings
 
             if (Popup != null)
             {
-                _ = Popup.ShowQueuedAsync();
+                ShowPopup(Popup);
             }
 
             return confirm;
@@ -455,14 +466,14 @@ namespace Telegram.ViewModels.Settings
 
             if (Popup != null)
             {
-                _ = Popup.ShowQueuedAsync();
+                ShowPopup(Popup);
             }
 
             return confirm;
         }
     }
 
-    public class ProxyViewModel : BindableBase
+    public partial class ProxyViewModel : BindableBase
     {
         private readonly Proxy _proxy;
 
@@ -503,15 +514,15 @@ namespace Telegram.ViewModels.Settings
     {
     }
 
-    public class ConnectionStatusChecking : ConnectionStatus
+    public partial class ConnectionStatusChecking : ConnectionStatus
     {
     }
 
-    public class ConnectionStatusConnecting : ConnectionStatus
+    public partial class ConnectionStatusConnecting : ConnectionStatus
     {
     }
 
-    public class ConnectionStatusReady : ConnectionStatus
+    public partial class ConnectionStatusReady : ConnectionStatus
     {
         public ConnectionStatusReady(bool connected, double seconds)
         {
@@ -523,7 +534,7 @@ namespace Telegram.ViewModels.Settings
         public double Seconds { get; private set; }
     }
 
-    public class ConnectionStatusError : ConnectionStatus
+    public partial class ConnectionStatusError : ConnectionStatus
     {
         public ConnectionStatusError(Error error)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,6 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
 using Telegram.Views.Settings;
@@ -20,7 +19,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsProfileViewModel : ViewModelBase, IDelegable<IUserDelegate>, IHandle
+    public partial class SettingsProfileViewModel : ViewModelBase, IDelegable<IUserDelegate>, IHandle
     {
         public IUserDelegate Delegate { get; set; }
 
@@ -196,7 +195,7 @@ namespace Telegram.ViewModels.Settings
 
         public async void SetPhoto()
         {
-            await _profilePhotoService.SetPhotoAsync(null);
+            await _profilePhotoService.SetPhotoAsync(NavigationService, null);
         }
 
         public async void CreatePhoto()
@@ -230,7 +229,7 @@ namespace Telegram.ViewModels.Settings
 
         public async void ChangeUsername()
         {
-            await ShowPopupAsync(typeof(SettingsUsernamePopup));
+            await ShowPopupAsync(new SettingsUsernamePopup());
         }
 
         public void ChangeProfileColor()
@@ -249,7 +248,7 @@ namespace Telegram.ViewModels.Settings
 
                 if (popup.SelectedChatId != 0)
                 {
-                    ToastPopup.Show(Strings.EditProfileChannelSet, new LocalFileSource("ms-appx:///Assets/Toasts/Success.tgs"));
+                    ShowToast(Strings.EditProfileChannelSet, ToastPopupIcon.Success);
                 }
             }
         }

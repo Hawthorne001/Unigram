@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,11 +18,11 @@ namespace Telegram.Views.Popups
 {
     public sealed partial class ScheduleMessagePopup : ContentPopup
     {
-        public ScheduleMessagePopup(User user, DateTime? until, bool reminder)
+        public ScheduleMessagePopup(User user, bool reminder)
         {
             InitializeComponent();
 
-            var date = until ?? DateTime.Now.AddMinutes(10);
+            var date = DateTime.Now.AddMinutes(10);
             Date.Date = date.Date;
             Time.Time = date.TimeOfDay;
 

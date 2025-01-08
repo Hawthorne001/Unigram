@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -27,7 +27,7 @@ namespace Telegram.Controls
         Superellipse
     }
 
-    public class ProfilePicture : HyperlinkButton
+    public partial class ProfilePicture : Control
     {
         private long _fileToken;
         private int? _fileId;
@@ -94,6 +94,7 @@ namespace Telegram.Controls
 
             var fontSize = Width switch
             {
+                < 20 => 10,
                 < 30 => 12,
                 < 36 => 14,
                 < 48 => 16,
@@ -161,6 +162,16 @@ namespace Telegram.Controls
             if (LayoutRoot == null)
             {
                 return;
+            }
+
+            if (newValue is PlaceholderImage or null)
+            {
+                UpdateManager.Unsubscribe(this, ref _fileToken, true);
+
+                _fileId = null;
+                _referenceId = null;
+
+                _parameters = null;
             }
 
             if (newValue is PlaceholderImage placeholder)
@@ -361,13 +372,13 @@ namespace Telegram.Controls
 
             shape = ProfilePictureShape.Ellipse;
 
-            if (clientService.IsSavedMessages(chat))
+            if (chat.Id == clientService.Options.MyId)
             {
                 return PlaceholderImage.GetGlyph(Icons.BookmarkFilled, 5);
             }
-            else if (clientService.IsRepliesChat(chat))
+            else if (chat.Id == clientService.Options.RepliesBotChatId)
             {
-                return PlaceholderImage.GetGlyph(Icons.ChatMultipleFilled, 5);
+                return PlaceholderImage.GetGlyph(Icons.ArrowReplyFilled, 5);
             }
 
             if (clientService.IsForum(chat))
@@ -609,7 +620,7 @@ namespace Telegram.Controls
 
         public void SetMessage(MessageViewModel message)
         {
-            if (message.IsSaved)
+            if (message.IsSaved || message.IsVerificationCode)
             {
                 if (message.ForwardInfo?.Origin is MessageOriginUser fromUser && message.ClientService.TryGetUser(fromUser.SenderUserId, out User fromUserUser))
                 {
@@ -625,12 +636,12 @@ namespace Telegram.Controls
                 }
                 else if (message.ForwardInfo?.Origin is MessageOriginHiddenUser fromHiddenUser)
                 {
-                    Source = PlaceholderImage.GetNameForUser(fromHiddenUser.SenderName);
+                    Source = PlaceholderImage.GetNameForUser(fromHiddenUser.SenderName, long.MinValue);
                     Shape = ProfilePictureShape.Ellipse;
                 }
                 else if (message.ImportInfo != null)
                 {
-                    Source = PlaceholderImage.GetNameForUser(message.ImportInfo.SenderName);
+                    Source = PlaceholderImage.GetNameForUser(message.ImportInfo.SenderName, long.MinValue);
                     Shape = ProfilePictureShape.Ellipse;
                 }
             }
@@ -645,7 +656,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class PlaceholderImage
+    public partial class PlaceholderImage
     {
         public string Initials { get; }
 

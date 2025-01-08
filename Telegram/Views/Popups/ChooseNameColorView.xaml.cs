@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -52,14 +52,14 @@ namespace Telegram.Views.Popups
                 customEmojiId = user.BackgroundCustomEmojiId;
                 accentColorId = user.AccentColorId;
 
-                var webPage = new WebPage
+                var linkPreview = new LinkPreview
                 {
                     SiteName = Strings.AppName,
                     Title = Strings.UserColorPreviewLinkTitle,
                     Description = new FormattedText(Strings.UserColorPreviewLinkDescription, Array.Empty<TextEntity>())
                 };
 
-                Message1.Mockup(clientService, Strings.UserColorPreview, sender, Strings.UserColorPreviewReply, webPage, false, DateTime.Now);
+                Message1.Mockup(clientService, Strings.UserColorPreview, sender, Strings.UserColorPreviewReply, linkPreview, false, DateTime.Now);
 
                 BadgeText.Text = Strings.UserReplyIcon;
                 NameColor.Footer = Strings.UserColorHint;
@@ -72,14 +72,14 @@ namespace Telegram.Views.Popups
                 customEmojiId = chat.BackgroundCustomEmojiId;
                 accentColorId = chat.AccentColorId;
 
-                var webPage = new WebPage
+                var linkPreview = new LinkPreview
                 {
                     SiteName = Strings.AppName,
                     Title = Strings.ChannelColorPreviewLinkTitle,
                     Description = new FormattedText(Strings.ChannelColorPreviewLinkDescription, Array.Empty<TextEntity>())
                 };
 
-                Message1.Mockup(clientService, Strings.ChannelColorPreview, sender, Strings.ChannelColorPreviewReply, webPage, false, DateTime.Now);
+                Message1.Mockup(clientService, Strings.ChannelColorPreview, sender, Strings.ChannelColorPreviewReply, linkPreview, false, DateTime.Now);
 
                 BadgeText.Text = Strings.ChannelReplyLogo;
                 NameColor.Footer = Strings.ChannelReplyInfo;
@@ -174,11 +174,16 @@ namespace Telegram.Views.Popups
 
         private void Flyout_EmojiSelected(object sender, EmojiSelectedEventArgs e)
         {
-            SelectedCustomEmojiId = e.CustomEmojiId;
+            if (e.Type is not ReactionTypeCustomEmoji customEmoji)
+            {
+                return;
+            }
+
+            SelectedCustomEmojiId = customEmoji.CustomEmojiId;
 
             Message1.UpdateMockup(_clientService, SelectedCustomEmojiId, SelectedAccentColor.Id);
 
-            if (e.CustomEmojiId != 0)
+            if (customEmoji.CustomEmojiId != 0)
             {
                 Animated.Source = new CustomEmojiFileSource(_clientService, SelectedCustomEmojiId);
                 Badge.Badge = string.Empty;

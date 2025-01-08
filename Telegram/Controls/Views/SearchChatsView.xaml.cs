@@ -12,7 +12,7 @@ using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls.Views
 {
-    public class ItemContextRequestedEventArgs : EventArgs
+    public partial class ItemContextRequestedEventArgs : EventArgs
     {
         public ItemContextRequestedEventArgs(object item, ContextRequestedEventArgs eventArgs)
         {
@@ -35,11 +35,39 @@ namespace Telegram.Controls.Views
             InitializeComponent();
         }
 
+        public void Update()
+        {
+            TopChats.ForEach<Chat>((selector, chat) =>
+            {
+                var content = selector.ContentTemplateRoot as StackPanel;
+                var grid = content.Children[0] as Grid;
+
+                var badge = grid.Children[1] as BadgeControl;
+                badge.Visibility = chat.UnreadCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+                badge.Text = chat.UnreadCount.ToString();
+
+                var user = ViewModel.ClientService.GetUser(chat);
+                if (user != null)
+                {
+                    var online = grid.Children[2] as Border;
+                    online.Visibility = user.Status is UserStatusOnline ? Visibility.Visible : Visibility.Collapsed;
+                }
+            });
+        }
+
         public event ItemClickEventHandler ItemClick;
 
         public event TypedEventHandler<UIElement, ItemContextRequestedEventArgs> ItemContextRequested;
 
         public ListView Root => ScrollingHost;
+
+        public bool AreTabsVisible
+        {
+            get => ChatFolders.Visibility == Visibility.Visible;
+            set => ChatFolders.Visibility = value
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
 
         #region Recycle
 
@@ -188,6 +216,22 @@ namespace Telegram.Controls.Views
 
         private void OnItemClick(object sender, ItemClickEventArgs e)
         {
+            if (e.ClickedItem is SearchResult result && result.Type == SearchResultType.RecentWebApps)
+            {
+                var user = result.User ?? ViewModel.ClientService.GetUser(result.Chat);
+                if (user == null)
+                {
+                    return;
+                }
+
+                if (user.Type is UserTypeBot { HasMainWebApp: true })
+                {
+                    MessageHelper.NavigateToMainWebApp(ViewModel.ClientService, ViewModel.NavigationService, user, string.Empty, new WebAppOpenModeFullSize());
+                    ItemClick?.Invoke(this, null);
+                    return;
+                }
+            }
+
             ItemClick?.Invoke(this, e);
         }
 
@@ -244,6 +288,14 @@ namespace Telegram.Controls.Views
         private void ClearRecentChats_Click(object sender, RoutedEventArgs e)
         {
             ViewModel.ClearRecentChats();
+        }
+
+        private void EmptyState_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBlock textBlock)
+            {
+                textBlock.Text = string.Format(Strings.NoResultFoundFor2, ViewModel.Query);
+            }
         }
     }
 }

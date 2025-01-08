@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,7 +17,7 @@ using Windows.UI.ViewManagement;
 
 namespace Telegram.Services
 {
-    public class ThemeCustomInfo : ThemeAccentInfo
+    public partial class ThemeCustomInfo : ThemeAccentInfo
     {
         public ThemeCustomInfo(TelegramTheme parent, Color accent, string name)
             : base(TelegramThemeType.Custom, accent, null, null)

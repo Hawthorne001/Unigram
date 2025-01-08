@@ -81,15 +81,13 @@
         <TextBlock x:Name="Label"
                    Margin="12,-2,0,0"
                    VerticalAlignment="Center"
-                   Foreground="{ThemeResource MessageForegroundBrush}"
+                   Foreground="{ThemeResource MessageSubtleForegroundBrush}"
                    FontFamily="{ThemeResource EmojiThemeFontFamily}"
                    Style="{StaticResource BodyTextBlockStyle}">
             <Run x:Name="TitleLabel"
                  Foreground="{ThemeResource MessageForegroundBrush}"
                  FontWeight="SemiBold" /><Run Text="," />
-            <Run x:Name="ServiceLabel"
-                 Foreground="{ThemeResource MessageSubtleForegroundBrush}" /><Run x:Name="MessageLabel"
-                                                                                  Foreground="{ThemeResource MessageHeaderForegroundBrush}" />
+            <Run x:Name="ServiceLabel" />
         </TextBlock>
 
         <controls:RecentUserHeads x:Name="RecentUsers"
@@ -101,15 +99,21 @@
                                   Margin="0,0,8,0"
                                   Grid.Column="1" />
 
-        <controls:BadgeButton x:Name="JoinButton"
-                              Content="{CustomResource VoipChatJoin}"
-                              Style="{StaticResource PillButtonStyle}"
-                              Typography.NumeralAlignment="Tabular"
-                              FontWeight="SemiBold"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"
-                              Grid.Column="2" />
+        <Grid HorizontalAlignment="Right"
+              VerticalAlignment="Center"
+              Margin="0,0,12,0"
+              Grid.Column="2">
+            <Border x:Name="JoinButtonBackground"
+                    CornerRadius="16" />
+
+            <controls:BadgeButton x:Name="JoinButton"
+                                  Content="{CustomResource VoipChatJoin}"
+                                  Style="{StaticResource StartButtonStyle}"
+                                  Typography.NumeralAlignment="Tabular"
+                                  FontWeight="SemiBold"
+                                  CornerRadius="16"
+                                  Margin="0" />
+        </Grid>
 
     </Grid>
 </HyperlinkButton>

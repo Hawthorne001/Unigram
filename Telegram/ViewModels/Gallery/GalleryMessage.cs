@@ -1,15 +1,17 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
+using System;
+using System.Collections.Generic;
 using Telegram.Services;
 using Telegram.Td.Api;
 
 namespace Telegram.ViewModels.Gallery
 {
-    public class GalleryMessage : GalleryMedia
+    public partial class GalleryMessage : GalleryMedia
     {
         protected readonly Message _message;
         protected readonly bool _hasProtectedContent;
@@ -17,12 +19,28 @@ namespace Telegram.ViewModels.Gallery
         public GalleryMessage(IClientService clientService, Message message)
             : base(clientService)
         {
-            _message = message;
+            // Create a copy so that content doesn't get updated while the gallery is open
+            _message = new(message.Id, message.SenderId, message.ChatId, message.SendingState, message.SchedulingState, message.IsOutgoing, message.IsPinned, message.IsFromOffline, message.CanBeSaved, message.HasTimestampedMedia, message.IsChannelPost, message.IsTopicMessage, message.ContainsUnreadMention, message.Date, message.EditDate, message.ForwardInfo, message.ImportInfo, message.InteractionInfo, message.UnreadReactions, message.FactCheck, message.ReplyTo, message.MessageThreadId, message.SavedMessagesTopicId, message.SelfDestructType, message.SelfDestructIn, message.AutoDeleteIn, message.ViaBotUserId, message.SenderBusinessBotUserId, message.SenderBoostCount, message.AuthorSignature, message.MediaAlbumId, message.EffectId, message.HasSensitiveContent, message.RestrictionReason, message.Content, message.ReplyMarkup);
 
-            var chat = clientService.GetChat(message.ChatId);
-            if (chat != null)
+            if (clientService.TryGetChat(message.ChatId, out Chat chat))
             {
                 _hasProtectedContent = chat.Type is ChatTypeSecret || chat.HasProtectedContent;
+            }
+
+            File = _message.GetFile();
+
+            var thumbnail = _message.GetThumbnail();
+            if (thumbnail == null)
+            {
+                var photo = _message.GetPhoto();
+                if (photo != null)
+                {
+                    Thumbnail = photo.GetSmall()?.Photo;
+                }
+            }
+            else if (thumbnail?.Format is ThumbnailFormatJpeg)
+            {
+                Thumbnail = thumbnail.File;
             }
         }
 
@@ -31,34 +49,30 @@ namespace Telegram.ViewModels.Gallery
         {
         }
 
-        public Message Message => _message;
-
         public long ChatId => _message.ChatId;
         public long Id => _message.Id;
 
-        public override File GetFile()
+        public override bool IsHls()
         {
-            return _message.GetFile();
+            if (_message.Content is MessageVideo video)
+            {
+                return video.IsHls();
+            }
+
+            return false;
         }
 
-        public override File GetThumbnail()
+        public override IList<AlternativeVideo> AlternativeVideos
         {
-            var thumbnail = _message.GetThumbnail();
-            if (thumbnail == null)
+            get
             {
-                var photo = _message.GetPhoto();
-                if (photo != null)
+                if (_message.Content is MessageVideo video)
                 {
-                    return photo.GetSmall()?.Photo;
+                    return video.AlternativeVideos;
                 }
-            }
 
-            if (thumbnail?.Format is ThumbnailFormatJpeg)
-            {
-                return thumbnail.File;
+                return Array.Empty<AlternativeVideo>();
             }
-
-            return null;
         }
 
         public override object Constraint => _message.Content;
@@ -67,6 +81,11 @@ namespace Telegram.ViewModels.Gallery
         {
             get
             {
+                if (_message.SchedulingState != null)
+                {
+                    return null;
+                }
+
                 if (_message.ForwardInfo != null)
                 {
                     // TODO: ...
@@ -102,20 +121,20 @@ namespace Telegram.ViewModels.Gallery
                 }
                 else if (_message.Content is MessageInvoice invoice)
                 {
-                    return invoice.ExtendedMedia is MessageExtendedMediaVideo;
+                    return invoice.PaidMedia is PaidMediaVideo;
                 }
                 else if (_message.Content is MessageText text)
                 {
-                    return text.WebPage?.Video != null
-                        || text.WebPage?.Animation != null
-                        || text.WebPage?.VideoNote != null;
+                    return text.LinkPreview?.Type is LinkPreviewTypeVideo
+                        || text.LinkPreview?.Type is LinkPreviewTypeAnimation
+                        || text.LinkPreview?.Type is LinkPreviewTypeVideoNote;
                 }
 
                 return false;
             }
         }
 
-        public override bool IsLoop
+        public override bool IsLoopingEnabled
         {
             get
             {
@@ -129,8 +148,8 @@ namespace Telegram.ViewModels.Gallery
                 }
                 else if (_message.Content is MessageText text)
                 {
-                    return text.WebPage?.Animation != null
-                        || text.WebPage?.VideoNote != null;
+                    return text.LinkPreview?.Type is LinkPreviewTypeAnimation
+                        || text.LinkPreview?.Type is LinkPreviewTypeVideoNote;
                 }
 
                 return false;
@@ -147,7 +166,7 @@ namespace Telegram.ViewModels.Gallery
                 }
                 else if (_message.Content is MessageText text)
                 {
-                    return text.WebPage?.VideoNote != null;
+                    return text.LinkPreview?.Type is LinkPreviewTypeVideoNote;
                 }
 
                 return false;
@@ -164,9 +183,9 @@ namespace Telegram.ViewModels.Gallery
 
 
 
-        public override bool CanView => true;
-        public override bool CanCopy => CanSave && IsPhoto;
-        public override bool CanSave => !_hasProtectedContent && _message.Content switch
+        public override bool CanBeViewed => true;
+        public override bool CanBeCopied => CanBeSaved && IsPhoto;
+        public override bool CanBeSaved => !_hasProtectedContent && _message.Content switch
         {
             MessageAnimation animation => !animation.IsSecret,
             MessagePhoto photo => !photo.IsSecret,
@@ -175,9 +194,9 @@ namespace Telegram.ViewModels.Gallery
             _ => true
         };
 
-        public override bool CanShare => CanSave;
+        public override bool CanBeShared => CanBeSaved;
 
-        public override bool IsProtected => _hasProtectedContent || _message.Content switch
+        public override bool HasProtectedContent => _hasProtectedContent || _message.Content switch
         {
             MessageAnimation animation => animation.IsSecret,
             MessagePhoto photo => photo.IsSecret,
@@ -210,71 +229,23 @@ namespace Telegram.ViewModels.Gallery
                 }
                 else if (_message.Content is MessageInvoice invoice)
                 {
-                    if (invoice.ExtendedMedia is MessageExtendedMediaVideo extendedVideo)
+                    if (invoice.PaidMedia is PaidMediaVideo extendedVideo)
                     {
                         return extendedVideo.Video.Duration;
                     }
                 }
                 else if (_message.Content is MessageText text)
                 {
-                    if (text.WebPage?.Video != null)
+                    return text.LinkPreview?.Type switch
                     {
-                        return text.WebPage.Video.Duration;
-                    }
-                    else if (text.WebPage?.Animation != null)
-                    {
-                        return text.WebPage.Video.Duration;
-                    }
-                    else if (text.WebPage?.VideoNote != null)
-                    {
-                        return text.WebPage.VideoNote.Duration;
-                    }
+                        LinkPreviewTypeVideo previewVideo => previewVideo.Video.Duration,
+                        LinkPreviewTypeAnimation previewAnimation => previewAnimation.Animation.Duration,
+                        LinkPreviewTypeVideoNote previewVideoNote => previewVideoNote.VideoNote.Duration,
+                        _ => 0
+                    };
                 }
 
                 return 0;
-            }
-        }
-
-        public override string MimeType
-        {
-            get
-            {
-                if (_message.Content is MessageVideo video)
-                {
-                    return video.Video.MimeType;
-                }
-                else if (_message.Content is MessageAnimation animation)
-                {
-                    return animation.Animation.MimeType;
-                }
-                else if (_message.Content is MessageVideoNote videoNote)
-                {
-                    return "video/mp4"; // videoNote.VideoNote.MimeType;
-                }
-                else if (_message.Content is MessageGame game)
-                {
-                    return game.Game.Animation?.MimeType;
-                }
-                else if (_message.Content is MessageInvoice invoice)
-                {
-                    if (invoice.ExtendedMedia is MessageExtendedMediaVideo extendedVideo)
-                    {
-                        return extendedVideo.Video.MimeType;
-                    }
-                }
-                else if (_message.Content is MessageText text)
-                {
-                    if (text.WebPage?.Video != null)
-                    {
-                        return text.WebPage.Video.MimeType;
-                    }
-                    else if (text.WebPage?.Animation != null)
-                    {
-                        return text.WebPage.Video.MimeType;
-                    }
-                }
-
-                return null;
             }
         }
     }

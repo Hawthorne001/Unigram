@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,10 +17,11 @@ using Telegram.Views.Popups;
 using Telegram.Views.Settings.Popups;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using WinRT;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsSessionsViewModel : ViewModelBase
+    public partial class SettingsSessionsViewModel : ViewModelBase
     {
         public SettingsSessionsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -49,6 +50,7 @@ namespace Telegram.ViewModels.Settings
 
         private readonly int[] _sessionTtlIndexer = new[]
         {
+            7,
             30,
             90,
             180,
@@ -61,6 +63,7 @@ namespace Telegram.ViewModels.Settings
             new SettingsOptionItem<int>(30, Locale.Declension(Strings.R.Months, 1)),
             new SettingsOptionItem<int>(90, Locale.Declension(Strings.R.Months, 3)),
             new SettingsOptionItem<int>(180, Locale.Declension(Strings.R.Months, 6)),
+            new SettingsOptionItem<int>(365, Locale.Declension(Strings.R.Years, 1)),
         };
 
         private async Task UpdateSessionsAsync()
@@ -194,13 +197,13 @@ namespace Telegram.ViewModels.Settings
             var confirm = await ShowPopupAsync(dialog);
             if (confirm != ContentDialogResult.Primary)
             {
-                if (session.CanAcceptCalls != dialog.CanAcceptCalls && confirm == ContentDialogResult.Secondary)
+                if (session.CanAcceptCalls != dialog.CanAcceptCalls)
                 {
                     session.CanAcceptCalls = dialog.CanAcceptCalls;
                     ClientService.Send(new ToggleSessionCanAcceptCalls(session.Id, dialog.CanAcceptCalls));
                 }
 
-                if (session.CanAcceptSecretChats != dialog.CanAcceptSecretChats && confirm == ContentDialogResult.Secondary)
+                if (session.CanAcceptSecretChats != dialog.CanAcceptSecretChats)
                 {
                     session.CanAcceptSecretChats = dialog.CanAcceptSecretChats;
                     ClientService.Send(new ToggleSessionCanAcceptSecretChats(session.Id, dialog.CanAcceptSecretChats));
@@ -228,7 +231,8 @@ namespace Telegram.ViewModels.Settings
         }
     }
 
-    public class KeyedGroup
+    [GeneratedBindableCustomProperty]
+    public partial class KeyedGroup
     {
         public string Title { get; set; }
         public string Footer { get; set; }

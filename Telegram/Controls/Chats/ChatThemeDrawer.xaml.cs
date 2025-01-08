@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Controls.Chats
 {
-    public class ChatThemeChangedEventArgs : EventArgs
+    public partial class ChatThemeChangedEventArgs : EventArgs
     {
         public ChatTheme Theme { get; }
 
@@ -28,7 +28,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatThemeSelectedEventArgs : EventArgs
+    public partial class ChatThemeSelectedEventArgs : EventArgs
     {
         public bool Applied { get; }
 
@@ -56,7 +56,7 @@ namespace Telegram.Controls.Chats
 
             var chat = _viewModel.Chat;
             var defaultTheme = new ChatThemeViewModel(viewModel.ClientService, "\u274C", null, null, false);
-            var themes = viewModel.ClientService.GetChatThemes().Select(x => new ChatThemeViewModel(viewModel.ClientService, x, false));
+            var themes = viewModel.ClientService.ChatThemes.Select(x => new ChatThemeViewModel(viewModel.ClientService, x, false));
 
             var items = new[] { defaultTheme }.Union(themes).ToList();
 
@@ -151,7 +151,7 @@ namespace Telegram.Controls.Chats
         {
             if (ScrollingHost.SelectedItem is ChatThemeViewModel theme)
             {
-                _viewModel.ClientService.Send(new SetChatTheme(_viewModel.Chat.Id, theme.Name));
+                _viewModel.ClientService.Send(new SetChatTheme(_viewModel.Chat.Id, theme.LightSettings == null ? string.Empty : theme.Name));
                 ThemeSelected?.Invoke(this, new ChatThemeSelectedEventArgs(true));
             }
         }
@@ -160,7 +160,7 @@ namespace Telegram.Controls.Chats
         {
             var tsc = new TaskCompletionSource<object>();
 
-            var confirm = await _viewModel.ShowPopupAsync(typeof(BackgroundsPopup), _viewModel.Chat.Id, tsc);
+            var confirm = await _viewModel.ShowPopupAsync(new BackgroundsPopup(tsc), _viewModel.Chat.Id);
             var delayed = await tsc.Task;
 
             if (delayed is bool close && close)

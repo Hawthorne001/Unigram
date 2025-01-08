@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,6 @@ using Telegram.Common;
 using Telegram.Navigation.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
-using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Documents;
@@ -24,6 +23,8 @@ namespace Telegram.Controls.Cells
         private MessageWithOwner _message;
         private INavigationService _navigationService;
 
+        private long _thumbnailToken;
+
         public SharedLinkCell()
         {
             InitializeComponent();
@@ -33,6 +34,8 @@ namespace Telegram.Controls.Cells
         {
             _navigationService = navigationService;
             _message = message;
+
+            UpdateManager.Unsubscribe(this, ref _thumbnailToken, true);
 
             var caption = message.GetCaption();
             if (caption == null)
@@ -51,20 +54,20 @@ namespace Telegram.Controls.Cells
             bool webPageCached = false;
             Thumbnail webPageThumbnail = null;
 
-            var webPage = text?.WebPage;
-            if (webPage != null)
+            var linkPreview = text?.LinkPreview;
+            if (linkPreview != null)
             {
 
-                title = webPage.Title;
+                title = linkPreview.Title;
                 if (string.IsNullOrEmpty(title))
                 {
-                    title = webPage.SiteName;
+                    title = linkPreview.SiteName;
                 }
 
-                description = string.IsNullOrEmpty(webPage.Description?.Text) ? null : webPage.Description?.Text;
-                webPageLink = webPage.Url;
-                webPageCached = webPage.InstantViewVersion != 0;
-                webPageThumbnail = webPage.GetThumbnail();
+                description = string.IsNullOrEmpty(linkPreview.Description?.Text) ? null : linkPreview.Description?.Text;
+                webPageLink = linkPreview.Url;
+                webPageCached = linkPreview.InstantViewVersion != 0;
+                webPageThumbnail = linkPreview.GetThumbnail();
             }
 
             if (caption.Entities.Count > 0)
@@ -226,6 +229,12 @@ namespace Telegram.Controls.Cells
 
             Photo.Source = null;
 
+            if (webPageThumbnail != null)
+            {
+                UpdateManager.Subscribe(this, message, webPageThumbnail.File, ref _thumbnailToken, UpdateFile, true);
+                UpdateThumbnail(webPageThumbnail.File);
+            }
+
             for (int i = 0; i < links.Count; i++)
             {
                 var link = links[i];
@@ -260,9 +269,26 @@ namespace Telegram.Controls.Cells
                     Extensions.SetToolTip(hyperlink, link);
                     SetRow(textBlock, i);
 
-                    LinksPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+                    LinksPanel.RowDefinitions.Add(1, GridUnitType.Auto);
                     LinksPanel.Children.Add(textBlock);
                 }
+            }
+        }
+
+        private void UpdateFile(object target, File file)
+        {
+            UpdateThumbnail(file);
+        }
+
+        private void UpdateThumbnail(File file)
+        {
+            if (file.Local.IsDownloadingCompleted)
+            {
+                Photo.Source = UriEx.ToBitmap(file.Local.Path);
+            }
+            else if (file.Local.CanBeDownloaded && !file.Local.IsDownloadingActive)
+            {
+                _message.ClientService.DownloadFile(file.Id, 1);
             }
         }
 
@@ -278,52 +304,15 @@ namespace Telegram.Controls.Cells
 
         private async void Hyperlink_Click(Hyperlink sender, Uri uri)
         {
-            if (MessageHelper.IsTelegramUrl(uri))
-            {
-                MessageHelper.OpenTelegramUrl(_message.ClientService, _navigationService, uri);
-            }
-            else
-            {
-                try
-                {
-                    await Launcher.LaunchUriAsync(uri);
-                }
-                catch
-                {
-                    // Invalid URI
-                }
-            }
+            MessageHelper.OpenUrl(_message.ClientService, _navigationService, uri.ToString());
         }
 
-        private async void Thumbnail_Click(object sender, RoutedEventArgs e)
+        private void Thumbnail_Click(object sender, RoutedEventArgs e)
         {
-            //if (DataContext is TLMessage message && message.Media is TLMessageMediaWebPage webpageMedia && webpageMedia.WebPage is TLWebPage webpage)
-            //{
-            //    if (webpage.HasCachedPage)
-            //    {
-            //        Context.NavigationService.Navigate(typeof(InstantPage), message.Media);
-            //    }
-            //    else
-            //    {
-            //        var url = webpage.Url;
-            //        if (url.StartsWith("http") == false)
-            //        {
-            //            url = "http://" + url;
-            //        }
-
-            //        if (Uri.TryCreate(url, UriKind.Absolute, out Uri uri))
-            //        {
-            //            if (MessageHelper.IsTelegramUrl(uri))
-            //            {
-            //                MessageHelper.HandleTelegramUrl(webpage.Url);
-            //            }
-            //            else
-            //            {
-            //                await Launcher.LaunchUriAsync(uri);
-            //            }
-            //        }
-            //    }
-            //}
+            if (_message?.Content is MessageText text && text.LinkPreview != null)
+            {
+                MessageHelper.OpenUrl(_message.ClientService, _navigationService, text.LinkPreview.Url);
+            }
         }
     }
 }

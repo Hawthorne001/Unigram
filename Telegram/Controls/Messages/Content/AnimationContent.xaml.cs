@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,7 +17,7 @@ using Windows.UI.Xaml.Media.Imaging;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class AnimationContent : Control, IContent, IPlayerView
+    public sealed partial class AnimationContent : Control, IContent, IPlayerView
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -79,7 +79,7 @@ namespace Telegram.Controls.Messages.Content
                 return;
             }
 
-            LayoutRoot.Constraint = message;
+            LayoutRoot.Constraint = isSecret ? Constants.SecretSize : message;
             Texture.Source = null;
 
             UpdateThumbnail(message, animation, animation.Thumbnail?.File, true, isSecret);
@@ -126,7 +126,7 @@ namespace Telegram.Controls.Messages.Content
 
                 Player.Source = null;
             }
-            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed)
+            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed || (message.SendingState is MessageSendingStatePending && !file.Remote.IsUploadingCompleted))
             {
                 Button.SetGlyph(file.Id, MessageContentState.Uploading);
                 Button.Progress = (double)file.Remote.UploadedSize / size;
@@ -253,9 +253,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return game.Game.Animation != null;
             }
-            else if (content is MessageText text && text.WebPage != null && !primary)
+            else if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return text.WebPage.Animation != null;
+                return text.LinkPreview.Type is LinkPreviewTypeAnimation;
             }
 
             return false;
@@ -282,9 +282,9 @@ namespace Telegram.Controls.Messages.Content
                 isGame = true;
                 return game.Game.Animation;
             }
-            else if (content is MessageText text && text.WebPage != null)
+            else if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeAnimation previewAnimation)
             {
-                return text.WebPage.Animation;
+                return previewAnimation.Animation;
             }
 
             return null;
@@ -323,9 +323,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 _message.ClientService.DownloadFile(file.Id, 30);
             }
-            else if (_message.Content is MessageText text && text.WebPage.HasText())
+            else if (_message.Content is MessageText text && text.LinkPreview.HasText())
             {
-                _message.Delegate.OpenWebPage(text.WebPage);
+                _message.Delegate.OpenWebPage(_message);
             }
             else
             {

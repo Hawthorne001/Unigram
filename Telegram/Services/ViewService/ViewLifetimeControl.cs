@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -35,7 +35,7 @@ using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 
-namespace Telegram.Services.ViewService
+namespace Telegram.Services
 {
     // A custom event that fires whenever the secondary view is ready to be closed. You should
     // clean up any state (including deregistering for events) then close the window in this handler
@@ -44,7 +44,7 @@ namespace Telegram.Services.ViewService
     // A ViewLifetimeControl is instantiated for every secondary view. ViewLifetimeControl's reference count
     // keeps track of when the secondary view thinks it's in use and when the main view is interacting with the secondary view (about to show
     // it to the user, etc.) When the reference count drops to zero, the secondary view is closed.
-    public sealed class ViewLifetimeControl
+    public sealed partial class ViewLifetimeControl
     {
         private static readonly ConcurrentDictionary<int, ViewLifetimeControl> WindowControlsMap = new();
 

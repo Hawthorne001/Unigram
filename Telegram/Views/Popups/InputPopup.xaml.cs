@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Navigation;
+using Telegram.Views.Host;
 using Windows.Globalization.NumberFormatting;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -22,10 +23,11 @@ namespace Telegram.Views.Popups
     {
         Text,
         Password,
-        Value
+        Value,
+        Stars
     }
 
-    public class InputPopupResult
+    public partial class InputPopupResult
     {
         public ContentDialogResult Result { get; set; }
 
@@ -41,7 +43,7 @@ namespace Telegram.Views.Popups
         }
     }
 
-    public class InputPopupValidatingEventArgs : CancelEventArgs
+    public partial class InputPopupValidatingEventArgs : CancelEventArgs
     {
         public InputPopupValidatingEventArgs(string text, double value)
         {
@@ -67,16 +69,20 @@ namespace Telegram.Views.Popups
 
         public int MaxLength { get; set; } = int.MaxValue;
         public int MinLength { get; set; } = 1;
+
+        public double Minimum { get; set; } = 0;
         public double Maximum { get; set; } = double.MaxValue;
 
         public InputScopeNameValue InputScope { get; set; }
         public INumberFormatter2 Formatter { get; set; }
 
+        private readonly InputPopupType _type;
+
         public InputPopup(InputPopupType type = InputPopupType.Text)
         {
             InitializeComponent();
 
-            switch (type)
+            switch (_type = type)
             {
                 case InputPopupType.Text:
                     FindName(nameof(Label));
@@ -85,6 +91,7 @@ namespace Telegram.Views.Popups
                     FindName(nameof(Password));
                     break;
                 case InputPopupType.Value:
+                case InputPopupType.Stars:
                     FindName(nameof(Number));
                     break;
             }
@@ -132,11 +139,22 @@ namespace Telegram.Views.Popups
             }
             else if (Number != null)
             {
-                Number.NumberFormatter = Formatter;
+                if (Formatter != null)
+                {
+                    Number.NumberFormatter = Formatter;
+                }
+
+                Number.Minimum = Minimum;
                 Number.Maximum = Maximum;
                 Number.Value = Value;
 
                 Number.Focus(FocusState.Keyboard);
+
+                if (_type == InputPopupType.Stars)
+                {
+                    Number.Padding = new Thickness(36, Number.Padding.Top, Number.Padding.Right, Number.Padding.Bottom);
+                    FindName(nameof(StarCount));
+                }
             }
         }
 
@@ -220,12 +238,12 @@ namespace Telegram.Views.Popups
 
         private void Number_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
         {
-            IsPrimaryButtonEnabled = args.NewValue >= 0 && args.NewValue <= Maximum;
+            IsPrimaryButtonEnabled = args.NewValue >= Minimum && args.NewValue <= Maximum;
         }
 
         #region Static methods
 
-        public static async Task<InputPopupResult> ShowAsync(InputPopupType type, string message, string title = null, string placeholderText = null, string primary = null, string secondary = null, bool destructive = false, ElementTheme requestedTheme = ElementTheme.Default)
+        public static async Task<InputPopupResult> ShowAsync(XamlRoot xamlRoot, InputPopupType type, string message, string title = null, string placeholderText = null, string primary = null, string secondary = null, bool destructive = false, ElementTheme requestedTheme = ElementTheme.Default)
         {
             var popup = new InputPopup(type)
             {
@@ -238,12 +256,17 @@ namespace Telegram.Views.Popups
                 RequestedTheme = requestedTheme
             };
 
-            var confirm = await popup.ShowQueuedAsync();
+            var confirm = await popup.ShowQueuedAsync(xamlRoot);
             return new InputPopupResult(confirm, popup.Text, popup.Value);
         }
 
-        public static async Task<InputPopupResult> ShowAsync(FrameworkElement target, InputPopupType type, string message, string title = null, string placeholderText = null, string primary = null, string secondary = null, bool destructive = false, ElementTheme requestedTheme = ElementTheme.Default)
+        public static async Task<InputPopupResult> ShowAsync(XamlRoot xamlRoot, FrameworkElement target, InputPopupType type, string message, string title = null, string placeholderText = null, string primary = null, string secondary = null, bool destructive = false, ElementTheme requestedTheme = ElementTheme.Default)
         {
+            if (xamlRoot.Content is not IToastHost host)
+            {
+                return null;
+            }
+
             var popup = new InputTeachingTip(type)
             {
                 Title = title ?? string.Empty,
@@ -262,6 +285,13 @@ namespace Telegram.Views.Popups
                 // TODO:
                 RequestedTheme = target?.ActualTheme ?? requestedTheme
             };
+
+            popup.Closed += (s, args) =>
+            {
+                host.ToastClosed(s);
+            };
+
+            host.ToastOpened(popup);
 
             var confirm = await popup.ShowAsync();
             return new InputPopupResult(confirm, popup.Text, popup.Value);

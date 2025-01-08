@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -19,16 +19,20 @@ namespace Telegram.Views.Popups
 {
     public sealed partial class ProxyPopup : ContentPopup
     {
-        public ProxyPopup()
+        private readonly IClientService _clientService;
+
+        public ProxyPopup(IClientService clientService)
         {
             InitializeComponent();
+
+            _clientService = clientService;
 
             PrimaryButtonText = Strings.OK;
             SecondaryButtonText = Strings.Cancel;
         }
 
-        public ProxyPopup(ProxyViewModel proxy)
-            : this()
+        public ProxyPopup(IClientService clientService, ProxyViewModel proxy)
+            : this(clientService)
         {
             InitializeComponent();
 
@@ -135,7 +139,7 @@ namespace Telegram.Views.Popups
             //}
 
             var title = Strings.ProxySettings;
-            var link = new Uri(MeUrlPrefixConverter.Convert(TypeResolver.Current.Resolve<IClientService>(), $"socks?{string.Join("&", builder)}"));
+            var link = new Uri(MeUrlPrefixConverter.Convert(_clientService, $"socks?{string.Join("&", builder)}"));
 
             // TODO: currently not used
             //await new ChooseChatsPopup().ShowAsync(link, title);

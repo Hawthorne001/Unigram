@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,8 +11,9 @@ using Telegram.ViewModels;
 
 namespace Telegram.Controls.Media
 {
-    public class Icons
+    public partial class Icons
     {
+        public const string BulletSpace = "\u2022 ";
         public const string RTL = "\u200F";
         public const string LTR = "\u200E";
         public const string ZWJ = "\u200D";
@@ -35,8 +36,12 @@ namespace Telegram.Controls.Media
 
         public const string ArrowSync = "\uE981";
 
-        public const string LinkSide = "\uE9F8";
-        public const string LinkSideBroken = "\uE9F7";
+        public const string TicketDiagonal = "\uEA9D";
+        public const string LinkDiagonal = "\uE9F8";
+        public const string LinkDiagonalBroken = "\uE9F7";
+
+        public const string ArrowMinimizeFilled24 = "\uEA94";
+        public const string ArrowMaximizeFilled24 = "\uEA95";
 
         public const string ArrowMinimize = "\uE965";
         public const string ArrowMaximize = "\uE966";
@@ -91,6 +96,8 @@ namespace Telegram.Controls.Media
         public const string PauseFilled24 = "\uEA18";
         public const string Checkmark = "\uE10B";
         public const string CheckmarkFilled24 = "\uEA20";
+        public const string CheckmarkCircleFilled24 = "\uE9F4";
+        public const string DismissCircleFilled24 = "\uE9F3";
         public const string TtlFilled24 = "\uEA21";
         public const string Document = "\uE7C3";
         public const string DocumentFilled24 = "\uEA1C";
@@ -98,7 +105,12 @@ namespace Telegram.Controls.Media
         public const string Color = "\uE2B1";
         public const string ColorFilled24 = "\uEA1B";
 
+        public const string HomeAdd = "\uEAA4";
+        public const string HomeDismiss = "\uEAA5";
         public const string ArrowClockwise = "\uE72C";
+
+        public const string Info = "\uEA8C";
+        public const string Coin = "\uEA8D";
 
         public const string ArrowUndo = "\uE7A7";
         public const string ArrowRedo = "\uE7A6";
@@ -110,6 +122,7 @@ namespace Telegram.Controls.Media
 
         public const string Payment16 = "\uE9AB";
         public const string Window16 = "\uE9AA";
+        public const string CopyFilled16 = "\uEA97";
 
         public const string NumberSymbolFilled16 = "\uE9FB";
 
@@ -119,7 +132,8 @@ namespace Telegram.Controls.Media
         public const string TextStrikethrough = "\uE8DE";
         public const string Code = "\uE943";
         public const string Link = "\uE71B";
-        public const string TabInPrivate = "\uE97C";
+        public const string Spoiler = "\uEAA1";
+        public const string SpoilerMedia = "\uEAA2";
 
         public const string People = "\uE716";
         public const string Megaphone = "\uE789";
@@ -154,6 +168,7 @@ namespace Telegram.Controls.Media
         public const string ShieldError = "\uE730";
         public const string Broom = "\uEA99";
         public const string CalendarClock = "\uE81C";
+        public const string CheckmarkStarburst = "\uEA8B";
 
         public const string ClockAlarmHour = "\uE9A3";
 
@@ -234,7 +249,7 @@ namespace Telegram.Controls.Media
         public const string Record = "\uE903";
 
         public const string AppsListDetails = "\uEA67";
-
+        public const string DeleteFilled24 = "\uEAA0";
         public const string Delete = "\uE74D";
         public const string Share = "\uE72D";
         public const string ShareFilled = "\uE914";
@@ -282,6 +297,7 @@ namespace Telegram.Controls.Media
         public const string MicOnFilled24 = "\uE9D7";
         public const string VideoOffFilled = "\uE963";
         public const string SmallScreencastFilled = "\uE910";
+        public const string ShareScreenStartFilled24 = "\uEA5E";
         public const string ShareScreenFilled = "\uE956";
         public const string ShareScreenStopFilled = "\uE955";
         public const string Camera = "\uE722";
@@ -291,9 +307,11 @@ namespace Telegram.Controls.Media
         public const string MicOnFilled = "\uF12E";
         public const string DataUsage = "\uE9D9";
         public const string Add = "\uE710";
+        public const string ChatStarsFilled = "\uE97C";
 
         public const string LastSeenFilled = "\uEA6D";
         public const string ChatLockedFilled = "\uEA6C";
+        public const string ChatSparkeFilled = "\uEA90";
         public const string BuildingShopFilled = "\uEA86";
 
         public const string EmojiRecents = "\uE911";
@@ -357,6 +375,7 @@ namespace Telegram.Controls.Media
         public const string ChatBubblesQuestion = "\uE783";
         public const string ChatMultiple = "\uE992";
         public const string ChatMultipleFilled = "\uEA0D";
+        public const string CameraAddFilled = "\uEA92";
 
         public const string TopSpeed = "\uE90D";
 
@@ -373,6 +392,8 @@ namespace Telegram.Controls.Media
 
         public const string Clock = "\uEA34";
         public const string ClockFilled = "\uEA33";
+        public const string ClockEdit = "\uEA9E";
+        public const string ClockArrowForward = "\uEA9F";
 
         public const string Multiplier2xFilled = "\uE9BA";
         public const string PlayCircleFilled = "\uE9AE";
@@ -390,6 +411,8 @@ namespace Telegram.Controls.Media
         public const string EmojiFilled = "\uE9B1";
         public const string TranslateFilled = "\uE9B2";
 
+        public const string FragmentFilled = "\uEA8E";
+        public const string Premium = "\uEA87";
         public const string Premium16 = "\uE9B5";
         public const string LockClosed16 = "\uE9BE";
         public const string Verified16 = "\uE97A";
@@ -401,6 +424,7 @@ namespace Telegram.Controls.Media
         public const string PersonDeleteFilled = "\uEA40";
         public const string PeopleFilled = "\uE9B9";
         public const string PinFilled = "\uE9BB";
+        public const string PinFilled16 = "\uEA8A";
         public const string LinkFilled = "\uE9BC";
         public const string FolderFilled = "\uE9BD";
 

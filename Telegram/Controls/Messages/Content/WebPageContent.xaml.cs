@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -25,14 +25,12 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class WebPageContent : HyperlinkButton, IContentWithPlayback
+    public sealed partial class WebPageContent : HyperlinkButton, IContentWithPlayback
     {
         private CancellationTokenSource _instantViewToken;
 
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
-
-        private long _fileToken;
 
         public WebPageContent(MessageViewModel message)
         {
@@ -87,8 +85,6 @@ namespace Telegram.Controls.Messages.Content
         private Run TitleLabel;
         private Run SubtitleLabel;
         private Run ContentLabel;
-        private Border SmallPanel;
-        private Image Texture;
         private Grid MediaPanel;
         private Border Media;
         private Border Overlay;
@@ -106,8 +102,6 @@ namespace Telegram.Controls.Messages.Content
             TitleLabel = GetTemplateChild(nameof(TitleLabel)) as Run;
             SubtitleLabel = GetTemplateChild(nameof(SubtitleLabel)) as Run;
             ContentLabel = GetTemplateChild(nameof(ContentLabel)) as Run;
-            SmallPanel = GetTemplateChild(nameof(SmallPanel)) as Border;
-            Texture = GetTemplateChild(nameof(Texture)) as Image;
             MediaPanel = GetTemplateChild(nameof(MediaPanel)) as Grid;
             Media = GetTemplateChild(nameof(Media)) as Border;
             Overlay = GetTemplateChild(nameof(Overlay)) as Border;
@@ -141,49 +135,49 @@ namespace Telegram.Controls.Messages.Content
                 return;
             }
 
-            var webPage = text.WebPage;
-            if (webPage == null)
+            var linkPreview = text.LinkPreview;
+            if (linkPreview == null)
             {
                 return;
             }
 
-            Texture.Source = null;
-            UpdateManager.Unsubscribe(this, ref _fileToken, true);
+            UpdateWebPage(linkPreview);
+            UpdateInstantView(linkPreview);
 
-            UpdateWebPage(webPage);
-            UpdateInstantView(webPage);
-
-            if (webPage.HasMedia())
+            if (linkPreview.HasMedia())
             {
-                var small = webPage.GetThumbnail();
-                if (small == null || webPage.ShowLargeMedia || !webPage.CanBeSmall())
+                if (linkPreview.ShowLargeMedia || !linkPreview.CanBeSmall() || !linkPreview.HasThumbnail())
                 {
-                    SmallPanel.Visibility = Visibility.Collapsed;
-                    Media.Visibility = Visibility.Visible;
+                    MediaPanel.Width = double.NaN;
+                    MediaPanel.Height = double.NaN;
+                    MediaPanel.Margin = new Thickness(0, 0, 0, 8);
+
+                    Grid.SetRow(MediaPanel, 2);
+                    Grid.SetColumn(MediaPanel, 0);
+
                     OverflowArea.Margin = new Thickness(0, 0, 0, 8);
                     ButtonLine.Margin = new Thickness(0, 0, 0, 0);
 
-                    UpdateContent(message, webPage);
-                    UpdateInstantView(webPage, _instantViewToken.Token);
+                    UpdateContent(message, linkPreview, false);
+                    UpdateInstantView(linkPreview, _instantViewToken.Token);
                 }
                 else
                 {
-                    SmallPanel.Visibility = Visibility.Visible;
-                    Media.Visibility = Visibility.Collapsed;
+                    MediaPanel.Width = 44;
+                    MediaPanel.Height = 44;
+                    MediaPanel.Margin = new Thickness(8, 8, 0, 0);
+
+                    Grid.SetRow(MediaPanel, 0);
+                    Grid.SetColumn(MediaPanel, 1);
+
                     OverflowArea.Margin = new Thickness(0, 0, 0, 4);
                     ButtonLine.Margin = new Thickness(0, 4, 0, 0);
 
-                    MediaPanel.Visibility = Visibility.Collapsed;
-                    Media.Child = null;
-
-                    UpdateManager.Subscribe(this, message, small.File, ref _fileToken, UpdateFile, true);
-                    UpdateFile(message, small.File);
+                    UpdateContent(message, linkPreview, true);
                 }
             }
             else
             {
-                SmallPanel.Visibility = Visibility.Collapsed;
-                Media.Visibility = Visibility.Collapsed;
                 OverflowArea.Margin = new Thickness(0, 0, 0, 4);
                 ButtonLine.Margin = new Thickness(0, 4, 0, 0);
 
@@ -239,54 +233,7 @@ namespace Telegram.Controls.Messages.Content
             }
         }
 
-        private void UpdateFile(object target, File file)
-        {
-            UpdateFile(_message, file);
-        }
-
-        private void UpdateFile(MessageViewModel message, File file)
-        {
-            var text = GetContent(message);
-            if (text == null || !_templateApplied)
-            {
-                return;
-            }
-
-            var webPage = text.WebPage;
-            if (webPage == null)
-            {
-                return;
-            }
-
-            var small = webPage.GetThumbnail();
-            if (small == null)
-            {
-                return;
-            }
-
-            if (small.File.Id != file.Id)
-            {
-                return;
-            }
-
-            if (file.Local.IsDownloadingCompleted)
-            {
-                double ratioX = (double)48 / small.Width;
-                double ratioY = (double)48 / small.Height;
-                double ratio = Math.Max(ratioX, ratioY);
-
-                var width = (int)(small.Width * ratio);
-                var height = (int)(small.Height * ratio);
-
-                Texture.Source = UriEx.ToBitmap(file.Local.Path, width, height);
-            }
-            else if (file.Local.CanBeDownloaded && !file.Local.IsDownloadingActive)
-            {
-                message.ClientService.DownloadFile(file.Id, 1);
-            }
-        }
-
-        private void UpdateContent(MessageViewModel message, WebPage webPage)
+        private void UpdateContent(MessageViewModel message, LinkPreview linkPreview, bool small)
         {
             MediaPanel.Visibility = Visibility.Visible;
 
@@ -303,48 +250,89 @@ namespace Telegram.Controls.Messages.Content
                 }
             }
 
-            var maxWidth = (double)BootStrapper.Current.Resources["MessageMaxWidth"];
-            maxWidth -= 10 + 8 + 2 + 10;
+            double maxWidth;
+            if (small)
+            {
+                maxWidth = 44;
+            }
+            else
+            {
+                maxWidth = (double)BootStrapper.Current.Resources["MessageMaxWidth"];
+                maxWidth -= 10 + 8 + 2 + 10;
+            }
 
-            if (string.Equals(webPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase))
+            if (small)
+            {
+                if (linkPreview.Type is LinkPreviewTypeStickerSet)
+                {
+                    Media.Child = new StickerSetContent(message);
+                }
+                else
+                {
+                    Media.Child = new ThumbnailContent(message);
+                }
+            }
+            else if (linkPreview.Type is LinkPreviewTypeAlbum album)
+            {
+                if (album.Media[0] is LinkPreviewAlbumMediaPhoto)
+                {
+                    Media.Child = new PhotoContent(message);
+                }
+                else
+                {
+                    Media.Child = new VideoContent(message);
+                }
+            }
+            else if (linkPreview.Type is LinkPreviewTypeBackground)
             {
                 Media.Child = new WallpaperContent(message);
             }
-            else if (webPage.Animation != null)
+            else if (linkPreview.Type is LinkPreviewTypeAnimation)
             {
                 Media.Child = new AnimationContent(message)
                 {
                     MaxWidth = maxWidth,
                 };
             }
-            else if (webPage.Audio != null)
+            else if (linkPreview.Type is LinkPreviewTypeAudio)
             {
                 Media.Child = new AudioContent(message);
             }
-            else if (webPage.Document != null)
+            else if (linkPreview.Type is LinkPreviewTypeDocument)
             {
                 Media.Child = new DocumentContent(message);
             }
-            else if (webPage.Sticker != null)
+            else if (linkPreview.Type is LinkPreviewTypeSticker)
             {
                 Media.Child = new StickerContent(message);
             }
-            else if (webPage.Video != null)
+            else if (linkPreview.Type is LinkPreviewTypeVideo)
             {
                 Media.Child = new VideoContent(message)
                 {
                     MaxWidth = maxWidth
                 };
             }
-            else if (webPage.VideoNote != null)
+            else if (linkPreview.Type is LinkPreviewTypeVideoNote)
             {
                 Media.Child = new VideoNoteContent(message);
             }
-            else if (webPage.VoiceNote != null)
+            else if (linkPreview.Type is LinkPreviewTypeVoiceNote)
             {
                 Media.Child = new VoiceNoteContent(message);
             }
-            else if (webPage.Photo != null)
+            else if (linkPreview.Type is LinkPreviewTypePhoto or
+                                         LinkPreviewTypeEmbeddedAudioPlayer or
+                                         LinkPreviewTypeEmbeddedAnimationPlayer or
+                                         LinkPreviewTypeEmbeddedVideoPlayer or
+                                         LinkPreviewTypeApp or
+                                         LinkPreviewTypeArticle or
+                                         LinkPreviewTypeChannelBoost or
+                                         LinkPreviewTypeChat or
+                                         LinkPreviewTypeSupergroupBoost or
+                                         LinkPreviewTypeUser or
+                                         LinkPreviewTypeVideoChat or
+                                         LinkPreviewTypeWebApp)
             {
                 // Photo at last: web page preview might have both a file and a thumbnail
                 Media.Child = new PhotoContent(message)
@@ -366,13 +354,11 @@ namespace Telegram.Controls.Messages.Content
             {
                 content.Recycle();
             }
-
-            UpdateManager.Unsubscribe(this, ref _fileToken, true);
         }
 
         public bool IsValid(MessageContent content, bool primary)
         {
-            return content is MessageText text && text.WebPage != null;
+            return content is MessageText text && text.LinkPreview != null;
         }
 
         private MessageText GetContent(MessageViewModel message)
@@ -402,27 +388,15 @@ namespace Telegram.Controls.Messages.Content
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            var text = GetContent(_message);
-            if (text == null)
-            {
-                return;
-            }
+            _message?.Delegate?.OpenWebPage(_message);
 
-            var webPage = text.WebPage;
-            if (webPage == null)
-            {
-                return;
-            }
-
-            _message?.Delegate?.OpenWebPage(webPage);
         }
 
-        public void Mockup(WebPage webPage)
+        public void Mockup(LinkPreview linkPreview)
         {
-            UpdateWebPage(webPage);
+            UpdateWebPage(linkPreview);
 
-            SmallPanel.Visibility = Visibility.Collapsed;
-            Media.Visibility = Visibility.Collapsed;
+            MediaPanel.Visibility = Visibility.Collapsed;
             OverflowArea.Margin = new Thickness(0, 0, 0, 0);
 
             ButtonLine.Visibility = Visibility.Collapsed;
@@ -451,11 +425,11 @@ namespace Telegram.Controls.Messages.Content
             }
         }
 
-        private void UpdateWebPage(WebPage webPage)
+        private void UpdateWebPage(LinkPreview linkPreview)
         {
             var empty = true;
 
-            if (string.Equals(webPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase))
+            if (linkPreview.Type is LinkPreviewTypeBackground)
             {
                 empty = false;
                 TitleLabel.Text = Strings.ChatBackground;
@@ -464,17 +438,17 @@ namespace Telegram.Controls.Messages.Content
             }
             else
             {
-                if (!string.IsNullOrWhiteSpace(webPage.SiteName))
+                if (!string.IsNullOrWhiteSpace(linkPreview.SiteName))
                 {
                     empty = false;
-                    TitleLabel.Text = webPage.SiteName;
+                    TitleLabel.Text = linkPreview.SiteName;
                 }
                 else
                 {
                     TitleLabel.Text = string.Empty;
                 }
 
-                if (!string.IsNullOrWhiteSpace(webPage.Title))
+                if (!string.IsNullOrWhiteSpace(linkPreview.Title))
                 {
                     if (TitleLabel.Text.Length > 0)
                     {
@@ -482,9 +456,9 @@ namespace Telegram.Controls.Messages.Content
                     }
 
                     empty = false;
-                    SubtitleLabel.Text += webPage.Title;
+                    SubtitleLabel.Text += linkPreview.Title;
                 }
-                else if (!string.IsNullOrWhiteSpace(webPage.Author))
+                else if (!string.IsNullOrWhiteSpace(linkPreview.Author))
                 {
                     if (TitleLabel.Text.Length > 0)
                     {
@@ -492,14 +466,14 @@ namespace Telegram.Controls.Messages.Content
                     }
 
                     empty = false;
-                    SubtitleLabel.Text += webPage.Author;
+                    SubtitleLabel.Text += linkPreview.Author;
                 }
                 else
                 {
                     SubtitleLabel.Text = string.Empty;
                 }
 
-                if (!string.IsNullOrWhiteSpace(webPage.Description?.Text))
+                if (!string.IsNullOrWhiteSpace(linkPreview.Description?.Text))
                 {
                     if (TitleLabel.Text.Length > 0 || SubtitleLabel.Text.Length > 0)
                     {
@@ -507,7 +481,7 @@ namespace Telegram.Controls.Messages.Content
                     }
 
                     empty = false;
-                    ContentLabel.Text += webPage.Description.Text;
+                    ContentLabel.Text += linkPreview.Description.Text;
                 }
                 else
                 {
@@ -520,11 +494,11 @@ namespace Telegram.Controls.Messages.Content
                 : Visibility.Visible;
         }
 
-        private void UpdateInstantView(WebPage webPage)
+        private void UpdateInstantView(LinkPreview linkPreview)
         {
-            if (webPage.InstantViewVersion != 0)
+            if (linkPreview.InstantViewVersion != 0)
             {
-                if (webPage.IsInstantGallery())
+                if (linkPreview.Type is LinkPreviewTypeAlbum)
                 {
                     ButtonLine.Visibility = Visibility.Collapsed;
                 }
@@ -533,49 +507,63 @@ namespace Telegram.Controls.Messages.Content
                     ShowButton(Strings.InstantView, "\uE60E");
                 }
             }
-            else if (string.Equals(webPage.Type, "telegram_megagroup", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeChat typeChat)
             {
-                ShowButton(Strings.OpenGroup);
+                if (typeChat.CreatesJoinRequest)
+                {
+                    ShowButton(Strings.RequestToJoin);
+                }
+                else if (typeChat.Type is InviteLinkChatTypeSupergroup)
+                {
+                    ShowButton(Strings.OpenGroup);
+                }
+                else if (typeChat.Type is InviteLinkChatTypeBasicGroup)
+                {
+                    ShowButton(Strings.OpenGroup);
+                }
+                else if (typeChat.Type is InviteLinkChatTypeChannel)
+                {
+                    ShowButton(Strings.OpenChannel);
+                }
             }
-            else if (string.Equals(webPage.Type, "telegram_channel", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowButton(Strings.OpenChannel);
-            }
-            else if (string.Equals(webPage.Type, "telegram_channel_request", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowButton(Strings.RequestToJoin);
-            }
-            else if (string.Equals(webPage.Type, "telegram_message", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeMessage)
             {
                 ShowButton(Strings.OpenMessage);
             }
-            else if (string.Equals(webPage.Type, "telegram_chat", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeVideoChat videoChat)
             {
-                ShowButton(Strings.OpenGroup);
+                ShowButton(videoChat.IsLiveStream ? Strings.VoipGroupJoinAsSpeaker : Strings.VoipGroupJoinAsLinstener);
             }
-            else if (string.Equals(webPage.Type, "telegram_voicechat", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowButton(webPage.Url.Contains("?voicechat=") ? Strings.VoipGroupJoinAsSpeaker : Strings.VoipGroupJoinAsLinstener);
-            }
-            else if (string.Equals(webPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeBackground)
             {
                 ShowButton(Strings.OpenBackground);
             }
-            else if (string.Equals(webPage.Type, "telegram_chatlist", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeShareableChatFolder)
             {
                 ShowButton(Strings.ViewChatList);
             }
-            else if (string.Equals(webPage.Type, "telegram_user", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeUser)
             {
                 ShowButton(Strings.SendMessage);
             }
-            else if (string.Equals(webPage.Type, "telegram_botapp", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeWebApp)
             {
                 ShowButton(Strings.BotWebAppInstantViewOpen);
             }
-            else if (string.Equals(webPage.Type, "telegram_channel_boost", StringComparison.OrdinalIgnoreCase))
+            else if (linkPreview.Type is LinkPreviewTypeChannelBoost or LinkPreviewTypeSupergroupBoost)
             {
                 ShowButton(Strings.BoostLinkButton);
+            }
+            else if (linkPreview.Type is LinkPreviewTypeStickerSet stickerSet)
+            {
+                if (stickerSet.Stickers.Count > 0 && stickerSet.Stickers[0].FullType is StickerFullTypeCustomEmoji)
+                {
+                    ShowButton(Strings.OpenEmojiSet);
+                }
+                else
+                {
+                    ShowButton(Strings.OpenStickerSet);
+                }
             }
             else
             {
@@ -597,11 +585,11 @@ namespace Telegram.Controls.Messages.Content
             ButtonLine.Visibility = Visibility.Visible;
         }
 
-        private async void UpdateInstantView(WebPage webPage, CancellationToken token)
+        private async void UpdateInstantView(LinkPreview linkPreview, CancellationToken token)
         {
-            if (webPage.IsInstantGallery())
+            if (linkPreview.Type is LinkPreviewTypeAlbum)
             {
-                var response = await _message.ClientService.SendAsync(new GetWebPageInstantView(webPage.Url, false));
+                var response = await _message.ClientService.SendAsync(new GetWebPageInstantView(linkPreview.Url, false));
                 if (response is WebPageInstantView instantView && instantView.IsFull && !token.IsCancellationRequested)
                 {
                     var count = CountWebPageMedia(instantView);
@@ -620,7 +608,7 @@ namespace Telegram.Controls.Messages.Content
             }
         }
 
-        private static int CountBlock(WebPageInstantView webPage, PageBlock pageBlock, int count)
+        private static int CountBlock(WebPageInstantView linkPreview, PageBlock pageBlock, int count)
         {
             if (pageBlock is PageBlockPhoto)
             {
@@ -638,24 +626,24 @@ namespace Telegram.Controls.Messages.Content
             return count;
         }
 
-        public static int CountWebPageMedia(WebPageInstantView webPage)
+        public static int CountWebPageMedia(WebPageInstantView linkPreview)
         {
             var result = 0;
 
-            foreach (var block in webPage.PageBlocks)
+            foreach (var block in linkPreview.PageBlocks)
             {
                 if (block is PageBlockSlideshow slideshow)
                 {
                     foreach (var item in slideshow.PageBlocks)
                     {
-                        result = CountBlock(webPage, item, result);
+                        result = CountBlock(linkPreview, item, result);
                     }
                 }
                 else if (block is PageBlockCollage collage)
                 {
                     foreach (var item in collage.PageBlocks)
                     {
-                        result = CountBlock(webPage, item, result);
+                        result = CountBlock(linkPreview, item, result);
                     }
                 }
             }
@@ -685,7 +673,7 @@ namespace Telegram.Controls.Messages.Content
                 return;
             }
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var rectangle = compositor.CreateRoundedRectangleGeometry();
             rectangle.Size = new Vector2(ActualSize.X - 2, ActualSize.Y - 2);
             rectangle.Offset = new Vector2(1, 1);
@@ -727,13 +715,13 @@ namespace Telegram.Controls.Messages.Content
 
         public void HideSkeleton()
         {
-            ElementCompositionPreview.SetElementChildVisual(this, Window.Current.Compositor.CreateSpriteVisual());
+            ElementCompositionPreview.SetElementChildVisual(this, BootStrapper.Current.Compositor.CreateSpriteVisual());
         }
 
         #endregion
     }
 
-    public class WebPageContentAutomationPeer : HyperlinkButtonAutomationPeer
+    public partial class WebPageContentAutomationPeer : HyperlinkButtonAutomationPeer
     {
         private WebPageContent _owner;
 

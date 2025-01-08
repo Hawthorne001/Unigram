@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,15 +8,16 @@ using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
+using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Converters;
 using Telegram.Entities;
 using Telegram.Native;
 using Telegram.Navigation;
 using Telegram.Services;
-using Telegram.Services.Keyboard;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Media.Core;
@@ -24,7 +25,11 @@ using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Media.Imaging;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Telegram.Views.Popups
 {
@@ -32,11 +37,16 @@ namespace Telegram.Views.Popups
     {
         public StorageMedia ResultMedia { get; private set; }
 
+        private readonly ImageCropperMask _mask;
+
         private readonly StorageFile _file;
         private readonly StorageMedia _media;
 
         private BitmapRotation _rotation = BitmapRotation.None;
         private BitmapFlip _flip = BitmapFlip.None;
+
+        private TimeSpan _duration;
+        private bool _resume;
 
         public EditMediaPopup(StorageMedia media, ImageCropperMask mask = ImageCropperMask.Rectangle)
         {
@@ -53,63 +63,100 @@ namespace Telegram.Views.Popups
                 Proportions.IsEnabled = false;
             }
 
+            _mask = mask;
+
             _file = media.File;
             _media = media;
 
-            Loaded += async (s, args) =>
-            {
-                WindowContext.Current.InputListener.KeyDown += OnAcceleratorKeyActivated;
+            Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
 
-                if (mask == ImageCropperMask.Ellipse)
-                {
-                    await Cropper.SetSourceAsync(media.File, proportions: BitmapProportions.Square);
-                }
-                else
-                {
-                    await Cropper.SetSourceAsync(media.File, media.EditState.Rotation, media.EditState.Flip, media.EditState.Proportions, media.EditState.Rectangle);
-                }
-            };
-            Unloaded += (s, args) =>
-            {
-                WindowContext.Current.InputListener.KeyDown -= OnAcceleratorKeyActivated;
-                Media.Source = null;
-            };
-
-            if (mask == ImageCropperMask.Ellipse && string.Equals(media.File.FileType, ".mp4", StringComparison.OrdinalIgnoreCase))
+            if (Constants.VideoTypes.Contains(media.File.FileType.ToLower()))
             {
                 FindName(nameof(TrimToolbar));
                 TrimToolbar.Visibility = Visibility.Visible;
                 BasicToolbar.Visibility = Visibility.Collapsed;
 
-                InitializeVideo(media.File);
+                InitializeVideo(media, mask);
             }
         }
 
-        private void OnAcceleratorKeyActivated(Window sender, InputKeyDownEventArgs args)
+        private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            if (args.VirtualKey == Windows.System.VirtualKey.Enter && args.OnlyKey)
+            if (_mask == ImageCropperMask.Ellipse)
+            {
+                await Cropper.SetSourceAsync(_media.File, proportions: BitmapProportions.Square);
+            }
+            else
+            {
+                await Cropper.SetSourceAsync(_media.File, _media.EditState.Rotation, _media.EditState.Flip, _media.EditState.Proportions, _media.EditState.Rectangle);
+            }
+
+            var animation = ConnectedAnimationService.GetForCurrentView().GetAnimation("EditMediaPopup");
+            if (animation != null)
+            {
+                animation.TryStart(Cropper);
+            }
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            Media.Source = null;
+        }
+
+        private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
+        {
+            if (TrimToolbar?.Visibility == Visibility.Visible)
+            {
+                if (args.Key == VirtualKey.Space /*&& args.Modifiers == VirtualKeyModifiers.None*/)
+                {
+                    if (Media.MediaPlayer.PlaybackSession.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing)
+                    {
+                        Media.MediaPlayer.Pause();
+                    }
+                    else
+                    {
+                        Media.MediaPlayer.Play();
+                    }
+
+                    args.Handled = true;
+                }
+            }
+        }
+
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
+        {
+            if (args.Key == VirtualKey.Enter && args.Modifiers == VirtualKeyModifiers.None)
             {
                 Accept_Click(null, null);
                 args.Handled = true;
             }
+            else if (TrimToolbar?.Visibility == Visibility.Visible)
+            {
+                if (args.Key == VirtualKey.M && args.Modifiers == VirtualKeyModifiers.None)
+                {
+                    Media.MediaPlayer.IsMuted = !Media.MediaPlayer.IsMuted;
+                    args.Handled = true;
+                }
+            }
             else if (DrawToolbar?.Visibility == Visibility.Visible)
             {
-                if (args.VirtualKey == Windows.System.VirtualKey.Z && args.OnlyControl && Canvas.CanUndo)
+                if (args.Key == VirtualKey.Z && args.Modifiers == VirtualKeyModifiers.Control && Canvas.CanUndo)
                 {
                     Canvas.Undo();
                     args.Handled = true;
                 }
-                else if (args.VirtualKey == Windows.System.VirtualKey.Y && args.OnlyControl && Canvas.CanRedo)
+                else if (args.Key == VirtualKey.Y && args.Modifiers == VirtualKeyModifiers.Control && Canvas.CanRedo)
                 {
                     Canvas.Redo();
                     args.Handled = true;
                 }
-                else if (args.VirtualKey == Windows.System.VirtualKey.D && args.OnlyControl)
+                else if (args.Key == VirtualKey.D && args.Modifiers == VirtualKeyModifiers.Control)
                 {
                     Brush_Click(null, null);
                     args.Handled = true;
                 }
-                else if (args.VirtualKey == Windows.System.VirtualKey.E && args.OnlyControl)
+                else if (args.Key == VirtualKey.E && args.Modifiers == VirtualKeyModifiers.Control)
                 {
                     Erase_Click(null, null);
                     args.Handled = true;
@@ -117,12 +164,12 @@ namespace Telegram.Views.Popups
             }
             else if (BasicToolbar.Visibility == Visibility.Visible)
             {
-                if (args.VirtualKey == Windows.System.VirtualKey.R && args.OnlyControl)
+                if (args.Key == VirtualKey.R && args.Modifiers == VirtualKeyModifiers.Control)
                 {
                     Rotate_Click(null, null);
                     args.Handled = true;
                 }
-                else if (args.VirtualKey == Windows.System.VirtualKey.D && args.OnlyControl)
+                else if (args.Key == VirtualKey.D && args.Modifiers == VirtualKeyModifiers.Control)
                 {
                     Draw_Click(null, null);
                     args.Handled = true;
@@ -147,34 +194,45 @@ namespace Telegram.Views.Popups
             get { return Cropper.CropRectangle; }
         }
 
-        private async void InitializeVideo(StorageFile file)
+        private async void InitializeVideo(StorageMedia media, ImageCropperMask mask)
         {
-            Media.Source = MediaSource.CreateFromStorageFile(file);
-            Media.MediaPlayer.AutoPlay = true;
-            Media.MediaPlayer.IsMuted = true;
-            Media.MediaPlayer.IsLoopingEnabled = true;
-            Media.MediaPlayer.PlaybackSession.PositionChanged += MediaPlayer_PositionChanged;
-
-            using var stream = await file.OpenReadAsync();
-            using var animation = await Task.Run(() => VideoAnimation.LoadFromFile(new VideoAnimationStreamSource(stream), false, false, false));
-
-            double ratioX = (double)40 / animation.PixelWidth;
-            double ratioY = (double)40 / animation.PixelHeight;
-            double ratio = Math.Max(ratioY, ratioY);
-
-            var width = (int)(animation.PixelWidth * ratio);
-            var height = (int)(animation.PixelHeight * ratio);
-
-            var count = Math.Ceiling(296d / width);
-
-            width = (int)(width * XamlRoot.RasterizationScale);
-            height = (int)(height * XamlRoot.RasterizationScale);
-
-            TrimRange.OriginalDuration = TimeSpan.FromMilliseconds(animation.Duration);
-            TrimThumbnails.Children.Clear();
-
             try
             {
+                Media.Source = MediaSource.CreateFromStorageFile(media.File);
+                Media.MediaPlayer.AutoPlay = true;
+                Media.MediaPlayer.IsMuted = mask == ImageCropperMask.Ellipse;
+                Media.MediaPlayer.IsLoopingEnabled = true;
+                Media.MediaPlayer.PlaybackSession.PositionChanged += MediaPlayer_PositionChanged;
+
+                using var stream = await media.File.OpenReadAsync();
+                using var animation = await Task.Run(() => VideoAnimation.LoadFromFile(new VideoAnimationStreamSource(stream), false, false, false));
+
+                double ratioX = (double)40 / animation.PixelWidth;
+                double ratioY = (double)40 / animation.PixelHeight;
+                double ratio = Math.Max(ratioY, ratioY);
+
+                var width = (int)(animation.PixelWidth * ratio);
+                var height = (int)(animation.PixelHeight * ratio);
+
+                var count = Math.Ceiling(296d / width);
+
+                width = (int)(width * XamlRoot.RasterizationScale);
+                height = (int)(height * XamlRoot.RasterizationScale);
+
+                var duration = TimeSpan.FromMilliseconds(animation.Duration);
+                var maxLength = mask == ImageCropperMask.Ellipse
+                    ? TimeSpan.FromSeconds(10)
+                    : duration;
+
+                TrimRange.SetOriginalDuration(_duration = duration, maxLength);
+                TrimThumbnails.Children.Clear();
+
+                if (mask != ImageCropperMask.Ellipse && media.EditState?.TrimStartTime != TimeSpan.Zero && media.EditState?.TrimStopTime != TimeSpan.Zero)
+                {
+                    TrimRange.Minimum = media.EditState.TrimStartTime.TotalSeconds / TrimRange.OriginalDuration.TotalSeconds;
+                    TrimRange.Maximum = media.EditState.TrimStopTime.TotalSeconds / TrimRange.OriginalDuration.TotalSeconds;
+                }
+
                 for (int i = 0; i < count; i++)
                 {
                     var bitmap = new WriteableBitmap(width, height);
@@ -183,7 +241,7 @@ namespace Telegram.Views.Popups
                     await Task.Run(() =>
                     {
                         animation.SeekToMilliseconds((long)(animation.Duration / count * i), false);
-                        animation.RenderSync(buffer, width, height, false, out _);
+                        animation.RenderSync(buffer, width, height, true, out _);
                     });
 
                     var image = new Image();
@@ -191,10 +249,16 @@ namespace Telegram.Views.Popups
                     image.Stretch = Windows.UI.Xaml.Media.Stretch.UniformToFill;
                     image.Source = bitmap;
 
+                    Grid.SetColumn(image, i);
+
                     TrimThumbnails.Children.Add(image);
+                    TrimThumbnails.ColumnDefinitions.Add(1, i == count - 1 ? GridUnitType.Star : GridUnitType.Auto);
                 }
             }
-            catch { }
+            catch
+            {
+                // People like to delete files while they're sending them
+            }
         }
 
         private void Accept_Click(object sender, RoutedEventArgs e)
@@ -206,7 +270,7 @@ namespace Telegram.Views.Popups
                 TimeSpan trimStartTime;
                 TimeSpan trimStopTime;
 
-                if (TrimRange != null)
+                if (TrimRange != null && (TrimRange.Minimum != 0 || TrimRange.Maximum != 1))
                 {
                     trimStartTime = TimeSpan.FromMilliseconds(TrimRange.Minimum * TrimRange.OriginalDuration.TotalMilliseconds);
                     trimStopTime = TimeSpan.FromMilliseconds(TrimRange.Maximum * TrimRange.OriginalDuration.TotalMilliseconds);
@@ -534,32 +598,47 @@ namespace Telegram.Views.Popups
         {
             await TrimRange.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
-                if (sender.Position.TotalMilliseconds >= TrimRange.Maximum * sender.NaturalDuration.TotalMilliseconds)
+                if (TrimRange.IsChanging)
                 {
-                    sender.Position = TimeSpan.FromMilliseconds(sender.NaturalDuration.TotalMilliseconds * TrimRange.Minimum);
                     return;
                 }
 
-                TrimRange.Value = sender.Position.TotalMilliseconds / sender.NaturalDuration.TotalMilliseconds;
+                if (sender.Position.TotalMilliseconds >= TrimRange.Maximum * _duration.TotalMilliseconds)
+                {
+                    sender.Position = TimeSpan.FromMilliseconds(_duration.TotalMilliseconds * TrimRange.Minimum);
+                    return;
+                }
+
+                TrimRange.Value = sender.Position.TotalMilliseconds / _duration.TotalMilliseconds;
             });
         }
 
         private void TrimRange_MinimumChanged(object sender, double e)
         {
-            Media.MediaPlayer.Pause();
+            if (Media.MediaPlayer.PlaybackSession.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing)
+            {
+                _resume = true;
+                Media.MediaPlayer.Pause();
+            }
+
             Media.MediaPlayer.PlaybackSession.Position =
-                TimeSpan.FromMilliseconds(Media.MediaPlayer.PlaybackSession.NaturalDuration.TotalMilliseconds * e);
+                TimeSpan.FromMilliseconds(_duration.TotalMilliseconds * e);
         }
 
         private void TrimRange_MaximumChanged(object sender, double e)
         {
             Media.MediaPlayer.PlaybackSession.Position =
-                TimeSpan.FromMilliseconds(Media.MediaPlayer.PlaybackSession.NaturalDuration.TotalMilliseconds * e);
-            Media.MediaPlayer.Play();
+                TimeSpan.FromMilliseconds(_duration.TotalMilliseconds * e);
+
+            if (_resume)
+            {
+                _resume = false;
+                Media.MediaPlayer.Play();
+            }
         }
     }
 
-    public sealed class SmoothPathBuilder
+    public sealed partial class SmoothPathBuilder
     {
         private List<Vector2> _controlPoints;
         private readonly List<Vector2> _path;

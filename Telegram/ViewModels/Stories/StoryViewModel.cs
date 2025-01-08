@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,7 @@ using Telegram.Td.Api;
 
 namespace Telegram.ViewModels.Stories
 {
-    public class StoryViewModel : BindableBase
+    public partial class StoryViewModel : BindableBase
     {
         public IClientService ClientService { get; }
 
@@ -29,7 +29,7 @@ namespace Telegram.ViewModels.Stories
             StoryId = storyInfo.StoryId;
         }
 
-        public StoryViewModel(IClientService clientService, Story story)
+        public StoryViewModel(IClientService clientService, Story story, bool botPreview = false)
         {
             ClientService = clientService;
 
@@ -38,6 +38,8 @@ namespace Telegram.ViewModels.Stories
 
             Date = story.Date;
             StoryId = story.Id;
+
+            IsBotPreview = botPreview;
 
             Update(story);
         }
@@ -49,6 +51,8 @@ namespace Telegram.ViewModels.Stories
         public Chat Chat { get; private set; }
 
         public int StoryId { get; set; }
+
+        public bool IsBotPreview { get; set; }
 
         public async Task LoadAsync()
         {
@@ -79,11 +83,11 @@ namespace Telegram.ViewModels.Stories
             CanGetInteractions = story.CanGetInteractions;
             CanBeReplied = story.CanBeReplied;
             CanBeForwarded = story.CanBeForwarded;
-            CanToggleIsPinned = story.CanToggleIsPinned;
+            CanToggleIsPostedToChatPage = story.CanToggleIsPostedToChatPage;
             CanBeEdited = story.CanBeEdited;
             CanBeDeleted = story.CanBeDeleted;
             IsVisibleOnlyForSelf = story.IsVisibleOnlyForSelf;
-            IsPinned = story.IsPinned;
+            IsPostedToChatPage = story.IsPostedToChatPage;
             HasExpiredViewers = story.HasExpiredViewers;
             Areas = story.Areas;
             ChosenReactionType = story.ChosenReactionType;
@@ -123,9 +127,9 @@ namespace Telegram.ViewModels.Stories
         public bool CanBeForwarded { get; private set; }
 
         /// <summary>
-        /// True, if the story's IsPinned value can be changed.
+        /// True, if the story's IsPostedToChatPage value can be changed.
         /// </summary>
-        public bool CanToggleIsPinned { get; private set; }
+        public bool CanToggleIsPostedToChatPage { get; private set; }
 
         /// <summary>
         /// True, if the story can be edited.
@@ -146,7 +150,7 @@ namespace Telegram.ViewModels.Stories
         /// True, if the story is saved in the sender's profile and will be available there
         /// after expiration.
         /// </summary>
-        public bool IsPinned { get; private set; }
+        public bool IsPostedToChatPage { get; private set; }
 
         /// <summary>
         /// True, if users viewed the story can't be received, because the story has expired
@@ -176,8 +180,6 @@ namespace Telegram.ViewModels.Stories
 
         public void Prepare()
         {
-            Logger.Debug("Preparing story " + StoryId);
-
             if (_task == null)
             {
                 _ = LoadAsync();

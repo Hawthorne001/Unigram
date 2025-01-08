@@ -1,12 +1,10 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
-using System;
 using Telegram.Navigation;
-using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.Input;
@@ -14,7 +12,7 @@ using Windows.UI.Xaml;
 
 namespace Telegram.Services.Keyboard
 {
-    public class InputListener
+    public partial class InputListener
     {
         private readonly Window _window;
 
@@ -32,25 +30,19 @@ namespace Telegram.Services.Keyboard
             _window.CoreWindow.PointerPressed -= OnPointerPressed;
         }
 
-        private void OnAcceleratorKeyActivated(CoreDispatcher sender, AcceleratorKeyEventArgs e)
+        private void OnAcceleratorKeyActivated(CoreDispatcher sender, AcceleratorKeyEventArgs args)
         {
-            if (e.EventType is not CoreAcceleratorKeyEventType.KeyDown and not CoreAcceleratorKeyEventType.SystemKeyDown || e.Handled)
+            if (args.EventType is not CoreAcceleratorKeyEventType.KeyDown and not CoreAcceleratorKeyEventType.SystemKeyDown || args.Handled)
             {
                 return;
             }
 
-            var args = KeyboardEventArgs(e);
             if (args.VirtualKey is VirtualKey.GoBack
                                 or VirtualKey.NavigationLeft
                                 or VirtualKey.GamepadLeftShoulder
                                 or VirtualKey.Escape)
             {
-                BootStrapper.Current.RaiseBackRequested(args.VirtualKey);
-            }
-            else if (args.OnlyAlt && args.VirtualKey is VirtualKey.Back
-                                                     or VirtualKey.Left)
-            {
-                BootStrapper.Current.RaiseBackRequested(args.VirtualKey);
+                BootStrapper.Current.RaiseBackRequested(null, args.VirtualKey);
             }
             else if (args.VirtualKey is VirtualKey.GoForward
                                      or VirtualKey.NavigationRight
@@ -58,54 +50,23 @@ namespace Telegram.Services.Keyboard
             {
                 BootStrapper.Current.RaiseForwardRequested();
             }
-            else if (args.OnlyAlt && args.VirtualKey is VirtualKey.Right)
+            else if (args.VirtualKey is VirtualKey.Back
+                                     or VirtualKey.Left)
             {
-                BootStrapper.Current.RaiseForwardRequested();
-            }
-            else
-            {
-                try
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == VirtualKeyModifiers.Menu)
                 {
-                    RaiseAsMulticastDelegate(args);
-                }
-                finally
-                {
-                    e.Handled = args.Handled;
+                    BootStrapper.Current.RaiseBackRequested(null, args.VirtualKey);
                 }
             }
-        }
-
-        private void RaiseAsMulticastDelegate(InputKeyDownEventArgs args)
-        {
-            if (KeyDown is MulticastDelegate multicast)
+            else if (args.VirtualKey is VirtualKey.Right)
             {
-                var list = multicast.GetInvocationList();
-                for (int i = list.Length - 1; i >= 0; i--)
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == VirtualKeyModifiers.Menu)
                 {
-                    list[i].DynamicInvoke(_window, args);
-
-                    if (args.Handled)
-                    {
-                        return;
-                    }
+                    BootStrapper.Current.RaiseForwardRequested();
                 }
             }
-        }
-
-        public event TypedEventHandler<Window, InputKeyDownEventArgs> KeyDown;
-
-        private InputKeyDownEventArgs KeyboardEventArgs(AcceleratorKeyEventArgs e)
-        {
-            return new InputKeyDownEventArgs
-            {
-                VirtualKey = e.VirtualKey,
-                RepeatCount = e.KeyStatus.RepeatCount,
-                AltKey = WindowContext.IsKeyDown(VirtualKey.Menu),
-                ControlKey = WindowContext.IsKeyDown(VirtualKey.Control),
-                ShiftKey = WindowContext.IsKeyDown(VirtualKey.Shift),
-                WindowsKey = WindowContext.IsKeyDown(VirtualKey.LeftWindows)
-                    || WindowContext.IsKeyDown(VirtualKey.RightWindows),
-            };
         }
 
         /// <summary>

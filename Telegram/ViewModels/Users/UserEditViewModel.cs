@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,13 +11,16 @@ using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
+using Telegram.Views.Chats;
+using Telegram.Views.Popups;
 using Telegram.Views.Settings.Popups;
+using Telegram.Views.Users;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Users
 {
-    public class UserEditViewModel : ViewModelBase, IDelegable<IUserDelegate>, IHandle
+    public partial class UserEditViewModel : ViewModelBase, IDelegable<IUserDelegate>, IHandle
     {
         public IUserDelegate Delegate { get; set; }
 
@@ -33,7 +36,7 @@ namespace Telegram.ViewModels.Users
             SendCommand = new RelayCommand(Send, CanSend);
         }
 
-        private string _firstName;
+        private string _firstName = string.Empty;
         public string FirstName
         {
             get => _firstName;
@@ -46,7 +49,7 @@ namespace Telegram.ViewModels.Users
             }
         }
 
-        private string _lastName;
+        private string _lastName = string.Empty;
         public string LastName
         {
             get => _lastName;
@@ -59,7 +62,7 @@ namespace Telegram.ViewModels.Users
             }
         }
 
-        private string _description;
+        private string _description = string.Empty;
         public string Description
         {
             get => _description;
@@ -77,6 +80,13 @@ namespace Telegram.ViewModels.Users
                     SendCommand.RaiseCanExecuteChanged();
                 }
             }
+        }
+
+        private StarAmount _starCount;
+        public StarAmount StarCount
+        {
+            get => _starCount;
+            set => Set(ref _starCount, value);
         }
 
         private long _userId;
@@ -116,9 +126,16 @@ namespace Telegram.ViewModels.Users
 
                     Delegate?.UpdateUserFullInfo(null, user, userFull, false, false);
                 }
-                else
+
+                ClientService.Send(new GetUserFullInfo(user.Id));
+
+                if (user.Type is UserTypeBot)
                 {
-                    ClientService.Send(new GetUserFullInfo(user.Id));
+                    var response = await ClientService.GetStarTransactionsAsync(new MessageSenderUser(userId), string.Empty, null, string.Empty, 1);
+                    if (response is StarTransactions transactions)
+                    {
+                        StarCount = transactions.StarAmount;
+                    }
                 }
             }
         }
@@ -224,7 +241,7 @@ namespace Telegram.ViewModels.Users
 
         public async void SetPhoto()
         {
-            var success = await _profilePhotoService.SetPhotoAsync(_userId, isPersonal: false);
+            var success = await _profilePhotoService.SetPhotoAsync(NavigationService, _userId, isPersonal: false);
             if (success)
             {
                 NavigationService.NavigateToChat(_userId);
@@ -242,7 +259,7 @@ namespace Telegram.ViewModels.Users
 
         public async void SetPersonalPhoto()
         {
-            await _profilePhotoService.SetPhotoAsync(_userId, isPersonal: true);
+            await _profilePhotoService.SetPhotoAsync(NavigationService, _userId, isPersonal: true);
         }
 
         public async void CreatePersonalPhoto()
@@ -264,7 +281,17 @@ namespace Telegram.ViewModels.Users
 
         public async void ChangeUsername()
         {
-            await ShowPopupAsync(typeof(SettingsUsernamePopup), _userId);
+            await ShowPopupAsync(new SettingsUsernamePopup(), _userId);
+        }
+
+        public void OpenAffiliate()
+        {
+            NavigationService.Navigate(typeof(UserAffiliatePage), _userId);
+        }
+
+        public void ShowBalance()
+        {
+            NavigationService.Navigate(typeof(ChatStarsPage), new MessageSenderUser(_userId));
         }
 
         public void EditCommands()
@@ -289,6 +316,11 @@ namespace Telegram.ViewModels.Users
             {
                 MessageHelper.OpenTelegramUrl(ClientService, NavigationService, fullInfo.BotInfo.EditSettingsLink);
             }
+        }
+
+        public void VerifyAccounts()
+        {
+            ShowPopup(new ChooseChatsPopup(), new ChooseChatsConfigurationVerifyChat(_userId));
         }
     }
 }

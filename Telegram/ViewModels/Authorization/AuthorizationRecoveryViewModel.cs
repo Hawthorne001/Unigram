@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Authorization
 {
-    public class AuthorizationRecoveryViewModel : ViewModelBase
+    public partial class AuthorizationRecoveryViewModel : ViewModelBase
     {
         private AuthorizationStateWaitPassword _parameters;
 
@@ -78,7 +78,7 @@ namespace Telegram.ViewModels.Authorization
                 }
                 else if (error.CodeEquals(ErrorCode.FLOOD))
                 {
-                    AlertsService.ShowFloodWaitAlert(error.Message);
+                    AlertsService.ShowFloodWaitAlert(XamlRoot, error.Message);
                     //await new MessageDialog($"{Resources.FloodWaitString}\r\n\r\n({result.Error.Message})", Resources.Error).ShowAsync();
                 }
             }

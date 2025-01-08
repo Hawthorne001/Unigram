@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -86,7 +86,7 @@ namespace Telegram.Views.Settings.Password
 
         private async void CancelReset_Click(Hyperlink sender, HyperlinkClickEventArgs args)
         {
-            var confirm = await MessagePopup.ShowAsync(target: null, Strings.CancelPasswordReset, Strings.AppName, Strings.CancelPasswordResetYes, Strings.CancelPasswordResetNo);
+            var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.CancelPasswordReset, Strings.AppName, Strings.CancelPasswordResetYes, Strings.CancelPasswordResetNo);
             if (confirm == ContentDialogResult.Primary)
             {
                 var response = await _clientService.SendAsync(new CancelPasswordReset());
@@ -115,7 +115,7 @@ namespace Telegram.Views.Settings.Password
 
         public EmailAddressAuthenticationCodeInfo RecoveryEmailAddressCodeInfo { get; private set; }
 
-        private async void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             try
             {
@@ -154,10 +154,6 @@ namespace Telegram.Views.Settings.Password
             IsPrimaryButtonEnabled = true;
         }
 
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
-        }
-
         private void Password_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == Windows.System.VirtualKey.Enter)
@@ -179,12 +175,12 @@ namespace Telegram.Views.Settings.Password
                 }
                 else if (response is Error error)
                 {
-                    await MessagePopup.ShowAsync(target: null, error.Message ?? "Error message", error.Code.ToString());
+                    await MessagePopup.ShowAsync(XamlRoot, target: null, error.Message ?? "Error message", error.Code.ToString(), Strings.OK);
                 }
             }
             else if (_passwordState.PendingResetDate == 0)
             {
-                var confirm = await MessagePopup.ShowAsync(target: null, Strings.RestorePasswordNoEmailText2, Strings.RestorePasswordNoEmailTitle, Strings.Reset, Strings.Cancel);
+                var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.RestorePasswordNoEmailText2, Strings.RestorePasswordNoEmailTitle, Strings.Reset, Strings.Cancel);
                 if (confirm == ContentDialogResult.Primary)
                 {
                     ResetPassword();
@@ -192,7 +188,7 @@ namespace Telegram.Views.Settings.Password
             }
             else
             {
-                await MessagePopup.ShowAsync(target: null, Strings.RestorePasswordNoEmailText, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.RestorePasswordNoEmailText, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                 //IsResettable = true;
             }
         }
@@ -219,7 +215,7 @@ namespace Telegram.Views.Settings.Password
                 var diff = _passwordState.PendingResetDate - DateTime.Now.ToTimestamp();
                 if (diff > 0)
                 {
-                    await MessagePopup.ShowAsync(target: null, string.Format(Strings.ResetPasswordWait, Locale.FormatTtl(diff)), Strings.AppName, Strings.OK);
+                    await MessagePopup.ShowAsync(XamlRoot, target: null, string.Format(Strings.ResetPasswordWait, Locale.FormatTtl(diff)), Strings.AppName, Strings.OK);
                 }
             }
         }

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,7 +17,7 @@ namespace Telegram.Controls
     public delegate string TextValueProvider(double newValue);
     public delegate string IconValueProvider(double newValue);
 
-    public class MenuFlyoutSlider : MenuFlyoutItem
+    public partial class MenuFlyoutSlider : MenuFlyoutItem
     {
         private MenuFlyoutSliderPresenter Presenter;
 
@@ -174,7 +174,7 @@ namespace Telegram.Controls
         #endregion
     }
 
-    public class MenuFlyoutSliderStateManager : VisualStateManager
+    public partial class MenuFlyoutSliderStateManager : VisualStateManager
     {
         protected override bool GoToStateCore(Control control, FrameworkElement templateRoot, string stateName, VisualStateGroup group, VisualState state, bool useTransitions)
         {
@@ -187,7 +187,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class MenuFlyoutSliderPresenter : Slider
+    public partial class MenuFlyoutSliderPresenter : Slider
     {
         private Grid HorizontalDecreaseRect;
 

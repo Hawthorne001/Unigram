@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -28,7 +28,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class DiagnosticsViewModel : ViewModelBase
+    public partial class DiagnosticsViewModel : ViewModelBase
     {
         public DiagnosticsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -115,7 +115,7 @@ namespace Telegram.ViewModels
             var tags = Client.Execute(new GetLogTags()) as LogTags;
             if (tags != null)
             {
-                Tags.ReplaceWith(tags.Tags.Select(x => new DiagnosticsTag(Settings)
+                Tags.ReplaceWith(tags.Tags.Select(x => new DiagnosticsTag(NavigationService, Settings)
                 {
                     Name = x,
                     Default = ((LogVerbosityLevel)Client.Execute(new GetLogTagVerbosityLevel(x))).VerbosityLevel,
@@ -264,7 +264,7 @@ namespace Telegram.ViewModels
             var file = await ApplicationData.Current.LocalFolder.TryGetItemAsync(fileName) as StorageFile;
             if (file != null)
             {
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(file.Path), null, true, null)));
+                await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(file.Path), null, true, null)));
             }
         }
 
@@ -284,14 +284,14 @@ namespace Telegram.ViewModels
                 await FillVideoCaptureCapabilityFromDeviceWithoutProfiles(builder, device.Id);
             }
 
-            MessageHelper.CopyText(builder.ToString());
+            MessageHelper.CopyText(XamlRoot, builder.ToString());
 
             try
             {
                 var file = await ApplicationData.Current.LocalFolder.CreateFileAsync("video_info.txt", CreationCollisionOption.ReplaceExisting);
 
                 await FileIO.WriteTextAsync(file, builder.ToString());
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(file.Path), null, true, null)));
+                await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(file.Path), null, true, null)));
             }
             catch { }
         }
@@ -375,21 +375,23 @@ namespace Telegram.ViewModels
         Verbose = 5
     }
 
-    public class DiagnosticsOption
+    public partial class DiagnosticsOption
     {
         public string Name { get; set; }
         public object Value { get; set; }
     }
 
-    public class DiagnosticsTag : BindableBase
+    public partial class DiagnosticsTag : BindableBase
     {
+        private readonly INavigationService _navigationService;
         private readonly ISettingsService _settings;
 
         public string Name { get; set; }
         public int Default { get; set; }
 
-        public DiagnosticsTag(ISettingsService settings)
+        public DiagnosticsTag(INavigationService navigationService, ISettingsService settings)
         {
+            _navigationService = navigationService;
             _settings = settings;
         }
 
@@ -420,13 +422,13 @@ namespace Telegram.ViewModels
                 return new ChooseOptionItem(x, Enum.GetName(typeof(VerbosityLevel), x), x == _value);
             }).ToArray();
 
-            var dialog = new ChooseOptionPopup(items);
-            dialog.Title = Name;
-            dialog.PrimaryButtonText = Strings.OK;
-            dialog.SecondaryButtonText = Strings.Cancel;
+            var popup = new ChooseOptionPopup(items);
+            popup.Title = Name;
+            popup.PrimaryButtonText = Strings.OK;
+            popup.SecondaryButtonText = Strings.Cancel;
 
-            var confirm = await dialog.ShowQueuedAsync();
-            if (confirm == ContentDialogResult.Primary && dialog.SelectedIndex is VerbosityLevel index)
+            var confirm = await _navigationService.ShowPopupAsync(popup);
+            if (confirm == ContentDialogResult.Primary && popup.SelectedIndex is VerbosityLevel index)
             {
                 Value = index;
                 RaisePropertyChanged(nameof(Text));

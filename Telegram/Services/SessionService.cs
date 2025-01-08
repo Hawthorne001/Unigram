@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Common;
+using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Td.Api;
 using Telegram.Views.Host;
@@ -34,7 +35,7 @@ namespace Telegram.Services
         Task<BaseObject> SetAuthenticationPhoneNumberAsync(SetAuthenticationPhoneNumber function);
     }
 
-    public class SessionService : ViewModelBase, ISessionService
+    public partial class SessionService : ViewModelBase, ISessionService
     {
         private readonly ILifetimeService _lifetimeService;
         private readonly int _id;
@@ -204,6 +205,11 @@ namespace Telegram.Services
                     {
                         _ = window.ConsolidateAsync();
                     }
+                    else if (window.Content is RootPage root && root.NavigationService?.SessionId == SessionId)
+                    {
+                        root.NavigationService.Block();
+                        ContentPopup.Block(root.NavigationService.XamlRoot);
+                    }
                 });
             }
             else if (update.AuthorizationState is AuthorizationStateClosed)
@@ -212,6 +218,9 @@ namespace Telegram.Services
                 {
                     _loggingOut = false;
                     _lifetimeService.Destroy(this);
+
+                    Settings.Clear();
+                    Settings.PasscodeLock.Clear();
                 }
                 else if (_continueOnLogOut)
                 {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,6 +17,7 @@ using Telegram.ViewModels;
 using Telegram.ViewModels.Delegates;
 using Telegram.ViewModels.Profile;
 using Telegram.ViewModels.Stories;
+using Telegram.Views.Chats;
 using Telegram.Views.Profile;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
@@ -24,6 +25,7 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 
@@ -52,6 +54,29 @@ namespace Telegram.Views
             };
 
             InitializeScrolling();
+        }
+
+        public override HostedPagePositionBase GetPosition()
+        {
+            ViewModel.Delegate = null;
+            return new HostedPageListViewPosition(DataContext, ScrollingHost.VerticalOffset, string.Empty);
+        }
+
+        public override void SetPosition(HostedPagePositionBase position)
+        {
+            if (position is HostedPageListViewPosition listViewPosition)
+            {
+                DataContext = listViewPosition.DataContext;
+                ViewModel.Delegate = this;
+
+                void handler(object sender, RoutedEventArgs e)
+                {
+                    ScrollingHost.Loaded -= handler;
+                    ScrollingHost.ChangeView(null, listViewPosition.ScrollPosition, null, true);
+                }
+
+                ScrollingHost.Loaded += handler;
+            }
         }
 
         private void InitializeScrolling()
@@ -102,7 +127,7 @@ namespace Telegram.Views
 
             if (ViewModel.SelectedItem is ProfileTabItem tab)
             {
-                MediaFrame.Navigate(tab.Type, null, new SuppressNavigationTransitionInfo());
+                MediaFrame.Navigate(tab.Type, tab.Parameter, new SuppressNavigationTransitionInfo());
             }
 
             var visual4 = ElementComposition.GetElementVisual(BackButton);
@@ -314,6 +339,20 @@ namespace Telegram.Views
                 return;
             }
 
+            if (e.Content is ProfileStoriesTabPage)
+            {
+                if (e.Parameter is ChatStoriesType type)
+                {
+                    tabPage.DataContext = type == ChatStoriesType.Pinned
+                        ? ViewModel.PinnedStoriesTab
+                        : ViewModel.ArchivedStoriesTab;
+                }
+                else
+                {
+                    tabPage.DataContext = ViewModel.PinnedStoriesTab;
+                }
+            }
+
             if (tabPage.ScrollingHost.ItemsSource != null)
             {
                 LoadMore(tabPage.ScrollingHost);
@@ -323,7 +362,10 @@ namespace Telegram.Views
                 tabPage.ScrollingHost.RegisterPropertyChangedCallback(ItemsControl.ItemsSourceProperty, OnItemsSourceChanged, ref _itemsSourceToken);
             }
 
-            tabPage.ScrollingHost.RegisterPropertyChangedCallback(ListViewBase.SelectionModeProperty, OnSelectionModeChanged, ref _selectionModeToken);
+            if (e.Content is not ProfileStoriesTabPage)
+            {
+                tabPage.ScrollingHost.RegisterPropertyChangedCallback(ListViewBase.SelectionModeProperty, OnSelectionModeChanged, ref _selectionModeToken);
+            }
         }
 
         private void OnItemsSourceChanged(DependencyObject sender, DependencyProperty dp)
@@ -388,11 +430,11 @@ namespace Telegram.Views
             var container = scrollingHost.Items[index];
             if (container is MessageWithOwner message)
             {
-                DateHeaderLabel.Text = Formatter.MonthGrouping(message.Date);
+                DateHeaderLabel.Text = Formatter.Date(message.Date, Strings.formatterMonthYear);
             }
             else if (container is StoryViewModel story)
             {
-                DateHeaderLabel.Text = Formatter.MonthGrouping(story.Date);
+                DateHeaderLabel.Text = Formatter.Date(story.Date, Strings.formatterMonthYear);
             }
             else
             {
@@ -440,11 +482,25 @@ namespace Telegram.Views
             }
         }
 
-        private void Header_ItemClick(object sender, ItemClickEventArgs e)
+        private int _prevSelectedIndex = -1;
+
+        private void Navigation_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (e.ClickedItem is ProfileTabItem page && page.Type != MediaFrame.Content?.GetType())
+            if (Navigation.SelectedItem is ProfileTabItem page && (page.Parameter != null || page.Type != MediaFrame.Content?.GetType()))
             {
-                MediaFrame.Navigate(page.Type, null, new SuppressNavigationTransitionInfo());
+                Logger.Info(page.Type);
+
+                NavigationTransitionInfo transition = _prevSelectedIndex == -1
+                    ? new SuppressNavigationTransitionInfo()
+                    : new SlideNavigationTransitionInfo
+                    {
+                        Effect = _prevSelectedIndex < Navigation.SelectedIndex
+                            ? SlideNavigationTransitionEffect.FromRight
+                            : SlideNavigationTransitionEffect.FromLeft
+                    };
+
+                _prevSelectedIndex = Navigation.SelectedIndex;
+                MediaFrame.Navigate(page.Type, page.Parameter, transition);
             }
         }
 
@@ -465,6 +521,60 @@ namespace Telegram.Views
             }
 
             flyout.ShowAt(sender as Button, FlyoutPlacementMode.BottomEdgeAlignedRight);
+        }
+
+        private void Navigation_ItemContextRequested(UIElement sender, ContextRequestedEventArgs args)
+        {
+            var item = Navigation.ItemFromContainer(sender) as ProfileTabItem;
+            if (item != ViewModel.SelectedItem || item.Type != typeof(ProfileMediaTabPage))
+            {
+                return;
+            }
+
+            var photos = new ToggleMenuFlyoutItem
+            {
+                Text = Strings.MediaShowPhotos,
+                IsChecked = ViewModel.Media.Source.Filter is SearchMessagesFilterPhoto or SearchMessagesFilterPhotoAndVideo
+            };
+
+            var videos = new ToggleMenuFlyoutItem
+            {
+                Text = Strings.MediaShowVideos,
+                IsChecked = ViewModel.Media.Source.Filter is SearchMessagesFilterVideo or SearchMessagesFilterPhotoAndVideo
+            };
+
+            photos.Click += MediaShowPhotos_Click;
+            videos.Click += MediaShowVideos_Click;
+
+            var flyout = new MenuFlyout();
+            flyout.Items.Add(photos);
+            flyout.Items.Add(videos);
+
+            flyout.ShowAt(sender, FlyoutPlacementMode.Bottom);
+        }
+
+        private void MediaShowPhotos_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Media.Source.Filter is SearchMessagesFilterPhotoAndVideo)
+            {
+                ViewModel.Media.UpdateSender(new SearchMessagesFilterVideo());
+            }
+            else if (ViewModel.Media.Source.Filter is SearchMessagesFilterVideo)
+            {
+                ViewModel.Media.UpdateSender(new SearchMessagesFilterPhotoAndVideo());
+            }
+        }
+
+        private void MediaShowVideos_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.Media.Source.Filter is SearchMessagesFilterPhotoAndVideo)
+            {
+                ViewModel.Media.UpdateSender(new SearchMessagesFilterPhoto());
+            }
+            else if (ViewModel.Media.Source.Filter is SearchMessagesFilterPhoto)
+            {
+                ViewModel.Media.UpdateSender(new SearchMessagesFilterPhotoAndVideo());
+            }
         }
 
         #region Selection

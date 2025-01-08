@@ -23,7 +23,7 @@
                   SelectionMode="None"
                   IsItemClickEnabled="True"
                   ItemClick="ScrollingHost_ItemClick"
-                  Padding="4,0,0,4">
+                  Padding="0,0,0,4">
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
                     <ItemsStackPanel Orientation="Horizontal" />
@@ -42,9 +42,7 @@
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemContainerTransitions>
-                <TransitionCollection>
-
-                </TransitionCollection>
+                <TransitionCollection />
             </ListView.ItemContainerTransitions>
         </ListView>
 
@@ -52,7 +50,7 @@
                          Click="Show_Click"
                          IsTabStop="False"
                          Height="32"
-                         Margin="10,18,0,0"
+                         Margin="10,20,0,0"
                          CornerRadius="16"
                          VerticalAlignment="Top"
                          HorizontalAlignment="Left" />

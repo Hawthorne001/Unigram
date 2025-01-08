@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,7 +9,6 @@ using System.Numerics;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Cells;
-using Telegram.Navigation;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.Devices.Geolocation;
@@ -35,10 +34,10 @@ namespace Telegram.Views.Popups
 
         public InputMessageContent Media { get; private set; }
 
-        public SendLocationPopup()
+        public SendLocationPopup(int sessionId)
         {
             InitializeComponent();
-            DataContext = TypeResolver.Current.Resolve<SendLocationViewModel>();
+            DataContext = TypeResolver.Current.Resolve<SendLocationViewModel>(sessionId);
 
             Title = Strings.AttachLocation;
 
@@ -91,7 +90,14 @@ namespace Telegram.Views.Popups
                     _geolocator = new Geolocator { DesiredAccuracy = PositionAccuracy.Default };
                     _geolocator.PositionChanged += OnPositionChanged;
 
-                    await _geolocator.GetGeopositionAsync();
+                    try
+                    {
+                        await _geolocator.GetGeopositionAsync();
+                    }
+                    catch
+                    {
+                        // All the remote procedure calls must be wrapped in a try-catch block
+                    }
                 }
                 else
                 {
@@ -101,7 +107,14 @@ namespace Telegram.Views.Popups
                         ElementCompositionPreview.SetElementChildVisual(MapShimmer, visual);
                     }
 
-                    UpdateLocation(await _geolocator.GetGeopositionAsync());
+                    try
+                    {
+                        UpdateLocation(await _geolocator.GetGeopositionAsync());
+                    }
+                    catch
+                    {
+                        // All the remote procedure calls must be wrapped in a try-catch block
+                    }
                 }
             }
         }
@@ -134,10 +147,12 @@ namespace Telegram.Views.Popups
             var latitude = point.Coordinate.Point.Position.Latitude;
             var longitude = point.Coordinate.Point.Position.Longitude;
 
-            var width = MapPresenter.ActualWidth * WindowContext.Current.RasterizationScale;
-            var height = MapPresenter.ActualHeight * WindowContext.Current.RasterizationScale;
+            var rasterization = XamlRoot.RasterizationScale;
 
-            var pixels = 96 * WindowContext.Current.RasterizationScale;
+            var width = MapPresenter.ActualWidth * rasterization;
+            var height = MapPresenter.ActualHeight * rasterization;
+
+            var pixels = 96 * rasterization;
             var scale = pixels * 39.37 * 156543.04 * Math.Cos(latitude * Math.PI / 180) / Math.Pow(2, 15);
             var accuracy = point.Coordinate.Accuracy * 39.37;
 

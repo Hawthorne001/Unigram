@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,12 +12,11 @@ using Telegram.Td.Api;
 using Telegram.ViewModels.Drawers;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls.Drawers
 {
-    public class StickerDrawerItemClickEventArgs : EventArgs
+    public partial class StickerDrawerItemClickEventArgs : EventArgs
     {
         public StickerDrawerItemClickEventArgs(Sticker sticker, bool fromStickerSet)
         {
@@ -44,6 +43,8 @@ namespace Telegram.Controls.Drawers
 
         private readonly AnimatedListHandler _toolbarHandler;
 
+        private readonly EventDebouncer<TextChangedEventArgs> _typing;
+
         private readonly Dictionary<StickerViewModel, Grid> _itemIdToContent = new();
         private long _selectedSetId;
 
@@ -53,7 +54,10 @@ namespace Telegram.Controls.Drawers
         {
             InitializeComponent();
 
-            ElementComposition.GetElementVisual(this).Clip = Window.Current.Compositor.CreateInsetClip();
+            this.CreateInsetClip();
+
+            var header = VisualUtilities.DropShadow(Separator);
+            header.Clip = header.Compositor.CreateInsetClip(0, 40, 0, -40);
 
             _handler = new AnimatedListHandler(List, AnimatedListType.Stickers);
             _toolbarHandler = new AnimatedListHandler(Toolbar, AnimatedListType.Stickers);
@@ -64,19 +68,16 @@ namespace Telegram.Controls.Drawers
             _zoomer.DownloadFile = fileId => ViewModel.ClientService.DownloadFile(fileId, 32);
             _zoomer.SessionId = () => ViewModel.ClientService.SessionId;
 
-            var header = DropShadowEx.Attach(Separator);
-            header.Clip = header.Compositor.CreateInsetClip(0, 40, 0, -40);
-
-            //var debouncer = new EventDebouncer<TextChangedEventArgs>(Constants.TypingTimeout, handler => FieldStickers.TextChanged += new TextChangedEventHandler(handler));
-            //debouncer.Invoked += async (s, args) =>
-            //{
-            //    var items = ViewModel.SearchStickers;
-            //    if (items != null && string.Equals(FieldStickers.Text, items.Query))
-            //    {
-            //        await items.LoadMoreItemsAsync(1);
-            //        await items.LoadMoreItemsAsync(2);
-            //    }
-            //};
+            _typing = new EventDebouncer<TextChangedEventArgs>(Constants.TypingTimeout, handler => SearchField.TextChanged += new TextChangedEventHandler(handler));
+            _typing.Invoked += async (s, args) =>
+            {
+                var items = ViewModel?.SearchStickers as SearchStickerSetsCollection;
+                if (items != null && string.Equals(SearchField.Text, items.Query))
+                {
+                    await items.LoadMoreItemsAsync(1);
+                    await items.LoadMoreItemsAsync(2);
+                }
+            };
         }
 
         public Services.Settings.StickersTab Tab => Services.Settings.StickersTab.Stickers;
@@ -89,7 +90,7 @@ namespace Telegram.Controls.Drawers
 
         public ListViewBase ScrollingHost => List;
 
-        public void Activate(Chat chat, EmojiSearchType type = EmojiSearchType.Default)
+        public void Activate(Chat chat, EmojiSearchType type = EmojiSearchType.Combined)
         {
             _isActive = true;
             _handler.ThrottleVisibleItems();
@@ -106,6 +107,8 @@ namespace Telegram.Controls.Drawers
             _isActive = false;
             _handler.UnloadItems();
             _toolbarHandler.UnloadItems();
+
+            _typing.Cancel();
 
             // This is called only right before XamlMarkupHelper.UnloadObject
             // so we can safely clean up any kind of anything from here.
@@ -223,8 +226,8 @@ namespace Telegram.Controls.Drawers
             if (args.GroupHeaderContainer == null)
             {
                 args.GroupHeaderContainer = new GridViewHeaderItem();
-                args.GroupHeaderContainer.Style = List.GroupStyle[0].HeaderContainerStyle;
-                args.GroupHeaderContainer.ContentTemplate = List.GroupStyle[0].HeaderTemplate;
+                args.GroupHeaderContainer.Style = sender.GroupStyle[0].HeaderContainerStyle;
+                args.GroupHeaderContainer.ContentTemplate = sender.GroupStyle[0].HeaderTemplate;
             }
 
             if (args.Group is StickerSetViewModel group && !group.IsLoaded)
@@ -335,17 +338,8 @@ namespace Telegram.Controls.Drawers
                     return;
                 }
 
-                var cover = sticker.GetThumbnail();
-                if (cover != null)
-                {
-                    var animation = content.Children[0] as AnimatedImage;
-                    animation.Source = new DelayedFileSource(ViewModel.ClientService, cover);
-                }
-                else
-                {
-                    var animation = content.Children[0] as AnimatedImage;
-                    animation.Source = null;
-                }
+                var animation = content.Children[0] as AnimatedImage;
+                animation.Source = DelayedFileSource.FromStickerSetInfo(ViewModel.ClientService, sticker);
 
                 args.Handled = true;
             }
@@ -358,7 +352,7 @@ namespace Telegram.Controls.Drawers
 
         private void SearchField_CategorySelected(object sender, EmojiCategorySelectedEventArgs e)
         {
-            ViewModel.Search(string.Join(" ", e.Category.Emojis), true);
+            ViewModel.Search(e.Category.Source);
         }
 
         private void OnContextRequested(UIElement sender, ContextRequestedEventArgs args)

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -157,12 +157,12 @@ namespace Telegram.Views.Chats.Popups
 
         private void CopyLink_Click(object sender, RoutedEventArgs e)
         {
-            MessageHelper.CopyLink(_status.BoostUrl);
+            MessageHelper.CopyLink(XamlRoot, _status.BoostUrl);
         }
 
         private void PurchaseShadow_Loaded(object sender, RoutedEventArgs e)
         {
-            DropShadowEx.Attach(PurchaseShadow);
+            VisualUtilities.DropShadow(PurchaseShadow);
         }
 
         private async void Purchase_Click(object sender, RoutedEventArgs e)
@@ -198,7 +198,7 @@ namespace Telegram.Views.Chats.Popups
                     // TODO: reassign boost slots
                     Hide();
 
-                    await new ChatBoostReassignPopup(_clientService, _chat, _slots).ShowQueuedAsync();
+                    await _navigationService.ShowPopupAsync(new ChatBoostReassignPopup(_clientService, _chat, _slots));
                 }
                 else
                 {
@@ -206,7 +206,7 @@ namespace Telegram.Views.Chats.Popups
                         ? Locale.Declension(Strings.R.BoostingGetMoreBoostByGiftingCount, _clientService.Options.PremiumGiftBoostCount, _chat.Title)
                         : string.Format(Strings.BoostingGetMoreBoostByGifting, _chat.Title);
 
-                    var confirm = await MessagePopup.ShowAsync(target: null, message, Strings.BoostingMoreBoostsNeeded, Strings.GiftPremium, Strings.Close);
+                    var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, message, Strings.BoostingMoreBoostsNeeded, Strings.GiftPremium, Strings.Close);
                     if (confirm == ContentDialogResult.Primary)
                     {
                         Hide();
@@ -215,7 +215,7 @@ namespace Telegram.Views.Chats.Popups
             }
             else
             {
-                var confirm = await MessagePopup.ShowAsync(target: null, _channel ? Strings.PremiumNeededForBoosting : Strings.PremiumNeededForBoostingGroup, Strings.PremiumNeeded, Strings.CheckPhoneNumberYes, Strings.Cancel);
+                var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, _channel ? Strings.PremiumNeededForBoosting : Strings.PremiumNeededForBoostingGroup, Strings.PremiumNeeded, Strings.CheckPhoneNumberYes, Strings.Cancel);
                 if (confirm == ContentDialogResult.Primary)
                 {
                     Hide();

@@ -3,7 +3,6 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:muxc="using:Microsoft.UI.Xaml.Media"
              xmlns:controls="using:Telegram.Controls"
              xmlns:cells="using:Telegram.Controls.Cells"
              mc:Ignorable="d"
@@ -81,14 +80,14 @@
 
                 <controls:ActiveStoriesSegments x:Name="Segments"
                                                 Click="Segments_Click"
+                                                ContextRequested="Segments_ContextRequested"
                                                 Width="140"
                                                 Height="140"
                                                 AutomationProperties.Name="{CustomResource AccDescrProfilePicture}"
                                                 VerticalAlignment="Bottom">
                     <controls:ProfilePicture x:Name="Photo"
                                              Width="140"
-                                             Height="140"
-                                             IsEnabled="False" />
+                                             Height="140" />
                 </controls:ActiveStoriesSegments>
             </Grid>
             <Border Height="140"
@@ -107,21 +106,32 @@
                   HorizontalAlignment="Center"
                   Grid.Row="1">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <controls:CustomEmojiIcon x:Name="BotVerified"
+                                          Visibility="Collapsed"
+                                          VerticalAlignment="Bottom"
+                                          Margin="0,0,4,4" />
+
                 <TextBlock x:Name="Title"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
                            TextAlignment="Center"
                            IsTextSelectionEnabled="True"
                            Style="{StaticResource SubtitleTextBlockStyle}"
-                           FontFamily="{ThemeResource EmojiThemeFontFamily}" />
+                           FontFamily="{ThemeResource EmojiThemeFontFamily}"
+                           Grid.Column="1" />
 
-                <controls:IdentityIcon x:Name="Identity"
-                                       VerticalAlignment="Bottom"
-                                       Margin="4,0,0,4"
-                                       Grid.Column="1" />
+                <HyperlinkButton x:Name="IdentityRoot"
+                                 Click="Identity_Click"
+                                 Style="{StaticResource EmptyHyperlinkButtonStyle}"
+                                 VerticalAlignment="Bottom"
+                                 Margin="4,0,0,4"
+                                 Grid.Column="2">
+                    <controls:IdentityIcon x:Name="Identity" />
+                </HyperlinkButton>
             </Grid>
             <Grid x:Name="SubtitleRoot"
                   HorizontalAlignment="Center"
@@ -138,6 +148,7 @@
                            TextAlignment="Center" />
 
                 <Button x:Name="SubtitleWhen"
+                        Visibility="Collapsed"
                         Click="{x:Bind ViewModel.ShowLastSeen}"
                         VerticalAlignment="Bottom"
                         FontSize="11"
@@ -148,7 +159,7 @@
                         CornerRadius="8"
                         Height="16"
                         Grid.Column="1">
-                    <TextBlock Text="when?"
+                    <TextBlock Text="{CustomResource StatusHiddenShow}"
                                TextLineBounds="Tight"
                                TextAlignment="Center"
                                OpticalMarginAlignment="TrimSideBearings"
@@ -246,7 +257,8 @@
         </Grid>
 
         <StackPanel x:Name="ControlsRoot">
-            <StackPanel x:Name="PersonalChannelRoot">
+            <StackPanel x:Name="PersonalChannelRoot"
+                        Visibility="Collapsed">
                 <Grid Margin="24,32,24,-8"
                       MaxWidth="1000">
                     <Grid.ColumnDefinitions>
@@ -268,14 +280,16 @@
 
                 <controls:HeaderedControl>
                     <Button Click="{x:Bind ViewModel.OpenLinkedChannel}"
-                            Style="{StaticResource EmptyButtonStyle}">
+                            Style="{StaticResource EmptyButtonStyle}"
+                            AutomationProperties.Name="{CustomResource ProfileChannel}">
                         <cells:ChatCell x:Name="PersonalChannel"
                                         Stroke="{ThemeResource ChatLastMessageStateBrush}" />
                     </Button>
                 </controls:HeaderedControl>
             </StackPanel>
 
-            <controls:HeaderedControl x:Name="InfoPanel">
+            <controls:HeaderedControl x:Name="InfoPanel"
+                                      IsFooterLink="True">
                 <controls:BadgeButton x:Name="Description"
                                       Visibility="Collapsed"
                                       Style="{StaticResource GlyphSubtitleBadgeButtonStyle}"
@@ -352,6 +366,7 @@
                 </controls:BadgeButton>
 
                 <controls:BadgeButton x:Name="UserBirthday"
+                                      Visibility="Collapsed"
                                       Click="Birthday_Click"
                                       Content="[Birthday Today]"
                                       Badge="21 Mar 2024 (99 years old)"
@@ -376,7 +391,8 @@
                     </Button.ContextFlyout>
                 </controls:BadgeButton>
 
-                <cells:ProfileHoursCell x:Name="BusinessHours" />
+                <cells:ProfileHoursCell x:Name="BusinessHours"
+                                        Visibility="Collapsed" />
 
                 <controls:BadgeButton x:Name="ChatId"
                                       Click="{x:Bind ViewModel.CopyId}"
@@ -404,26 +420,113 @@
                         </DataTemplate>
                     </controls:BadgeButton.ContentTemplate>
                 </controls:BadgeButton>
+
+                <Border x:Name="BotMainApp"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource SettingsItemBackground}">
+                    <Button Click="{x:Bind ViewModel.OpenMainWebApp}"
+                            Content="{CustomResource ProfileBotOpenApp}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch"
+                            Margin="12"
+                            Height="36" />
+                </Border>
             </controls:HeaderedControl>
 
-            <controls:HeaderedControl x:Name="ChannelMembersPanel"
-                                      Header="{CustomResource ChannelMembers}"
-                                      Visibility="Collapsed">
+            <Grid x:Name="BotVerifiedRoot"
+                  Visibility="Collapsed"
+                  MaxWidth="1000"
+                  Margin="24,8,24,8">
+                <RichTextBlock Style="{StaticResource InfoCaptionRichTextBlockStyle}"
+                               IsTextSelectionEnabled="False">
+                    <Paragraph>
+                        <InlineUIContainer>
+                            <controls:CustomEmojiIcon x:Name="BotVerifiedInfo"
+                                                      ReplacementColor="{ThemeResource SystemControlDisabledChromeDisabledLowBrush}"
+                                                      Width="16"
+                                                      Height="16"
+                                                      FrameSize="16,16"
+                                                      Margin="0,0,0,-4" />
+                        </InlineUIContainer>
+                        <Span x:Name="BotVerifiedText" />
+                    </Paragraph>
+                </RichTextBlock>
+            </Grid>
+
+            <controls:HeaderedControl x:Name="AffiliateProgramRoot">
+                <controls:BadgeButton x:Name="AffiliateProgram"
+                                      Content="{CustomResource ProfileBotAffiliateProgram}"
+                                      Click="{x:Bind ViewModel.OpenAffiliate}"
+                                      Style="{StaticResource GlyphBadgeButtonStyle}"
+                                      Glyph="&#xEAA6;"
+                                      Visibility="Collapsed" />
+            </controls:HeaderedControl>
+
+            <controls:HeaderedControl>
                 <controls:BadgeButton x:Name="Members"
                                       Content="{CustomResource ChannelSubscribers}"
                                       Click="{x:Bind ViewModel.OpenMembers}"
                                       Style="{StaticResource GlyphBadgeButtonStyle}"
-                                      Glyph="&#xE716;" />
+                                      Glyph="&#xE716;"
+                                      Visibility="Collapsed" />
                 <controls:BadgeButton x:Name="Admins"
                                       Content="{CustomResource ChannelAdministrators}"
                                       Click="{x:Bind ViewModel.OpenAdmins}"
                                       Style="{StaticResource GlyphBadgeButtonStyle}"
-                                      Glyph="&#xE734;" />
-                <controls:BadgeButton x:Name="Banned"
-                                      Content="{CustomResource ChannelBlockedUsers}"
-                                      Click="{x:Bind ViewModel.OpenBanned}"
+                                      Glyph="&#xE983;"
+                                      Visibility="Collapsed" />
+                <controls:BadgeButton x:Name="Statistics"
+                                      Click="{x:Bind ViewModel.OpenBalance}"
+                                      Content="{CustomResource StarsBalance}"
                                       Style="{StaticResource GlyphBadgeButtonStyle}"
-                                      Glyph="&#xF166;" />
+                                      Glyph="&#xEA8D;"
+                                      Visibility="Collapsed">
+                    <controls:BadgeButton.Badge>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Visibility="{x:Bind ViewModel.CryptoCount, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xEA7E;"
+                                           FontSize="16"
+                                           FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                           Foreground="{ThemeResource SystemColorControlAccentBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,4,0" />
+                                <TextBlock Text="{x:Bind ConvertCryptoCount(ViewModel.CryptoCount), Mode=OneWay}"
+                                           VerticalAlignment="Center"
+                                           Grid.Column="1" />
+                            </Grid>
+
+                            <Grid Visibility="{x:Bind ConvertStarVisibility(ViewModel.StarCount), Mode=OneWay}"
+                                  Grid.Column="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <controls:PremiumStarCount Margin="8,-4,4,-6"
+                                                           Width="20" />
+                                <TextBlock Text="{x:Bind ConvertStarCount(ViewModel.StarCount), Mode=OneWay}"
+                                           VerticalAlignment="Center"
+                                           Grid.Column="1" />
+                            </Grid>
+                        </Grid>
+                    </controls:BadgeButton.Badge>
+                </controls:BadgeButton>
+                <controls:BadgeButton x:Name="ChannelSettings"
+                                      Content="{CustomResource ChannelAdminSettings}"
+                                      Click="{x:Bind ViewModel.Edit}"
+                                      Style="{StaticResource GlyphBadgeButtonStyle}"
+                                      Glyph="&#xE9E9;"
+                                      IsChevronVisible="True"
+                                      Visibility="Collapsed" />
             </controls:HeaderedControl>
 
             <controls:HeaderedControl x:Name="MiscPanel">
@@ -445,15 +548,6 @@
                                     </controls:BadgeButton.Badge>-->
                 </controls:BadgeButton>
             </controls:HeaderedControl>
-
-            <Border x:Name="MembersPanel"
-                    Visibility="Collapsed"
-                    MaxWidth="640"
-                    Margin="0,16,0,0">
-                <TextBlock Text="{CustomResource ChannelMembers}"
-                           Margin="12,0,12,8"
-                           Style="{StaticResource SettingsGroupTextBlockStyle}" />
-            </Border>
         </StackPanel>
     </StackPanel>
 </UserControl>

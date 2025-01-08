@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,6 +15,7 @@ using Telegram.ViewModels.Delegates;
 using Telegram.Views.Business;
 using Telegram.Views.Folders;
 using Telegram.Views.Settings;
+using Telegram.Views.Stars;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
@@ -28,7 +29,6 @@ namespace Telegram.Views
         public SettingsPage()
         {
             InitializeComponent();
-            DataContext = TypeResolver.Current.Resolve<SettingsViewModel, ISettingsDelegate>(this);
 
             NavigationCacheMode = NavigationCacheMode.Required;
 
@@ -62,7 +62,6 @@ namespace Telegram.Views
             {
                 _masterDetail = value;
                 _masterDetail.NavigationService.Frame.Navigated += OnNavigated;
-                ViewModel.NavigationService = value.NavigationService;
             }
         }
 
@@ -172,15 +171,22 @@ namespace Telegram.Views
             MasterDetail.NavigationService.ShowPromo(new PremiumSourceSettings());
         }
 
+        private void Stars_Click(object sender, RoutedEventArgs e)
+        {
+            MasterDetail.NavigationService.Navigate(typeof(StarsPage));
+        }
+
+        private void Business_Click(object sender, RoutedEventArgs e)
+        {
+            MasterDetail.NavigationService.Navigate(typeof(BusinessPage));
+        }
+
         private async void Photo_Click(object sender, RoutedEventArgs e)
         {
-            var chat = ViewModel.Chat;
-            if (chat == null)
+            if (ViewModel.ClientService.TryGetUser(ViewModel.ClientService.Options.MyId, out User user))
             {
-                return;
+                await GalleryWindow.ShowAsync(ViewModel, ViewModel.StorageService, user, Photo);
             }
-
-            await GalleryWindow.ShowAsync(ViewModel, ViewModel.StorageService, chat, () => Photo);
         }
 
         #region Binding
@@ -189,7 +195,7 @@ namespace Telegram.Views
         {
             Title.Text = user.FullName();
             Photo.SetUser(ViewModel.ClientService, user, 48);
-            Identity.SetStatus(ViewModel.ClientService, user);
+            Identity.SetStatus(ViewModel.ClientService, user, BotVerified);
         }
 
         public void UpdateUserFullInfo(Chat chat, User user, UserFullInfo fullInfo, bool secret, bool accessToken)
@@ -205,11 +211,6 @@ namespace Telegram.Views
         private void VersionLabel_Navigate(object sender, RoutedEventArgs e)
         {
             MasterDetail.NavigationService.Navigate(typeof(DiagnosticsPage));
-        }
-
-        private void Business_Click(object sender, RoutedEventArgs e)
-        {
-            MasterDetail.NavigationService.Navigate(typeof(BusinessPage));
         }
     }
 }

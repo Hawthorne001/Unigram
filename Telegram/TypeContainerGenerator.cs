@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,12 +10,11 @@ using System.Diagnostics;
 using System.Linq;
 using Telegram.Services;
 using Telegram.Services.Factories;
-using Telegram.Services.ViewService;
 using Telegram.ViewModels;
 using Telegram.ViewModels.Authorization;
-using Telegram.ViewModels.BasicGroups;
-using Telegram.ViewModels.Channels;
+using Telegram.ViewModels.Business;
 using Telegram.ViewModels.Chats;
+using Telegram.ViewModels.Create;
 using Telegram.ViewModels.Drawers;
 using Telegram.ViewModels.Folders;
 using Telegram.ViewModels.Payments;
@@ -23,12 +22,13 @@ using Telegram.ViewModels.Premium;
 using Telegram.ViewModels.Profile;
 using Telegram.ViewModels.Settings;
 using Telegram.ViewModels.Settings.Privacy;
+using Telegram.ViewModels.Stars;
 using Telegram.ViewModels.Supergroups;
 using Telegram.ViewModels.Users;
 
 namespace Telegram
 {
-    public class TypeContainerGenerator
+    public partial class TypeContainerGenerator
     {
         private static List<Type> _globals;
         private static List<(Type Key, Type Value)> _singletons;
@@ -53,6 +53,7 @@ namespace Telegram
                 ( typeof(IGenerationService), typeof(GenerationService) ),
                 ( typeof(INetworkService), typeof(NetworkService) ),
                 ( typeof(IVoipService), typeof(VoipService) ),
+                ( typeof(IContactsService), typeof(ContactsService) ),
             };
 
             _lazySingletons = new List<(Type, Type)>
@@ -61,10 +62,8 @@ namespace Telegram
                 ( typeof(ISettingsSearchService), typeof(SettingsSearchService) ),
                 ( typeof(ICloudUpdateService), typeof(CloudUpdateService) ),
                 ( typeof(IShortcutsService), typeof(ShortcutsService) ),
-                ( typeof(IVoipGroupService), typeof(VoipGroupService) ),
                 ( typeof(IDeviceInfoService), typeof(DeviceInfoService) ),
                 ( typeof(IEventAggregator), typeof(EventAggregator) ),
-                ( typeof(IContactsService), typeof(ContactsService) ),
                 ( typeof(ILocationService), typeof(LocationService) ),
                 ( typeof(IThemeService), typeof(ThemeService) ),
                 ( typeof(IMessageFactory), typeof(MessageFactory) ),
@@ -85,10 +84,13 @@ namespace Telegram
                 typeof(AuthorizationEmailAddressViewModel),
                 typeof(AuthorizationEmailCodeViewModel),
                 typeof(MainViewModel),
+                typeof(ContactsViewModel),
+                typeof(CallsViewModel),
                 typeof(ChooseChatsViewModel),
                 typeof(SendLocationViewModel),
                 typeof(DialogViewModel),
                 typeof(DialogThreadViewModel),
+                typeof(DialogBusinessRepliesViewModel),
                 typeof(DialogSavedViewModel),
                 typeof(DialogPinnedViewModel),
                 typeof(DialogScheduledViewModel),
@@ -96,15 +98,17 @@ namespace Telegram
                 typeof(AnimationDrawerViewModel),
                 typeof(StickerDrawerViewModel),
                 typeof(EmojiDrawerViewModel),
+                typeof(EffectDrawerViewModel),
                 typeof(CreateChatPhotoViewModel),
                 typeof(ProfileViewModel),
                 typeof(ProfileStoriesTabViewModel),
                 typeof(ProfileMembersTabViewModel),
                 typeof(ProfileGroupsTabViewModel),
                 typeof(ProfileChannelsTabViewModel),
+                typeof(ProfileGiftsTabViewModel),
                 typeof(ProfileSavedChatsTabViewModel),
-                typeof(UserCreateViewModel),
                 typeof(UserEditViewModel),
+                typeof(UserAffiliateViewModel),
                 typeof(SupergroupEditViewModel),
                 typeof(SupergroupEditTypeViewModel),
                 typeof(SupergroupEditStickerSetViewModel),
@@ -112,7 +116,7 @@ namespace Telegram
                 typeof(SupergroupEditRestrictedViewModel),
                 typeof(SupergroupEditLinkedChatViewModel),
                 typeof(SupergroupChooseMemberViewModel),
-                typeof(ChatInviteLinkViewModel),
+                typeof(ChatInviteLinksViewModel),
                 typeof(SupergroupAdministratorsViewModel),
                 typeof(SupergroupBannedViewModel),
                 typeof(SupergroupPermissionsViewModel),
@@ -120,10 +124,13 @@ namespace Telegram
                 typeof(SupergroupReactionsViewModel),
                 typeof(ChatStatisticsViewModel),
                 typeof(ChatBoostsViewModel),
+                typeof(ChatRevenueViewModel),
+                typeof(ChatStarsViewModel),
+                typeof(ChatAffiliateViewModel),
                 typeof(MessageStatisticsViewModel),
-                typeof(ChannelCreateStep1ViewModel),
-                typeof(ChannelCreateStep2ViewModel),
-                typeof(BasicGroupCreateStep1ViewModel),
+                typeof(NewContactViewModel),
+                typeof(NewChannelViewModel),
+                typeof(NewGroupViewModel),
                 typeof(InstantViewModel),
                 typeof(LogOutViewModel),
                 typeof(DiagnosticsViewModel),
@@ -141,7 +148,6 @@ namespace Telegram
                 typeof(SettingsDataAndStorageViewModel),
                 typeof(SettingsDataAutoViewModel),
                 typeof(SettingsProxyViewModel),
-                typeof(SettingsQuickReactionViewModel),
                 typeof(SettingsPrivacyAndSecurityViewModel),
                 typeof(SettingsPrivacyAllowCallsViewModel),
                 typeof(SettingsPrivacyAllowP2PCallsViewModel),
@@ -149,14 +155,18 @@ namespace Telegram
                 typeof(SettingsPrivacyShowForwardedViewModel),
                 typeof(SettingsPrivacyPhoneViewModel),
                 typeof(SettingsPrivacyShowPhoneViewModel),
+                typeof(SettingsPrivacyAutosaveGiftsViewModel),
                 typeof(SettingsPrivacyAllowFindingByPhoneNumberViewModel),
                 typeof(SettingsPrivacyAllowPrivateVoiceAndVideoNoteMessagesViewModel),
                 typeof(SettingsPrivacyShowPhotoViewModel),
                 typeof(SettingsPrivacyShowStatusViewModel),
                 typeof(SettingsPrivacyShowBioViewModel),
+                typeof(SettingsPrivacyShowBirthdateViewModel),
                 typeof(SettingsPrivacyNewChatViewModel),
                 typeof(SettingsAutoDeleteViewModel),
                 typeof(SettingsProfileViewModel),
+                typeof(SettingsProfileColorViewModel),
+                typeof(SupergroupProfileColorViewModel),
                 typeof(SettingsPasswordViewModel),
                 typeof(SettingsPasscodeViewModel),
                 typeof(SettingsStickersViewModel),
@@ -173,9 +183,7 @@ namespace Telegram
                 typeof(PaymentAddressViewModel),
                 typeof(PaymentCredentialsViewModel),
                 typeof(PaymentFormViewModel),
-                typeof(InteractionsViewModel),
                 typeof(StoryInteractionsViewModel),
-                typeof(ChatsNearbyViewModel),
                 typeof(FoldersViewModel),
                 typeof(FolderViewModel),
                 typeof(ShareFolderViewModel),
@@ -184,7 +192,20 @@ namespace Telegram
                 typeof(DownloadsViewModel),
                 typeof(ChooseSoundViewModel),
                 typeof(ChatNotificationsViewModel),
-                typeof(PromoViewModel)
+                typeof(PromoViewModel),
+                typeof(StarsViewModel),
+                typeof(BuyViewModel),
+                typeof(PayViewModel),
+                typeof(BusinessViewModel),
+                typeof(BusinessLocationViewModel),
+                typeof(BusinessHoursViewModel),
+                typeof(BusinessRepliesViewModel),
+                typeof(BusinessGreetViewModel),
+                typeof(BusinessAwayViewModel),
+                typeof(BusinessBotsViewModel),
+                typeof(BusinessIntroViewModel),
+                typeof(BusinessChatLinksViewModel),
+                typeof(RevenueViewModel)
             };
 
             // Preprocess: find out lazy singletons used by singletons to promote
@@ -231,7 +252,7 @@ namespace Telegram
             var builder = new FormattedBuilder();
             builder.AppendLine("namespace Telegram.Views");
             builder.AppendLine("{");
-            builder.AppendLine("public class TLLocator");
+            builder.AppendLine("public partial class TypeLocator");
             builder.AppendLine("{");
             builder.AppendLine("private readonly int _session;");
             builder.AppendLine();
@@ -260,7 +281,7 @@ namespace Telegram
 
             builder.AppendLine();
 
-            builder.AppendIndent("public TLLocator(");
+            builder.AppendIndent("public TypeLocator(");
 
             for (int i = 0; i < _globals.Count; i++)
             {
@@ -302,24 +323,24 @@ namespace Telegram
 
             builder.AppendLine("public T Resolve<T>()");
             builder.AppendLine("{");
-            builder.AppendLine("switch (typeof(T).Name)");
+            builder.AppendLine("switch (typeof(T).FullName)");
             builder.AppendLine("{");
 
             for (int i = 0; i < _instances.Count; i++)
             {
-                    builder.AppendLine("case nameof(" + _instances[i].FullName + "):");
+                builder.AppendLine("case \"" + _instances[i].FullName + "\":");
                 builder.AppendLine("return (T)(object)" + GenerateConstructor(_instances[i], 4) + "; ");
             }
 
             for (int i = 0; i < _singletons.Count; i++)
             {
-                builder.AppendLine("case nameof(" + _singletons[i].Key.FullName + "):");
+                builder.AppendLine("case \"" + _singletons[i].Key.FullName + "\":");
                 builder.AppendLine("return (T)" + GetSingletonName(_singletons[i].Key) + "; ");
             }
 
             for (int i = 0; i < _lazySingletons.Count; i++)
             {
-                builder.AppendLine("case nameof(" + _lazySingletons[i].Key.FullName + "):");
+                builder.AppendLine("case \"" + _lazySingletons[i].Key.FullName + "\":");
                 builder.AppendLine("return (T)(" + GetSingletonName(_lazySingletons[i].Key) + " ??= " + GenerateConstructor(_lazySingletons[i].Value, 4) + ");");
             }
 

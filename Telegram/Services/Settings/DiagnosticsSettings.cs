@@ -1,15 +1,13 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 
-using System;
-
 namespace Telegram.Services.Settings
 {
-    public class DiagnosticsSettings : SettingsServiceBase
+    public partial class DiagnosticsSettings : SettingsServiceBase
     {
         public DiagnosticsSettings()
             : base("Diagnostics")
@@ -65,13 +63,6 @@ namespace Telegram.Services.Settings
             set => AddOrUpdateValue(ref _lastUpdateVersion, "LastUpdateVersion", value);
         }
 
-        private int? _lastUpdateTime;
-        public int LastUpdateTime
-        {
-            get => _lastUpdateTime ??= GetValueOrDefault("LastUpdateTime", 0);
-            set => AddOrUpdateValue(ref _lastUpdateTime, "LastUpdateTime", value);
-        }
-
         private bool? _enableWebViewDevTools;
         public bool EnableWebViewDevTools
         {
@@ -98,24 +89,6 @@ namespace Telegram.Services.Settings
         {
             get => _useStorageOptimizer ??= GetValueOrDefault("UseStorageOptimizer", false);
             set => AddOrUpdateValue(ref _useStorageOptimizer, "UseStorageOptimizer", value);
-        }
-
-        private bool? _lastCrashWasLayoutCycle;
-        public bool LastCrashWasLayoutCycle
-        {
-            get => _lastCrashWasLayoutCycle ??= GetValueOrDefault("LastCrashWasLayoutCycle", false);
-            set => AddOrUpdateValue(ref _lastCrashWasLayoutCycle, "LastCrashWasLayoutCycle", value);
-        }
-
-        private DateTime? _lasCrashReported;
-        public DateTime LastCrashReported
-        {
-            get => _lasCrashReported ??= DateTime.FromFileTimeUtc(GetValueOrDefault("LastCrashReported", 2650467743999999999 /* DateTime.MaxValue */));
-            set
-            {
-                _lasCrashReported = value;
-                AddOrUpdateValue("LastCrashReported", value.ToFileTimeUtc());
-            }
         }
 
         private bool? _hidePhoneNumber;
@@ -153,6 +126,13 @@ namespace Telegram.Services.Settings
             set => AddOrUpdateValue(ref _forceEdgeHtml, "ForceEdgeHtml", value);
         }
 
+        private bool? _forceWebView2;
+        public bool ForceWebView2
+        {
+            get => _forceWebView2 ??= GetValueOrDefault("ForceWebView2", false);
+            set => AddOrUpdateValue(ref _forceWebView2, "ForceWebView2", value);
+        }
+
         private bool? _disablePackageManager;
         public bool DisablePackageManager
         {
@@ -165,6 +145,13 @@ namespace Telegram.Services.Settings
         {
             get => _sendLargePhotos ??= GetValueOrDefault("SendLargePhotos", false);
             set => AddOrUpdateValue(ref _sendLargePhotos, "SendLargePhotos", value);
+        }
+
+        private bool? _useSpeexResampler;
+        public bool UseSpeexResampler
+        {
+            get => _useSpeexResampler ??= GetValueOrDefault("UseSpeexResampler", false);
+            set => AddOrUpdateValue(ref _useSpeexResampler, "UseSpeexResampler", value);
         }
 
         public bool IsLastErrorDiskFull { get; set; }

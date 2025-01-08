@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,19 +11,21 @@ using System.Globalization;
 using System.Linq;
 using Telegram.Common;
 using Telegram.Controls;
-using Telegram.Controls.Gallery;
 using Telegram.Controls.Media;
 using Telegram.Controls.Messages.Content;
 using Telegram.Converters;
 using Telegram.Navigation;
+using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Telegram.ViewModels.Gallery;
+using Telegram.Views.Popups;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
 using Windows.UI.Text;
+using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Documents;
@@ -32,10 +34,11 @@ using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
 using Windows.UI.Xaml.Shapes;
+using Point = Windows.Foundation.Point;
 
 namespace Telegram.Views
 {
-    public class InstantPageArgs
+    public partial class InstantPageArgs
     {
         public InstantPageArgs(WebPageInstantView instantView, string url)
         {
@@ -93,7 +96,7 @@ namespace Telegram.Views
         {
         }
 
-        protected override async void OnNavigatedTo(NavigationEventArgs e)
+        protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             ScrollingHost.Items.Clear();
             ViewModel.Gallery.Items.Clear();
@@ -111,6 +114,9 @@ namespace Telegram.Views
             ViewModel.ShareTitle = args.Url;
 
             UpdateView(args.InstantView);
+
+            Header.CanGoBack = Frame.CanGoBack;
+            Header.CanGoForward = Frame.CanGoForward;
         }
 
         private WebPageInstantView _instantView;
@@ -285,10 +291,10 @@ namespace Telegram.Views
             foreach (var article in relatedArticles.Articles)
             {
                 var grid = new Grid();
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
-                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
-                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+                grid.ColumnDefinitions.Add(1, GridUnitType.Star);
+                grid.ColumnDefinitions.Add(1, GridUnitType.Auto);
+                grid.RowDefinitions.Add(1, GridUnitType.Auto);
+                grid.RowDefinitions.Add(1, GridUnitType.Auto);
 
                 var title = new TextBlock { Text = article.Title };
                 var description = new TextBlock { TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 2, Style = Resources["BlockAuthorDateTextBlockStyle"] as Style };
@@ -303,7 +309,7 @@ namespace Telegram.Views
 
                     if (article.PublishDate > 0)
                     {
-                        description.Text += " — " + Formatter.DayMonthFullYear.Format(Formatter.ToLocalTime(article.PublishDate));
+                        description.Text += " — " + Formatter.Date(article.PublishDate, Strings.chatFullDate);
                     }
                 }
 
@@ -344,13 +350,13 @@ namespace Telegram.Views
             return panel;
         }
 
-        private FrameworkElement ProcessTable(PageBlockTable table)
+        private FrameworkElement ProcessTable(PageBlockTable table, bool test = true)
         {
             var grid = new Grid();
-            grid.BorderThickness = new Thickness(table.IsBordered ? 1 : 0, table.IsBordered ? 1 : 0, 0, 0);
-            grid.BorderBrush = new SolidColorBrush(Colors.Green);
 
-            var columns = table.Cells.Max(x => x.Count);
+            var thickness = table.IsBordered ? 1 : 0;
+
+            var columns = table.Cells.Select(x => x.Sum(x => x.Colspan)).Max();
             var rows = table.Cells.Count;
 
             for (int i = 0; i < columns; i++)
@@ -409,22 +415,21 @@ namespace Telegram.Views
                     ProcessRichText(cell.Text, span, textBlock);
 
                     var border = new Border();
-                    border.Background = cell.IsHeader || (table.IsStriped && row % 2 == 0) ? new SolidColorBrush(Colors.LightGray) : null;
-                    border.BorderThickness = new Thickness(0, 0, table.IsBordered ? 1 : 0, table.IsBordered ? 1 : 0);
-                    border.BorderBrush = new SolidColorBrush(Colors.Green);
-                    border.Child = textBlock;
+                    border.Style = Resources[cell.IsHeader || (table.IsStriped && row % 2 == 0) ? "BlockTableHeaderStyle" : "BlockTableCellStyle"] as Style;
+                    border.BorderThickness = new Thickness(column == 0 ? thickness : 0, row == 0 ? thickness : 0, thickness, thickness);
                     border.Padding = new Thickness(8, 4, 8, 4);
+                    border.Child = textBlock;
 
                     Grid.SetRow(border, row);
                     Grid.SetRowSpan(border, cell.Rowspan);
                     Grid.SetColumn(border, column);
                     Grid.SetColumnSpan(border, cell.Colspan);
 
-                    if (cell.Rowspan > 1 && column == 0)
+                    if (cell.Rowspan > 1 && column == adjust)
                     {
                         for (int i = 1; i < cell.Rowspan; i++)
                         {
-                            offset[row + i] = cell.Colspan;
+                            offset[row + i] = column + cell.Colspan;
                         }
                     }
 
@@ -433,7 +438,7 @@ namespace Telegram.Views
                     column += cell.Colspan;
                 }
 
-                grid.RowDefinitions.Add(new RowDefinition());
+                grid.RowDefinitions.Add(1, GridUnitType.Auto);
 
                 row++;
             }
@@ -445,6 +450,25 @@ namespace Telegram.Views
             scroll.VerticalScrollMode = ScrollMode.Disabled;
 
             scroll.Content = grid;
+
+            if (test && Constants.DEBUG)
+            {
+                var panel = new StackPanel();
+                //panel.Children.Add(caption);
+                panel.Children.Add(scroll);
+
+                var button = new Button();
+                button.Content = "Rebuild";
+                button.Click += (s, args) =>
+                {
+                    panel.Children.RemoveAt(0);
+                    panel.Children.Insert(0, ProcessTable(table, false));
+                };
+
+                panel.Children.Add(button);
+
+                return panel;
+            }
 
             var caption = ProcessText(table, true);
             if (caption != null)
@@ -525,20 +549,19 @@ namespace Telegram.Views
             if (!block.Author.IsNullOrEmpty())
             {
                 var span = new Span();
-                textBlock.Inlines.Add(new Run { Text = string.Format(Strings.ArticleByAuthor, string.Empty) });
+                textBlock.Inlines.Add(string.Format(Strings.ArticleByAuthor, string.Empty));
                 textBlock.Inlines.Add(span);
                 ProcessRichText(block.Author, span, null);
             }
 
-            //textBlock.Inlines.Add(new Run { Text = DateTimeFormatter.LongDate.Format(BindConvert.Current.DateTime(block.PublishedDate)) });
             if (block.PublishDate > 0)
             {
                 if (textBlock.Inlines.Count > 0)
                 {
-                    textBlock.Inlines.Add(new Run { Text = " — " });
+                    textBlock.Inlines.Add(" — ");
                 }
 
-                textBlock.Inlines.Add(new Run { Text = Formatter.DayMonthFullYear.Format(Formatter.ToLocalTime(block.PublishDate)) });
+                textBlock.Inlines.Add(Formatter.Date(block.PublishDate, Strings.chatFullDate));
             }
 
             return textBlock;
@@ -595,7 +618,7 @@ namespace Telegram.Views
                 return null;
             }
 
-            var textBlock = new RichTextBlock();
+            var textBlock = CreateTextBlock();
             var span = new Span();
             var paragraph = new Paragraph();
             paragraph.Inlines.Add(span);
@@ -682,6 +705,241 @@ namespace Telegram.Views
             return textBlock;
         }
 
+        #region Text selection
+
+        public partial class SelectionRange
+        {
+            public int Start { get; set; }
+            public int End { get; set; }
+
+            public SelectionRange(int start, int end)
+            {
+                Start = start;
+                End = end;
+            }
+        }
+
+        private RichTextBlock _selectionAnchor;
+        private Point _selectionAnchorPoint;
+        private Point _stackPoint;
+
+        private int _selectionDirection;
+        private TextPointer _selectionPivot;
+
+        private SelectionRange _selectionClue;
+        private bool _selectionDirty;
+
+        private bool _selecting;
+
+        private HashSet<RichTextBlock> _selection = new();
+
+        private RichTextBlock CreateTextBlock()
+        {
+            var block = new RichTextBlock();
+            block.SelectionChanged += OnSelectionChanged;
+            block.LostFocus += OnLostFocus;
+            block.AddHandler(PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
+            block.AddHandler(PointerMovedEvent, new PointerEventHandler(OnPointerMoved), true);
+            block.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
+
+            return block;
+        }
+
+        private void RemoveSelectionHighlighter(RichTextBlock block)
+        {
+            for (int i = block.TextHighlighters.Count - 1; i >= 0; i--)
+            {
+                if (block.TextHighlighters[i].Background == block.SelectionHighlightColor)
+                {
+                    block.TextHighlighters.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+
+        private void OnLostFocus(object sender, RoutedEventArgs e)
+        {
+            foreach (var block in _selection)
+            {
+                RemoveSelectionHighlighter(block);
+            }
+
+            if (sender is RichTextBlock anchor)
+            {
+                anchor.Select(anchor.ContentStart, anchor.ContentStart);
+            }
+        }
+
+        private void OnSelectionChanged(object sender, RoutedEventArgs e)
+        {
+            if (_selectionAnchor == sender && _selectionPivot == null)
+            {
+                if (_selectionClue != null)
+                {
+                    if (_selectionAnchor.SelectionStart.Offset == _selectionClue.Start || _selectionAnchor.SelectionStart.Offset == _selectionClue.End)
+                    {
+                        _selectionPivot = _selectionAnchor.SelectionStart;
+                        return;
+                    }
+                    else if (_selectionAnchor.SelectionEnd.Offset == _selectionClue.Start || _selectionAnchor.SelectionEnd.Offset == _selectionClue.End)
+                    {
+                        _selectionPivot = _selectionAnchor.SelectionEnd;
+                        return;
+                    }
+                }
+
+                _selectionClue = new SelectionRange(_selectionAnchor.SelectionStart.Offset, _selectionAnchor.SelectionEnd.Offset);
+            }
+        }
+
+        private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _selectionAnchor = sender as RichTextBlock;
+            RemoveSelectionHighlighter(_selectionAnchor);
+
+            var transform = _selectionAnchor.TransformToVisual(XamlRoot.Content);
+            var anchorPoint = transform.TransformPoint(new Point());
+
+            _selectionAnchorPoint = new Point(anchorPoint.X, anchorPoint.Y + (_selectionAnchor.ActualHeight / 2));
+
+            var transform2 = ScrollingHost.ItemsPanelRoot.TransformToVisual(XamlRoot.Content);
+            var anchorPoint2 = transform2.TransformPoint(new Point());
+
+            _stackPoint = anchorPoint;
+        }
+
+        private void CreateHighlighter(RichTextBlock block, TextPointer start, TextPointer end)
+        {
+            CreateHighlighter(block, start.OffsetToIndex(), end.OffsetToIndex());
+        }
+
+        private void CreateHighlighter(RichTextBlock block, int start, int length)
+        {
+            var highlighter = new TextHighlighter
+            {
+                Background = block.SelectionHighlightColor,
+                Foreground = new SolidColorBrush(Colors.White)
+            };
+
+            highlighter.Ranges.Add(new TextRange
+            {
+                StartIndex = start,
+                Length = length
+            });
+
+            RemoveSelectionHighlighter(block);
+            block.TextHighlighters.Add(highlighter);
+        }
+
+        private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (_selectionAnchor == null)
+            {
+                return;
+            }
+
+            var point = e.GetCurrentPoint(XamlRoot.Content);
+            var y1 = Math.Min(_selectionAnchorPoint.Y, point.Position.Y);
+            var y2 = Math.Max(_selectionAnchorPoint.Y, point.Position.Y);
+
+            var area = new Rect(_stackPoint.X, y1, ScrollingHost.ItemsPanelRoot.ActualWidth, y2 - y1);
+            var elements = VisualTreeHelper.FindElementsInHostCoordinates(area, ScrollingHost.ItemsPanelRoot);
+
+            var direction = Math.Sign(_selectionAnchorPoint.Y - point.Position.Y);
+
+            //Debug.WriteLine(direction < 0 ? "Selecting from top to bottom" : "Selecting from bottom to top");
+            //Debug.WriteLine(direction < 0 ? "Using selection start as anchor" : "Using selection end as anchor");
+
+            var selection = new HashSet<RichTextBlock>();
+
+            foreach (var block in elements.OfType<RichTextBlock>())
+            {
+                if (_selectionAnchor == block)
+                {
+                    continue;
+                }
+
+                var relative = e.GetCurrentPoint(block);
+                if (relative.Position.Y >= 0 && relative.Position.Y <= Math.Ceiling(block.ActualHeight))
+                {
+                    // Active block
+                    var position = block.GetPositionFromPoint(relative.Position);
+
+                    if (direction < 0)
+                    {
+                        CreateHighlighter(block, block.ContentStart, position);
+                    }
+                    else
+                    {
+                        CreateHighlighter(block, position, block.ContentEnd);
+                    }
+                }
+                else
+                {
+                    // Full block
+                    CreateHighlighter(block, 0, int.MaxValue);
+                }
+
+                selection.Add(block);
+            }
+
+            selection.Add(_selectionAnchor);
+
+            //Debug.WriteLine(selection.Count);
+
+            if (_selectionPivot != null)
+            {
+                var relative = e.GetCurrentPoint(_selectionAnchor);
+                //Debug.WriteLine("Anchor {0}: ({1} ~> {2})", _selectionAnchor.Tag, relative.Position, _selectionAnchor.ActualHeight);
+
+                if (relative.Position.Y < 0)
+                {
+                    _selectionDirty = true;
+                    _selectionAnchor.Select(_selectionAnchor.ContentStart, _selectionPivot);
+                }
+                else if (relative.Position.Y > _selectionAnchor.ActualHeight)
+                {
+                    _selectionDirty = true;
+                    _selectionAnchor.Select(_selectionPivot, _selectionAnchor.ContentEnd);
+                }
+                else if (_selectionDirty)
+                {
+                    _selectionDirty = false;
+                    _selectionAnchor.Select(_selectionPivot, _selectionPivot);
+                }
+            }
+
+            foreach (var block in _selection)
+            {
+                if (selection.Contains(block))
+                {
+                    continue;
+                }
+
+                RemoveSelectionHighlighter(block);
+            }
+
+            _selection = selection;
+            _selectionDirection = direction;
+        }
+
+        private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is RichTextBlock block)
+            {
+                Debug.WriteLine("Released, {0}", block.Tag);
+            }
+
+            _selectionAnchor = null;
+            _selectionPivot = null;
+            _selectionClue = null;
+            _selectionDirty = false;
+            _selectionDirection = 0;
+            _selecting = false;
+        }
+
+        #endregion
+
         private void Text_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
         {
             MessageHelper.Hyperlink_ContextRequested(ViewModel.TranslateService, sender, args);
@@ -702,7 +960,7 @@ namespace Telegram.Views
                 return null;
             }
 
-            var textBlock = new RichTextBlock();
+            var textBlock = CreateTextBlock();
             var span = new Span();
             var paragraph = new Paragraph();
             paragraph.Inlines.Add(span);
@@ -755,7 +1013,7 @@ namespace Telegram.Views
         private FrameworkElement ProcessList(PageBlockList block)
         {
             var panel = new Grid();
-            panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+            panel.ColumnDefinitions.Add(1, GridUnitType.Auto);
             panel.ColumnDefinitions.Add(new ColumnDefinition());
 
             var row = 0;
@@ -778,7 +1036,7 @@ namespace Telegram.Views
                 Grid.SetRow(stack, row);
                 Grid.SetColumn(stack, 1);
 
-                panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+                panel.RowDefinitions.Add(1, GridUnitType.Auto);
                 panel.Children.Add(label);
                 panel.Children.Add(stack);
 
@@ -831,7 +1089,7 @@ namespace Telegram.Views
             var galleryItem = new GalleryPhoto(ViewModel.ClientService, block.Photo, block.Caption.ToFormattedText());
             ViewModel.Gallery.Items.Add(galleryItem);
 
-            var message = CreateMessage(new MessagePhoto(block.Photo, null, false, false));
+            var message = CreateMessage(new MessagePhoto(block.Photo, null, false, false, false));
             var element = new StackPanel { Style = Resources["BlockPhotoStyle"] as Style };
 
             var content = new PhotoContent(message);
@@ -857,7 +1115,7 @@ namespace Telegram.Views
             var galleryItem = new GalleryVideo(ViewModel.ClientService, block.Video, block.Caption.ToFormattedText());
             ViewModel.Gallery.Items.Add(galleryItem);
 
-            var message = CreateMessage(new MessageVideo(block.Video, null, false, false));
+            var message = CreateMessage(new MessageVideo(block.Video, Array.Empty<AlternativeVideo>(), null, false, false, false));
             var element = new StackPanel { Style = Resources["BlockVideoStyle"] as Style };
 
             var content = new VideoContent(message);
@@ -883,7 +1141,7 @@ namespace Telegram.Views
             var galleryItem = new GalleryAnimation(ViewModel.ClientService, block.Animation, block.Caption.ToFormattedText());
             ViewModel.Gallery.Items.Add(galleryItem);
 
-            var message = CreateMessage(new MessageAnimation(block.Animation, null, false, false));
+            var message = CreateMessage(new MessageAnimation(block.Animation, null, false, false, false));
             var element = new StackPanel { Style = Resources["BlockVideoStyle"] as Style };
 
             var content = new AnimationContent(message);
@@ -988,7 +1246,7 @@ namespace Telegram.Views
                     var galleryItem = new GalleryPhoto(ViewModel.ClientService, photoBlock.Photo, block.Caption.ToFormattedText());
                     ViewModel.Gallery.Items.Add(galleryItem);
 
-                    var message = CreateMessage(new MessagePhoto(photoBlock.Photo, null, false, false));
+                    var message = CreateMessage(new MessagePhoto(photoBlock.Photo, null, false, false, false));
 
                     var content = new PhotoContent(message);
                     content.Tag = galleryItem;
@@ -1003,7 +1261,7 @@ namespace Telegram.Views
                     var galleryItem = new GalleryVideo(ViewModel.ClientService, videoBlock.Video, block.Caption.ToFormattedText());
                     ViewModel.Gallery.Items.Add(galleryItem);
 
-                    var message = CreateMessage(new MessageVideo(videoBlock.Video, null, false, false));
+                    var message = CreateMessage(new MessageVideo(videoBlock.Video, Array.Empty<AlternativeVideo>(), null, false, false, false));
 
                     var content = new VideoContent(message);
                     content.Tag = galleryItem;
@@ -1073,10 +1331,10 @@ namespace Telegram.Views
             }
 
             var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+            grid.ColumnDefinitions.Add(1, GridUnitType.Auto);
+            grid.ColumnDefinitions.Add(1, GridUnitType.Auto);
+            grid.ColumnDefinitions.Add(1, GridUnitType.Auto);
+            grid.ColumnDefinitions.Add(1, GridUnitType.Auto);
 
             for (int i = 0; i < items.Count; i++)
             {
@@ -1089,7 +1347,7 @@ namespace Telegram.Views
 
                 if (x == 0)
                 {
-                    grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
+                    grid.RowDefinitions.Add(1, GridUnitType.Auto);
                 }
             }
 
@@ -1110,9 +1368,9 @@ namespace Telegram.Views
             var element = new StackPanel { Style = Resources["BlockEmbedPostStyle"] as Style };
 
             var header = new Grid();
-            header.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
-            header.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Auto) });
-            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Auto) });
+            header.RowDefinitions.Add(1, GridUnitType.Auto);
+            header.RowDefinitions.Add(1, GridUnitType.Auto);
+            header.ColumnDefinitions.Add(1, GridUnitType.Auto);
             header.ColumnDefinitions.Add(new ColumnDefinition());
             header.Margin = new Thickness(_padding, 0, 0, 0);
 
@@ -1178,92 +1436,157 @@ namespace Telegram.Views
         private void ProcessRichText(RichText text, Span span, RichTextBlock textBlock)
         {
             int offset = 0;
-            ProcessRichText(text, span, textBlock, TextEffects.None, ref offset);
+            var cached = new TextHighlighter();
+            var marked = new TextHighlighter();
+
+            ProcessRichText(text, span, textBlock, TextEffects.None, ref offset, cached.Ranges, marked.Ranges);
+
+            if (cached.Ranges.Count > 0)
+            {
+                cached.Background = new SolidColorBrush(Theme.Accent.WithAlpha(22));
+                cached.Foreground = new SolidColorBrush(Theme.Accent);
+
+                textBlock.TextHighlighters.Add(cached);
+            }
+
+            if (marked.Ranges.Count > 0)
+            {
+                marked.Background = new SolidColorBrush(Colors.PaleGoldenrod);
+
+                textBlock.TextHighlighters.Add(marked);
+            }
         }
 
-        private void ProcessRichText(RichText text, Span span, RichTextBlock textBlock, TextEffects effects, ref int offset)
+        private static int _target;
+        private int _current;
+
+        private bool ProcessRichText(RichText text, Span span, RichTextBlock textBlock, TextEffects effects, ref int offset, IList<TextRange> cached, IList<TextRange> marked)
         {
             switch (text)
             {
                 case RichTextPlain plainText:
-                    span.Inlines.Add(new Run { Text = plainText.Text });
-
-                    if (effects.HasFlag(TextEffects.Marked))
+                    if (string.IsNullOrEmpty(plainText.Text))
                     {
-                        var highlight = new TextHighlighter();
-                        highlight.Background = new SolidColorBrush(Colors.PaleGoldenrod);
-                        highlight.Ranges.Add(new TextRange { StartIndex = offset, Length = plainText.Text.Length });
-
-                        //textBlock.TextHighlighters.Add(highlight);
+                        return false;
                     }
 
+                    if (effects.HasFlag(TextEffects.Cached))
+                    {
+                        cached.Add(new TextRange { StartIndex = offset, Length = plainText.Text.Length });
+                    }
+                    else if (effects.HasFlag(TextEffects.Marked))
+                    {
+                        marked.Add(new TextRange { StartIndex = offset, Length = plainText.Text.Length });
+                    }
+
+                    span.Inlines.Add(plainText.Text);
                     offset += plainText.Text.Length;
-                    break;
+                    return true;
                 case RichTexts concatText:
+                    var added = false;
+
                     foreach (var concat in concatText.Texts)
                     {
                         var concatRun = new Span();
-                        span.Inlines.Add(concatRun);
-                        ProcessRichText(concat, concatRun, textBlock, effects, ref offset);
+
+                        if (ProcessRichText(concat, concatRun, textBlock, effects, ref offset, cached, marked))
+                        {
+                            span.Inlines.Add(concatRun);
+                            added = true;
+                        }
                     }
-                    break;
+
+                    return added;
                 case RichTextBold boldText:
                     span.FontWeight = FontWeights.SemiBold;
-                    ProcessRichText(boldText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(boldText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextEmailAddress emailText:
-                    ProcessRichText(emailText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(emailText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextFixed fixedText:
                     span.FontFamily = new FontFamily("Consolas");
-                    ProcessRichText(fixedText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(fixedText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextItalic italicText:
                     span.FontStyle |= FontStyle.Italic;
-                    ProcessRichText(italicText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(italicText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextStrikethrough strikeText:
                     span.TextDecorations |= TextDecorations.Strikethrough;
-                    ProcessRichText(strikeText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(strikeText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextUnderline underlineText:
                     span.TextDecorations |= TextDecorations.Underline;
-                    ProcessRichText(underlineText.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(underlineText.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextAnchorLink anchorLinkText:
                     try
                     {
                         var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
-                        span.Inlines.Add(hyperlink);
-                        hyperlink.Click += (s, args) => Hyperlink_Click(anchorLinkText);
-                        Extensions.SetToolTip(hyperlink, anchorLinkText.Url);
-                        MessageHelper.SetEntityData(hyperlink, anchorLinkText.Url);
-                        MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(anchorLinkText));
-                        ProcessRichText(anchorLinkText.Text, hyperlink, textBlock, effects, ref offset);
+
+                        if (ProcessRichText(anchorLinkText.Text, hyperlink, textBlock, effects | TextEffects.Cached, ref offset, cached, marked))
+                        {
+                            span.Inlines.Add(hyperlink);
+                            hyperlink.Click += (s, args) => Hyperlink_Click(anchorLinkText);
+                            Extensions.SetToolTip(hyperlink, anchorLinkText.Url);
+                            MessageHelper.SetEntityData(hyperlink, anchorLinkText.Url);
+                            MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(anchorLinkText));
+
+                            return true;
+                        }
+
+                        return false;
                     }
                     catch
                     {
-                        ProcessRichText(anchorLinkText.Text, span, textBlock, effects, ref offset);
-                        Debug.WriteLine("InstantPage: Probably nesting textUrl inside textUrl");
+                        Logger.Info("InstantPage: Probably nesting anchorLink inside textUrl");
+                        return ProcessRichText(anchorLinkText.Text, span, textBlock, effects, ref offset, cached, marked);
                     }
-                    break;
                 case RichTextUrl urlText:
                     try
                     {
+                        if (urlText.IsCached)
+                        {
+                            effects |= TextEffects.Cached;
+                        }
+
                         var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
-                        span.Inlines.Add(hyperlink);
-                        hyperlink.Click += (s, args) => Hyperlink_Click(urlText);
-                        Extensions.SetToolTip(hyperlink, urlText.Url);
-                        MessageHelper.SetEntityData(hyperlink, urlText.Url);
-                        MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(urlText));
-                        ProcessRichText(urlText.Text, hyperlink, textBlock, effects, ref offset);
+
+                        if (ProcessRichText(urlText.Text, hyperlink, textBlock, effects, ref offset, cached, marked))
+                        {
+                            span.Inlines.Add(hyperlink);
+                            hyperlink.Click += (s, args) => Hyperlink_Click(urlText);
+                            Extensions.SetToolTip(hyperlink, urlText.Url);
+                            MessageHelper.SetEntityData(hyperlink, urlText.Url);
+                            MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(urlText));
+                            return true;
+                        }
+
+                        return false;
                     }
                     catch
                     {
-                        ProcessRichText(urlText.Text, span, textBlock, effects, ref offset);
-                        Debug.WriteLine("InstantPage: Probably nesting textUrl inside textUrl");
+                        Logger.Info("InstantPage: Probably nesting textUrl inside textUrl");
+                        return ProcessRichText(urlText.Text, span, textBlock, effects, ref offset, cached, marked);
                     }
-                    break;
+                case RichTextReference reference:
+                    try
+                    {
+                        var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
+
+                        if (ProcessRichText(reference.Text, hyperlink, textBlock, effects | TextEffects.Cached, ref offset, cached, marked))
+                        {
+                            span.Inlines.Add(hyperlink);
+                            //hyperlink.Click += (s, args) => Hyperlink_Click(reference);
+                            Extensions.SetToolTip(hyperlink, reference.Url);
+                            MessageHelper.SetEntityData(hyperlink, reference.Url);
+                            //MessageHelper.SetEntityAction(hyperlink, () => Hyperlink_Click(reference));
+
+                            return true;
+                        }
+
+                        return false;
+                    }
+                    catch
+                    {
+                        Logger.Info("InstantPage: Probably nesting reference inside textUrl");
+                        return ProcessRichText(reference.Text, span, textBlock, effects, ref offset, cached, marked);
+                    }
                 case RichTextIcon icon:
                     var photo = new ImageView
                     {
@@ -1280,33 +1603,31 @@ namespace Telegram.Views
                     var inline = new InlineUIContainer();
                     inline.Child = photo;
                     span.Inlines.Add(inline);
-                    break;
-                case RichTextMarked marked:
+                    return true;
+                case RichTextMarked markedText:
                     // ???
-                    ProcessRichText(marked.Text, span, textBlock, effects | TextEffects.Marked, ref offset);
-                    break;
+                    return ProcessRichText(markedText.Text, span, textBlock, effects | TextEffects.Marked, ref offset, cached, marked);
                 case RichTextPhoneNumber phoneNumber:
                     try
                     {
                         var hyperlink = new Hyperlink { UnderlineStyle = UnderlineStyle.None };
                         span.Inlines.Add(hyperlink);
                         hyperlink.Click += (s, args) => Hyperlink_Click(phoneNumber);
-                        ProcessRichText(phoneNumber.Text, hyperlink, textBlock, effects, ref offset);
+                        return ProcessRichText(phoneNumber.Text, hyperlink, textBlock, effects, ref offset, cached, marked);
                     }
                     catch
                     {
-                        ProcessRichText(phoneNumber.Text, span, textBlock, effects, ref offset);
-                        Debug.WriteLine("InstantPage: Probably nesting textUrl inside textUrl");
+                        Logger.Debug("InstantPage: Probably nesting phoneNumber inside textUrl");
+                        return ProcessRichText(phoneNumber.Text, span, textBlock, effects, ref offset, cached, marked);
                     }
-                    break;
                 case RichTextSubscript subscript:
                     Typography.SetVariants(span, FontVariants.Subscript);
-                    ProcessRichText(subscript.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(subscript.Text, span, textBlock, effects, ref offset, cached, marked);
                 case RichTextSuperscript superscript:
                     Typography.SetVariants(span, FontVariants.Superscript);
-                    ProcessRichText(superscript.Text, span, textBlock, effects, ref offset);
-                    break;
+                    return ProcessRichText(superscript.Text, span, textBlock, effects, ref offset, cached, marked);
+                default:
+                    return false;
             }
         }
 
@@ -1314,7 +1635,7 @@ namespace Telegram.Views
         private enum TextEffects
         {
             None,
-            Link,
+            Cached,
             Marked
         }
 
@@ -1455,7 +1776,7 @@ namespace Telegram.Views
             return _padding;
         }
 
-        private async void Image_Click(object sender, RoutedEventArgs e)
+        private void Image_Click(object sender, RoutedEventArgs e)
         {
             var image = sender as ImageView;
             var item = image.DataContext as GalleryMedia;
@@ -1464,7 +1785,7 @@ namespace Telegram.Views
                 ViewModel.Gallery.SelectedItem = item;
                 ViewModel.Gallery.FirstItem = item;
 
-                await GalleryWindow.ShowAsync(ViewModel.Gallery, () => image);
+                ViewModel.NavigationService.ShowGallery(ViewModel.Gallery, image);
             }
         }
 
@@ -1485,41 +1806,89 @@ namespace Telegram.Views
             ViewModel.IsLoading = true;
 
             var response = await ViewModel.ClientService.SendAsync(new GetWebPageInstantView(urlText.Url, false));
-            if (response is WebPageInstantView)
+            if (response is WebPageInstantView instantView)
             {
                 ViewModel.IsLoading = false;
-                ViewModel.NavigationService.NavigateToInstant(urlText.Url);
+                ViewModel.NavigationService.Navigate(typeof(InstantPage), new InstantPageArgs(instantView, urlText.Url));
             }
-            else if (MessageHelper.TryCreateUri(urlText.Url, out Uri uri))
+            else if (MessageHelper.TryCreateUri(urlText.Url, out Uri url))
             {
                 ViewModel.IsLoading = false;
-
-                if (MessageHelper.IsTelegramUrl(uri))
-                {
-                    MessageHelper.OpenTelegramUrl(ViewModel.ClientService, ViewModel.NavigationService, uri);
-                }
-                else
-                {
-                    await Launcher.LaunchUriAsync(uri);
-                }
+                OpenUrl(url);
             }
         }
 
-        private async void Hyperlink_Click(RichTextPhoneNumber phoneNumber)
+        private async void OpenUrl(Uri url)
+        {
+            if (MessageHelper.IsTelegramUrl(url))
+            {
+                var clientService = ViewModel.ClientService;
+                ByNavigation(navigation => MessageHelper.OpenTelegramUrl(clientService, navigation, url));
+            }
+            else
+            {
+                await Launcher.LaunchUriAsync(url);
+            }
+        }
+
+        private async void ByNavigation(Action<INavigationService> action)
+        {
+            WindowContext.Main.Dispatcher.Dispatch(() => action(WindowContext.Main.GetNavigationService()));
+            await ApplicationViewSwitcher.SwitchAsync(WindowContext.Main.Id);
+        }
+
+        private void Hyperlink_Click(RichTextPhoneNumber phoneNumber)
         {
 
         }
 
-        private bool IsCurrentPage(string bae, string url, out string fragment)
+        private void Header_GoBackClicked(object sender, RoutedEventArgs e)
         {
-            if (Uri.TryCreate(bae, UriKind.Absolute, out Uri current) && Uri.TryCreate(url, UriKind.Absolute, out Uri result))
+            Frame.GoBack();
+        }
+
+        private void Header_GoForwardClicked(object sender, RoutedEventArgs e)
+        {
+            Frame.GoForward();
+        }
+
+        private void Feedback_Click(object sender, RoutedEventArgs e)
+        {
+            var viewModel = ViewModel;
+            ByNavigation(navigation => viewModel.Feedback(navigation));
+        }
+
+        private async void Share_Click(object sender, RoutedEventArgs e)
+        {
+            var link = ViewModel.ShareLink;
+            if (link == null)
             {
-                fragment = result.Fragment.Length > 0 ? result.Fragment?.Substring(1) : null;
-                return fragment != null && Uri.Compare(current, result, UriComponents.Host | UriComponents.PathAndQuery, UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase) == 0;
+                return;
             }
 
-            fragment = null;
-            return false;
+            await this.ShowPopupAsync(ViewModel.SessionId, new ChooseChatsPopup(), new ChooseChatsConfigurationPostLink(new HttpUrl(link.ToString())));
+        }
+
+        private void Browser_Click(object sender, RoutedEventArgs e)
+        {
+            var link = ViewModel.ShareLink;
+            if (link == null)
+            {
+                return;
+            }
+
+            MessageHelper.OpenUrl(null, null, link.ToString());
+        }
+
+        private void Copy_Click(object sender, RoutedEventArgs e)
+        {
+            var link = ViewModel.ShareLink;
+            if (link == null)
+            {
+                return;
+            }
+
+            MessageHelper.CopyLink(XamlRoot, link.ToString());
         }
     }
 }

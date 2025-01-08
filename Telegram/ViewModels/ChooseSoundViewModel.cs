@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -19,7 +19,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class ChooseSoundViewModel : ViewModelBase, IHandle
+    public partial class ChooseSoundViewModel : ViewModelBase, IHandle
     {
         public ChooseSoundViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -93,7 +93,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class NotificationSoundViewModel : BindableBase
+    public partial class NotificationSoundViewModel : BindableBase
     {
         private readonly ChooseSoundViewModel _parent;
 
@@ -200,7 +200,7 @@ namespace Telegram.ViewModels
         public long Id { get; }
     }
 
-    public class NotificationSoundDiffHandler : IDiffHandler<NotificationSoundViewModel>
+    public partial class NotificationSoundDiffHandler : IDiffHandler<NotificationSoundViewModel>
     {
         public bool CompareItems(NotificationSoundViewModel oldItem, NotificationSoundViewModel newItem)
         {

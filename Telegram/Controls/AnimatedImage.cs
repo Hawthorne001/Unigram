@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -36,17 +36,17 @@ using Windows.UI.Xaml.Media.Imaging;
 
 namespace Telegram.Controls
 {
-    public class AnimatedImagePositionChangedEventArgs : EventArgs
+    public partial class AnimatedImagePositionChangedEventArgs : EventArgs
     {
         public int Position { get; set; }
     }
 
-    public class AnimatedImageLoopCompletedEventArgs : CancelEventArgs
+    public partial class AnimatedImageLoopCompletedEventArgs : CancelEventArgs
     {
 
     }
 
-    public class AnimatedImage : ControlEx, IPlayerView
+    public partial class AnimatedImage : ControlEx, IPlayerView
     {
         enum PlayingState
         {
@@ -75,7 +75,19 @@ namespace Telegram.Controls
 
             Connected += OnLoaded;
             Disconnected += OnUnloaded;
+
+            SizeChanged += OnSizeChanged;
         }
+
+        private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (FitToSize)
+            {
+                Load();
+            }
+        }
+
+        public bool FitToSize { get; set; }
 
         public event EventHandler Ready;
         public event EventHandler<AnimatedImagePositionChangedEventArgs> PositionChanged;
@@ -367,16 +379,23 @@ namespace Telegram.Controls
         {
             if (Source != null)
             {
-                var width = (int)FrameSize.Width;
-                var height = (int)FrameSize.Height;
+                var width = FitToSize ? (int)ActualWidth : (int)FrameSize.Width;
+                var height = FitToSize ? (int)ActualHeight : (int)FrameSize.Height;
+                var scale = 1d;
 
                 if (DecodeFrameType == DecodePixelType.Logical)
                 {
                     width = (int)(width * _rasterizationScale);
                     height = (int)(height * _rasterizationScale);
+                    scale = _rasterizationScale;
                 }
 
-                return new AnimatedImagePresentation(Source, width, height, LimitFps, LoopCount, AutoPlay, IsCachingEnabled);
+                if (FitToSize && (width <= 0 || height <= 0))
+                {
+                    return null;
+                }
+
+                return new AnimatedImagePresentation(Source, width, height, scale, LimitFps, LoopCount, AutoPlay, IsCachingEnabled);
             }
 
             return null;
@@ -638,7 +657,7 @@ namespace Telegram.Controls
 
             try
             {
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
 
                 // Build an effect that takes the source image and uses the alpha channel and replaces all other channels with
                 // the ReplacementColor's RGB.
@@ -714,7 +733,7 @@ namespace Telegram.Controls
         #endregion
     }
 
-    public class AnimatedImagePresenter
+    public partial class AnimatedImagePresenter
     {
         private bool _ticking;
         private bool _rendering;
@@ -1375,7 +1394,7 @@ namespace Telegram.Controls
         Loop,
     }
 
-    public class LottieAnimatedImageTask : AnimatedImageTask
+    public partial class LottieAnimatedImageTask : AnimatedImageTask
     {
         private readonly LottieAnimation _animation;
         private readonly HashSet<int> _markers;
@@ -1444,7 +1463,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class VideoAnimatedImageTask : AnimatedImageTask
+    public partial class VideoAnimatedImageTask : AnimatedImageTask
     {
         private readonly CachedVideoAnimation _animation;
 
@@ -1497,7 +1516,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class WebpAnimatedImageTask : AnimatedImageTask
+    public partial class WebpAnimatedImageTask : AnimatedImageTask
     {
         private readonly IBuffer _animation;
 
@@ -1518,6 +1537,30 @@ namespace Telegram.Controls
 
             BufferSurface.Copy(_animation, frame);
             return AnimatedImageTaskState.Stop;
+        }
+    }
+
+    public partial class ParticlesAnimatedImageTask : AnimatedImageTask
+    {
+        private readonly ParticlesAnimation _animation;
+
+        public ParticlesAnimatedImageTask(ParticlesAnimation animation, AnimatedImagePresentation presentation)
+            : base(presentation)
+        {
+            _animation = animation;
+
+            PixelWidth = animation.PixelWidth;
+            PixelHeight = animation.PixelHeight;
+
+            Interval = TimeSpan.FromMilliseconds(Math.Floor(1000d / 30));
+        }
+
+        public override AnimatedImageTaskState NextFrame(IBuffer frame, out int position)
+        {
+            _animation.RenderSync(frame);
+
+            position = 0;
+            return AnimatedImageTaskState.None;
         }
     }
 
@@ -1543,9 +1586,9 @@ namespace Telegram.Controls
         }
     }
 
-    public record AnimatedImagePresentation(AnimatedImageSource Source, int PixelWidth, int PixelHeight, bool LimitFps, int LoopCount, bool AutoPlay, bool IsCachingEnabled);
+    public record AnimatedImagePresentation(AnimatedImageSource Source, int PixelWidth, int PixelHeight, double RasterizationScale, bool LimitFps, int LoopCount, bool AutoPlay, bool IsCachingEnabled);
 
-    public class AnimatedImageLoader
+    public partial class AnimatedImageLoader
     {
         [ThreadStatic]
         private static AnimatedImageLoader _current;
@@ -1553,6 +1596,8 @@ namespace Telegram.Controls
 
         private readonly DispatcherQueue _dispatcherQueue;
         private readonly WindowContext _window;
+
+        private bool _closed;
 
         private AnimatedImageLoader()
         {
@@ -1564,7 +1609,14 @@ namespace Telegram.Controls
 
         public static void Release()
         {
-            _current = null;
+            if (_current?._rendering != null)
+            {
+                _current._closed = true;
+            }
+            else
+            {
+                _current = null;
+            }
         }
 
         private event EventHandler<object> _rendering;
@@ -1586,6 +1638,11 @@ namespace Telegram.Controls
                 if (_rendering == null)
                 {
                     Windows.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
+
+                    if (_closed)
+                    {
+                        _current = null;
+                    }
                 }
             }
         }
@@ -1722,6 +1779,10 @@ namespace Telegram.Controls
                             }
                         }
                     }
+                    else if (work.Presentation.Source is ParticlesImageSource)
+                    {
+                        LoadParticles(work);
+                    }
                     else
                     {
                         LoadCachedVideo(work);
@@ -1732,6 +1793,12 @@ namespace Telegram.Controls
                     // Shit happens...
                 }
             }
+        }
+
+        private void LoadParticles(WorkItem work)
+        {
+            var animation = new ParticlesAnimation(work.Presentation.PixelWidth, work.Presentation.PixelHeight, work.Presentation.RasterizationScale);
+            NotifyDelegate(work.CorrelationId, null, new ParticlesAnimatedImageTask(animation, work.Presentation));
         }
 
         private void LoadLottie(WorkItem work, LocalFileSource local)

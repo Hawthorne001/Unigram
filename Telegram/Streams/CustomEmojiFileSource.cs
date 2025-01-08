@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,15 +10,13 @@ using Telegram.Td.Api;
 
 namespace Telegram.Streams
 {
-    public class CustomEmojiFileSource : DelayedFileSource
+    public partial class CustomEmojiFileSource : DelayedFileSource
     {
-        private readonly IClientService _clientService;
         private readonly long _customEmojiId;
 
         public CustomEmojiFileSource(IClientService clientService, long customEmojiId)
             : base(clientService, null as File)
         {
-            _clientService = clientService;
             _customEmojiId = customEmojiId;
 
             DownloadFile(null, null);
@@ -45,10 +43,9 @@ namespace Telegram.Streams
                         Format = sticker.Format;
                         Width = sticker.Width;
                         Height = sticker.Height;
-                        Outline = sticker.Outline;
                         NeedsRepainting = sticker.FullType is StickerFullTypeCustomEmoji { NeedsRepainting: true };
 
-                        OnOutlineChanged();
+                        OnOutlineChanged(sticker.StickerValue);
                     }
                 }
 
@@ -76,7 +73,7 @@ namespace Telegram.Streams
 
         public override bool Equals(object obj)
         {
-            if (obj is CustomEmojiFileSource y)
+            if (obj is CustomEmojiFileSource y && !y.IsUnique && !IsUnique)
             {
                 return y.Id == Id;
             }
@@ -86,6 +83,11 @@ namespace Telegram.Streams
 
         public override int GetHashCode()
         {
+            if (IsUnique)
+            {
+                return base.GetHashCode();
+            }
+
             return Id.GetHashCode();
         }
     }

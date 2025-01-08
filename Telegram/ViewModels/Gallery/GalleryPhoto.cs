@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,32 +10,22 @@ using Telegram.Td.Api;
 
 namespace Telegram.ViewModels.Gallery
 {
-    public class GalleryPhoto : GalleryMedia
+    public partial class GalleryPhoto : GalleryMedia
     {
         private readonly Photo _photo;
         private readonly FormattedText _caption;
 
-        public GalleryPhoto(IClientService clientService, Photo photo)
+        private readonly bool _protect;
+
+        public GalleryPhoto(IClientService clientService, Photo photo, FormattedText caption = null, bool protect = false)
             : base(clientService)
         {
             _photo = photo;
-        }
+            _caption = caption ?? new FormattedText(string.Empty, Array.Empty<TextEntity>());
+            _protect = protect;
 
-        public GalleryPhoto(IClientService clientService, Photo photo, FormattedText caption)
-            : base(clientService)
-        {
-            _photo = photo;
-            _caption = caption;
-        }
-
-        public override File GetFile()
-        {
-            return _photo.GetBig()?.Photo;
-        }
-
-        public override File GetThumbnail()
-        {
-            return _photo?.GetSmall()?.Photo;
+            File = _photo.GetBig()?.Photo;
+            Thumbnail = _photo?.GetSmall()?.Photo;
         }
 
         public override object Constraint => _photo;
@@ -44,16 +34,16 @@ namespace Telegram.ViewModels.Gallery
 
         public override bool HasStickers => _photo.HasStickers;
 
-        public override bool CanCopy => true;
-        public override bool CanSave => true;
-        public override bool CanShare => true;
+        public override bool CanBeCopied => !_protect;
+        public override bool CanBeSaved => !_protect;
+        public override bool CanBeShared => !_protect;
 
         public override InputMessageContent ToInput()
         {
             var big = _photo.GetBig();
             var small = _photo.GetSmall();
 
-            return new InputMessagePhoto(new InputFileId(big.Photo.Id), small?.ToInputThumbnail(), Array.Empty<int>(), big.Width, big.Height, null, null, false);
+            return new InputMessagePhoto(new InputFileId(big.Photo.Id), small?.ToInputThumbnail(), Array.Empty<int>(), big.Width, big.Height, null, false, null, false);
         }
     }
 }

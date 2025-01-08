@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -80,9 +80,9 @@ namespace Telegram.Controls
             _playbackService.SourceChanged -= OnPlaybackStateChanged;
             _playbackService.StateChanged -= OnPlaybackStateChanged;
             _playbackService.PositionChanged -= OnPositionChanged;
-            _playbackService.SourceChanged += OnPlaybackStateChanged;
-
             _playbackService.PlaylistChanged -= OnPlaylistChanged;
+
+            _playbackService.SourceChanged += OnPlaybackStateChanged;
             _playbackService.StateChanged += OnPlaybackStateChanged;
             _playbackService.PositionChanged += OnPositionChanged;
             _playbackService.PlaylistChanged += OnPlaylistChanged;
@@ -160,12 +160,12 @@ namespace Telegram.Controls
             PlaybackButton.Glyph = _playbackService.PlaybackState == PlaybackState.Paused ? Icons.Play : Icons.Pause;
             Automation.SetToolTip(PlaybackButton, _playbackService.PlaybackState == PlaybackState.Paused ? Strings.AccActionPlay : Strings.AccActionPause);
 
-            var webPage = message.Content is MessageText text ? text.WebPage : null;
+            var linkPreview = message.Content is MessageText text ? text.LinkPreview : null;
 
-            if (message.Content is MessageVoiceNote || message.Content is MessageVideoNote || webPage?.VoiceNote != null || webPage?.VideoNote != null)
+            if (message.Content is MessageVoiceNote || message.Content is MessageVideoNote || linkPreview?.Type is LinkPreviewTypeVoiceNote or LinkPreviewTypeVideoNote)
             {
                 var title = string.Empty;
-                var date = Formatter.ToLocalTime(message.Date);
+                var date = Formatter.DateAt(message.Date);
 
                 if (_clientService.TryGetUser(message.SenderId, out Telegram.Td.Api.User senderUser))
                 {
@@ -176,9 +176,7 @@ namespace Telegram.Controls
                     title = _clientService.GetTitle(senderChat);
                 }
 
-                var subtitle = string.Format(Strings.formatDateAtTime, Formatter.ShortDate.Format(date), Formatter.ShortTime.Format(date));
-
-                UpdateText(message.ChatId, message.Id, title, subtitle);
+                UpdateText(message.ChatId, message.Id, title, date);
 
                 PreviousButton.Visibility = Visibility.Collapsed;
                 NextButton.Visibility = Visibility.Collapsed;
@@ -190,9 +188,9 @@ namespace Telegram.Controls
 
                 ViewButton.Padding = new Thickness(48, 0, 40 * 2 + 48 + 12, 0);
             }
-            else if (message.Content is MessageAudio || webPage?.Audio != null)
+            else if (message.Content is MessageAudio || linkPreview?.Type is LinkPreviewTypeAudio)
             {
-                var audio = message.Content is MessageAudio messageAudio ? messageAudio.Audio : webPage?.Audio;
+                var audio = message.Content is MessageAudio messageAudio ? messageAudio.Audio : (linkPreview?.Type is LinkPreviewTypeAudio previewAudio ? previewAudio.Audio : null);
                 if (audio == null)
                 {
                     return;

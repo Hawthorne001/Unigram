@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -30,6 +30,7 @@ namespace Telegram.Views.Popups
         {
             InitializeComponent();
 
+            // TODO: WinUI - These handlers are no longer needed and can be removed
             Connected += OnLoaded;
             Disconnected += OnUnloaded;
         }
@@ -143,7 +144,7 @@ namespace Telegram.Views.Popups
                     FrameSize = new Size(180, 180),
                     DecodeFrameType = DecodePixelType.Logical,
                     IsCachingEnabled = true,
-                    Source = new LocalFileSource(sticker)
+                    Source = new LocalFileSource(sticker.StickerValue)
                 };
             }
             else

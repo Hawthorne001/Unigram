@@ -1,10 +1,9 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
-using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Collections;
@@ -21,16 +20,16 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsNotificationsViewModel : MultiViewModelBase, IHandle
+    public partial class SettingsNotificationsViewModel : MultiViewModelBase, IHandle
     {
         public SettingsNotificationsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
         {
             Scopes = new MvxObservableCollection<SettingsNotificationsScope>
             {
-                new SettingsNotificationsScope(clientService, typeof(NotificationSettingsScopePrivateChats), Strings.NotificationsPrivateChats, Icons.Person),
-                new SettingsNotificationsScope(clientService, typeof(NotificationSettingsScopeGroupChats), Strings.NotificationsGroups, Icons.People),
-                new SettingsNotificationsScope(clientService, typeof(NotificationSettingsScopeChannelChats), Strings.NotificationsChannels, Icons.Megaphone),
+                new SettingsNotificationsScope(clientService, new NotificationSettingsScopePrivateChats(), Strings.NotificationsPrivateChats, Icons.Person),
+                new SettingsNotificationsScope(clientService, new NotificationSettingsScopeGroupChats(), Strings.NotificationsGroups, Icons.People),
+                new SettingsNotificationsScope(clientService, new NotificationSettingsScopeChannelChats(), Strings.NotificationsChannels, Icons.Megaphone),
             };
 
             foreach (var scope in Scopes)
@@ -86,6 +85,66 @@ namespace Telegram.ViewModels.Settings
 
         #endregion
 
+        public bool ShowName
+        {
+            get => Settings.Notifications.ShowName;
+            set
+            {
+                if (Settings.Notifications.ShowName != value)
+                {
+                    Settings.Notifications.ShowName = value;
+                    RaisePropertyChanged();
+
+                    if (value is false)
+                    {
+                        ShowText = false;
+                        ShowReply = false;
+                    }
+                }
+            }
+        }
+
+        public bool ShowText
+        {
+            get => Settings.Notifications.ShowText;
+            set
+            {
+                if (Settings.Notifications.ShowText != value)
+                {
+                    Settings.Notifications.ShowText = value;
+                    RaisePropertyChanged();
+
+                    if (value)
+                    {
+                        ShowName = true;
+                    }
+                    else
+                    {
+                        ShowReply = false;
+                    }
+                }
+            }
+        }
+
+        public bool ShowReply
+        {
+            get => Settings.Notifications.ShowReply;
+            set
+            {
+                if (Settings.Notifications.ShowReply != value)
+                {
+                    Settings.Notifications.ShowReply = value;
+                    RaisePropertyChanged();
+
+                    if (value)
+                    {
+                        ShowName = true;
+                        ShowText = true;
+                    }
+                }
+            }
+        }
+
         public bool IsContactEnabled
         {
             get => !ClientService.Options.DisableContactRegisteredNotifications;
@@ -132,9 +191,27 @@ namespace Telegram.ViewModels.Settings
                 Settings.Notifications.IncludeMutedChats = value;
                 RaisePropertyChanged();
 
-                var unreadCount = ClientService.GetUnreadCount(new ChatListMain());
-                Aggregator.Publish(unreadCount.UnreadChatCount);
-                Aggregator.Publish(unreadCount.UnreadMessageCount);
+                foreach (var unreadCount in ClientService.UnreadCounts)
+                {
+                    Aggregator.Publish(unreadCount.UnreadChatCount);
+                    Aggregator.Publish(unreadCount.UnreadMessageCount);
+                }
+            }
+        }
+
+        public bool IncludeMutedChatsInFolderCounters
+        {
+            get => Settings.Notifications.IncludeMutedChatsInFolderCounters;
+            set
+            {
+                Settings.Notifications.IncludeMutedChatsInFolderCounters = value;
+                RaisePropertyChanged();
+
+                foreach (var unreadCount in ClientService.UnreadCounts)
+                {
+                    Aggregator.Publish(unreadCount.UnreadChatCount);
+                    Aggregator.Publish(unreadCount.UnreadMessageCount);
+                }
             }
         }
 
@@ -146,9 +223,11 @@ namespace Telegram.ViewModels.Settings
                 Settings.Notifications.CountUnreadMessages = value;
                 RaisePropertyChanged();
 
-                var unreadCount = ClientService.GetUnreadCount(new ChatListMain());
-                Aggregator.Publish(unreadCount.UnreadChatCount);
-                Aggregator.Publish(unreadCount.UnreadMessageCount);
+                foreach (var unreadCount in ClientService.UnreadCounts)
+                {
+                    Aggregator.Publish(unreadCount.UnreadChatCount);
+                    Aggregator.Publish(unreadCount.UnreadMessageCount);
+                }
             }
         }
 
@@ -179,16 +258,16 @@ namespace Telegram.ViewModels.Settings
         }
     }
 
-    public class SettingsNotificationsScope : ViewModelBase
+    public partial class SettingsNotificationsScope : ViewModelBase
     {
-        private readonly Type _type;
+        private readonly NotificationSettingsScope _scope;
         private readonly string _title;
         private readonly string _glyph;
 
-        public SettingsNotificationsScope(IClientService clientService, Type type, string title, string glyph)
+        public SettingsNotificationsScope(IClientService clientService, NotificationSettingsScope scope, string title, string glyph)
             : base(clientService, null, null)
         {
-            _type = type;
+            _scope = scope;
             _title = title;
             _glyph = glyph;
         }
@@ -197,11 +276,29 @@ namespace Telegram.ViewModels.Settings
 
         public string Glyph => _glyph;
 
-        private bool _alert;
+        private int _muteFor;
+        public int MuteFor
+        {
+            get => _muteFor;
+            set
+            {
+                if (Set(ref _muteFor, value))
+                {
+                    RaisePropertyChanged(nameof(Alert));
+                }
+            }
+        }
+
         public bool Alert
         {
-            get => _alert;
-            set => Set(ref _alert, value);
+            get => _muteFor == 0;
+            set
+            {
+                if (Set(ref _muteFor, value ? 0 : int.MaxValue))
+                {
+                    RaisePropertyChanged(nameof(MuteFor));
+                }
+            }
         }
 
         private bool _preview;
@@ -225,7 +322,7 @@ namespace Telegram.ViewModels.Settings
             set => Set(ref _soundTitle, value);
         }
 
-        private string _exceptionsCount;
+        private string _exceptionsCount = string.Empty;
         public string ExceptionsCount
         {
             get => _exceptionsCount;
@@ -247,11 +344,11 @@ namespace Telegram.ViewModels.Settings
 
         public void Update(UpdateScopeNotificationSettings update)
         {
-            if (update.Scope.GetType() == _type)
+            if (update.Scope.GetType() == _scope.GetType())
             {
                 BeginOnUIThread(() =>
                 {
-                    Alert = update.NotificationSettings.MuteFor == 0;
+                    MuteFor = update.NotificationSettings.MuteFor;
                     Preview = update.NotificationSettings.ShowPreview;
                     SoundId = update.NotificationSettings.SoundId;
 
@@ -263,10 +360,10 @@ namespace Telegram.ViewModels.Settings
 
         protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
-            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(GetScope())) as ScopeNotificationSettings;
+            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(_scope)) as ScopeNotificationSettings;
             if (settings != null)
             {
-                Alert = settings.MuteFor == 0;
+                MuteFor = settings.MuteFor;
                 Preview = settings.ShowPreview;
                 SoundId = settings.SoundId;
 
@@ -276,8 +373,10 @@ namespace Telegram.ViewModels.Settings
                 ReloadSound();
             }
 
-            var chats = await ClientService.SendAsync(new GetChatNotificationSettingsExceptions(GetScope(), false)) as Telegram.Td.Api.Chats;
-            if (chats != null)
+            ExceptionsCount = Alert ? Strings.NotificationsOn : Strings.NotificationsOff;
+
+            var chats = await ClientService.SendAsync(new GetChatNotificationSettingsExceptions(_scope, false)) as Telegram.Td.Api.Chats;
+            if (chats?.ChatIds.Count > 0)
             {
                 ExceptionsCount = string.Format("{0}, {1}", Alert ? Strings.NotificationsOn : Strings.NotificationsOff, Locale.Declension(Strings.R.Exception, chats.ChatIds.Count));
             }
@@ -285,10 +384,10 @@ namespace Telegram.ViewModels.Settings
 
         public async void Save()
         {
-            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(GetScope())) as ScopeNotificationSettings;
+            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(_scope)) as ScopeNotificationSettings;
             if (settings != null)
             {
-                await ClientService.SendAsync(new SetScopeNotificationSettings(GetScope(), new ScopeNotificationSettings(_alert ? 0 : int.MaxValue, _soundId, _preview, settings.UseDefaultMuteStories, settings.MuteStories, settings.StorySoundId, settings.ShowStorySender, _disablePinnedMessage, _disableMention)));
+                await ClientService.SendAsync(new SetScopeNotificationSettings(_scope, new ScopeNotificationSettings(_muteFor, _soundId, _preview, settings.UseDefaultMuteStories, settings.MuteStories, settings.StorySoundId, settings.ShowStorySender, _disablePinnedMessage, _disableMention)));
 
                 ReloadSound();
             }
@@ -296,16 +395,16 @@ namespace Telegram.ViewModels.Settings
 
         public async Task ToggleDisablePinnedMessage(bool disable)
         {
-            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(GetScope())) as ScopeNotificationSettings;
+            var settings = await ClientService.SendAsync(new GetScopeNotificationSettings(_scope)) as ScopeNotificationSettings;
             if (settings != null)
             {
-                await ClientService.SendAsync(new SetScopeNotificationSettings(GetScope(), new ScopeNotificationSettings(settings.MuteFor, settings.SoundId, settings.ShowPreview, settings.UseDefaultMuteStories, settings.MuteStories, settings.StorySoundId, settings.ShowStorySender, disable, settings.DisableMentionNotifications)));
+                await ClientService.SendAsync(new SetScopeNotificationSettings(_scope, new ScopeNotificationSettings(settings.MuteFor, settings.SoundId, settings.ShowPreview, settings.UseDefaultMuteStories, settings.MuteStories, settings.StorySoundId, settings.ShowStorySender, disable, settings.DisableMentionNotifications)));
             }
         }
 
         public void Exceptions()
         {
-            switch (GetScope())
+            switch (_scope)
             {
                 case NotificationSettingsScopePrivateChats:
                     NavigationService.Navigate(typeof(SettingsNotificationsExceptionsPage), SettingsNotificationsExceptionsScope.PrivateChats);
@@ -317,11 +416,6 @@ namespace Telegram.ViewModels.Settings
                     NavigationService.Navigate(typeof(SettingsNotificationsExceptionsPage), SettingsNotificationsExceptionsScope.ChannelChats);
                     break;
             }
-        }
-
-        private NotificationSettingsScope GetScope()
-        {
-            return Activator.CreateInstance(_type) as NotificationSettingsScope;
         }
 
         private async void ReloadSound()

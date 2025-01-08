@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using Rg.DiffUtils;
 using System;
 using Telegram.Td.Api;
+using Windows.Foundation;
 
 namespace Telegram
 {
@@ -22,13 +23,15 @@ namespace Telegram
 
         public static readonly ushort BuildNumber;
 
+        public static readonly Size SecretSize = new(320, 200);
+
         public const int TypingTimeout = 300;
         public const int HoldingThrottle = 500;
         public const int AnimatedThrottle = 200;
 
-        public static readonly string[] MediaTypes = new[] { ".jpg", ".jpeg", ".png", ".gif", ".mp4" };
+        public static readonly string[] MediaTypes = new[] { ".jpg", ".jpeg", ".png", ".gif", ".mp4", ".mov", ".m4v" };
         public static readonly string[] PhotoTypes = new[] { ".jpg", ".jpeg", ".png", ".gif" };
-        public static readonly string[] VideoTypes = new[] { ".mp4" };
+        public static readonly string[] VideoTypes = new[] { ".mp4", ".mov", ".m4v" };
 
         public const string WallpaperFileName = "wallpaper.jpg";
         public const string WallpaperLocalFileName = "wallpaper.local.jpg";
@@ -41,6 +44,9 @@ namespace Telegram
         public const int ChatListArchive = 1;
 
         public const string DefaultDeviceId = "";
+
+        public const int FontSize = 14;
+        public const int CaptionFontSize = 12;
 
         public static readonly string[] TelegramHosts = new string[]
         {
@@ -58,7 +64,7 @@ namespace Telegram
             DetectMoves = true
         };
 
-        public static MessageSendOptions PreviewOnly = new(false, false, false, false, null, 0, true);
+        public static MessageSendOptions PreviewOnly = new(false, false, false, false, false, null, 0, 0, true);
 
 #if DEBUG
         // We use properties in debug so that the duration is re-evaluated

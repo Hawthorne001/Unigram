@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,6 +8,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using Telegram.Common;
+using Telegram.Navigation;
 using Windows.Foundation;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
@@ -17,7 +18,7 @@ using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls
 {
-    public class TopNavView : ListViewEx
+    public partial class TopNavView : ListViewEx
     {
         private readonly Vector2 c_frame1point1 = new(0.9f, 0.1f);
         private readonly Vector2 c_frame1point2 = new(1.0f, 0.2f);
@@ -153,8 +154,8 @@ namespace Telegram.Controls
                     float prevPos;
                     float nextPos;
 
-                    var prevPosPoint = prevIndicator.TransformToVisual(this).TransformPoint(new Point()).ToVector2();
-                    var nextPosPoint = nextIndicator.TransformToVisual(this).TransformPoint(new Point()).ToVector2();
+                    var prevPosPoint = prevIndicator.TransformToVisual(this).TransformVector2();
+                    var nextPosPoint = nextIndicator.TransformToVisual(this).TransformVector2();
                     var prevSize = prevIndicator.RenderSize.ToVector2();
                     var nextSize = nextIndicator.RenderSize.ToVector2();
 
@@ -172,7 +173,7 @@ namespace Telegram.Controls
                     float outgoingEndPosition = (float)(nextPos - prevPos);
                     float incomingStartPosition = (float)(prevPos - nextPos);
 
-                    var scopedBatch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+                    var scopedBatch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
                     scopedBatch.Completed += OnAnimationCompleted;
 
                     // Play the animation on both the previous and next indicators
@@ -338,7 +339,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class TopNavViewItem : TextListViewItem
+    public partial class TopNavViewItem : TextListViewItem
     {
         private UIElement SelectionIndicator;
 
@@ -358,7 +359,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class TopNavViewItemManager : VisualStateManager
+    public partial class TopNavViewItemManager : VisualStateManager
     {
         private readonly static string[] _allowedStates = new[]
         {

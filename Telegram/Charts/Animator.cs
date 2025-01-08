@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,7 @@ using System.Threading;
 
 namespace Telegram.Charts
 {
-    public class AnimatorLoopThread
+    public partial class AnimatorLoopThread
     {
         public static object DrawLock = new object();
 
@@ -122,7 +122,7 @@ namespace Telegram.Charts
         internal abstract bool Tick();
     }
 
-    public class AnimatorSet : Animator
+    public partial class AnimatorSet : Animator
     {
         private readonly List<Animator> _animators = new List<Animator>();
 
@@ -170,7 +170,7 @@ namespace Telegram.Charts
         }
     }
 
-    public class ValueAnimator : Animator
+    public partial class ValueAnimator : Animator
     {
         private readonly float _f1;
         private readonly float _f2;
@@ -309,7 +309,7 @@ namespace Telegram.Charts
         }
     }
 
-    public class AnimatorUpdateListener
+    public partial class AnimatorUpdateListener
     {
         private readonly Action<Animator> _update;
         private readonly Action<Animator> _end;

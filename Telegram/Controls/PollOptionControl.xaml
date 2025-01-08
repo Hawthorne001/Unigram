@@ -80,12 +80,15 @@
                        HorizontalAlignment="Right"
                        Margin="-10,10,6,8" />
 
-            <TextBlock x:Name="Text"
-                       Style="{StaticResource BodyTextBlockStyle}"
-                       FontFamily="{ThemeResource EmojiThemeFontFamily}"
-                       VerticalAlignment="Top"
-                       Margin="0,8,0,8"
-                       Grid.Column="1" />
+            <RichTextBlock x:Name="TextText"
+                           Style="{StaticResource BodyRichTextBlockStyle}"
+                           FontFamily="{ThemeResource EmojiThemeFontFamily}"
+                           VerticalAlignment="Top"
+                           IsTextSelectionEnabled="False"
+                           Margin="0,8,0,8"
+                           Grid.Column="1">
+                <Paragraph x:Name="Text" />
+            </RichTextBlock>
 
             <Grid x:Name="Tick"
                   VerticalAlignment="Top"
@@ -123,6 +126,14 @@
                          VerticalAlignment="Top"
                          Grid.Row="1"
                          Grid.Column="1" />
+
+            <Border x:Name="VotesLine"
+                    BorderBrush="{ThemeResource MessageSubtleForegroundBrush}"
+                    BorderThickness="0,0,0,0.5"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,-10,0"
+                    Opacity="0.3"
+                    Grid.Column="1" />
         </Grid>
     </UserControl>
 </ToggleButton>

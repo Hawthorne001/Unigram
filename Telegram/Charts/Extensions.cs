@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,12 +16,11 @@ namespace Telegram.Charts
 {
     public static class D2D1Extensions
     {
-        public static void DrawText(this CanvasDrawingSession session, string text, float x, float y, Paint paint)
+        public static void DrawText(this CanvasDrawingSession session, string text, float x, float y, Paint paint, CanvasTextFormat textFormat = null)
         {
-            CanvasTextFormat textFormat = null;
             if (paint.TextSize is float textSize)
             {
-                textFormat = new CanvasTextFormat();
+                textFormat ??= new CanvasTextFormat();
                 textFormat.FontSize = textSize;
             }
             if (paint.TextAlignment is CanvasHorizontalAlignment textAlignmnet)

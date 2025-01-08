@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Controls.Payments
 {
-    public class CardTextBox : TextBox
+    public partial class CardTextBox : TextBox
     {
         public string[] PREFIXES_15 = new[] { "34", "37" };
         public string[] PREFIXES_14 = new[] { "300", "301", "302", "303", "304", "305", "309", "36", "38", "39" };

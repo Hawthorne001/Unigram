@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -176,7 +176,7 @@ namespace Telegram.Views.Settings
 
         private string ConvertTimeSpan(TimeSpan time)
         {
-            return Formatter.ShortTime.Format(new DateTime(2020, 1, 1) + time);
+            return Formatter.Time(new DateTime(2020, 1, 1) + time);
         }
 
         private string ConvertSunDate(bool enabled, Location location)
@@ -197,8 +197,8 @@ namespace Telegram.Views.Settings
             end = end.Add(sunrise);
 
             return string.Format(Strings.AutoNightUpdateLocationInfo,
-                Formatter.ShortTime.Format(start),
-                Formatter.ShortTime.Format(end));
+                Formatter.Time(start),
+                Formatter.Time(end));
         }
 
         private string ConvertBrightness(float value)

@@ -6,6 +6,7 @@ using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Cells;
 using Telegram.Controls.Media;
+using Telegram.Navigation;
 using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
@@ -39,16 +40,16 @@ namespace Telegram.Views.Stories.Popups
             }
         }
 
-        public override void OnNavigatedTo()
+        public override void OnNavigatedTo(object parameter)
         {
             var story = ViewModel.Story;
-            if (story?.InteractionInfo != null && story.CanGetInteractions && (story.ClientService.IsPremium || story.InteractionInfo.ReactionCount > 0))
+            if (story?.InteractionInfo != null && story.CanGetInteractions && (story.ClientService.IsPremium || story.InteractionInfo.ReactionCount > 0 || story.InteractionInfo.ViewCount > 0))
             {
                 ViewModel.Items.CollectionChanged += OnCollectionChanged;
 
                 var premium = story.ClientService.IsPremium;
-                var count = story.HasExpiredViewers
-                    ? story.InteractionInfo.ReactionCount 
+                var count = story.HasExpiredViewers && !premium
+                    ? story.InteractionInfo.ReactionCount
                     : story.InteractionInfo.ViewCount;
 
                 if (count >= 9)
@@ -68,7 +69,7 @@ namespace Telegram.Views.Stories.Popups
                     ? Visibility.Visible
                     : Visibility.Collapsed;
 
-                SortBy.Visibility =  premium && story.InteractionInfo.ReactionCount >= 10
+                SortBy.Visibility = premium && story.InteractionInfo.ReactionCount >= 10
                     ? Visibility.Visible
                     : Visibility.Collapsed;
 
@@ -271,7 +272,7 @@ namespace Telegram.Views.Stories.Popups
             var rows = Math.Min(ViewModel.Story.InteractionInfo.ViewCount, Math.Ceiling(size.Y / itemHeight));
             var shapes = new List<CanvasGeometry>();
 
-            var maxWidth = (int)Math.Min(size.X - 32 - 12 - 12 - 48 - 12, 280);
+            var maxWidth = (int)Math.Clamp(size.X - 32 - 12 - 12 - 48 - 12, 80, 280);
             var random = new Random();
 
             for (int i = 0; i < rows; i++)
@@ -283,7 +284,7 @@ namespace Telegram.Views.Stories.Popups
                 shapes.Add(CanvasGeometry.CreateRoundedRectangle(null, 12 + 36 + 8, y + 6 + 18 + 4, random.Next(80, maxWidth), 14, 4, 4));
             }
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
 
             var geometries = shapes.ToArray();
             var path = compositor.CreatePathGeometry(new CompositionPath(CanvasGeometry.CreateGroup(null, geometries, CanvasFilledRegionDetermination.Winding)));

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.Foundation;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 
-namespace Telegram.Services.ViewService
+namespace Telegram.Services
 {
     public interface IViewService
     {
@@ -30,12 +30,19 @@ namespace Telegram.Services.ViewService
         /// It won't not be called before all previously started async operations on <see cref="CoreDispatcher"/> complete. <remarks>DO NOT call operations on Dispatcher after this</remarks></returns>
         Task<ViewLifetimeControl> OpenAsync(Type page, object parameter = null, string title = null, Size size = default, int session = 0, string id = "0");
 
-        Task<ViewLifetimeControl> OpenAsync(ViewServiceParams parameters);
+        Task<ViewLifetimeControl> OpenAsync(ViewServiceOptions options);
     }
 
-    public class ViewServiceParams
+    public enum ViewServiceMode
     {
-        public ApplicationViewMode ViewMode { get; set; } = ApplicationViewMode.Default;
+        Default,
+        CompactOverlay,
+        FullScreen,
+    }
+
+    public partial class ViewServiceOptions
+    {
+        public ViewServiceMode ViewMode { get; set; } = ViewServiceMode.Default;
 
         public string Title { get; set; }
 
@@ -44,10 +51,10 @@ namespace Telegram.Services.ViewService
 
         public Func<ViewLifetimeControl, UIElement> Content { get; set; }
 
-        public string PersistentId { get; set; }
+        public string PersistedId { get; set; }
     }
 
-    public sealed class ViewService : IViewService
+    public sealed partial class ViewService : IViewService
     {
         private static readonly TaskCompletionSource<bool> _mainWindowCreated = new();
 
@@ -70,13 +77,18 @@ namespace Telegram.Services.ViewService
             _mainWindowCreated.TrySetResult(true);
         }
 
-        public Task<ViewLifetimeControl> OpenAsync(ViewServiceParams parameters)
+        public static Task WaitForMainWindowAsync()
+        {
+            return _mainWindowCreated.Task;
+        }
+
+        public Task<ViewLifetimeControl> OpenAsync(ViewServiceOptions options)
         {
             if (ApiInfo.HasMultipleViews)
             {
                 try
                 {
-                    return OpenAsyncInternal(parameters);
+                    return OpenAsyncInternal(options);
                 }
                 catch (Exception ex)
                 {
@@ -89,11 +101,11 @@ namespace Telegram.Services.ViewService
             }
             else
             {
-                return FacadeAsync(parameters);
+                return FacadeAsync(options);
             }
         }
 
-        private async Task<ViewLifetimeControl> FacadeAsync(ViewServiceParams parameters)
+        private async Task<ViewLifetimeControl> FacadeAsync(ViewServiceOptions options)
         {
             var tsc = new TaskCompletionSource<ViewLifetimeControl>();
 
@@ -101,7 +113,7 @@ namespace Telegram.Services.ViewService
             {
                 if (Window.Current.Content is RootPage root)
                 {
-                    root.PresentContent(parameters.Content(null));
+                    root.PresentContent(options.Content(null));
                     await ApplicationViewSwitcher.TryShowAsStandaloneAsync(ApplicationView.GetForCurrentView().Id);
                 }
 
@@ -111,7 +123,7 @@ namespace Telegram.Services.ViewService
             return await tsc.Task;
         }
 
-        private async Task<ViewLifetimeControl> OpenAsyncInternal(ViewServiceParams parameters)
+        private async Task<ViewLifetimeControl> OpenAsyncInternal(ViewServiceOptions options)
         {
             await _mainWindowCreated.Task;
 
@@ -124,28 +136,46 @@ namespace Telegram.Services.ViewService
 
                 newView.DispatcherQueue.TryEnqueue(() =>
                 {
-                    var newWindow = Window.Current;
+                    var newWindow = WindowContext.Current;
                     var newAppView = ApplicationView.GetForCurrentView();
 
-                    newAppView.Title = parameters.Title ?? string.Empty;
-                    newAppView.PersistedStateId = parameters.PersistentId ?? string.Empty;
+                    newAppView.Title = options.Title ?? string.Empty;
+                    newWindow.PersistedId = options.PersistedId ?? string.Empty;
 
                     var control = ViewLifetimeControl.GetForCurrentView();
-                    newWindow.Content = parameters.Content(control);
+                    newWindow.Content = options.Content(control);
                     newWindow.Activate();
 
                     tsc.SetResult(control);
+
+                    Logger.Info(newWindow.Content?.GetType());
                 });
 
                 var control = await tsc.Task;
-
-                var preferences = ViewModePreferences.CreateDefault(parameters.ViewMode);
-                if (parameters.Width != 0 && parameters.Height != 0)
+                var viewMode = options.ViewMode switch
                 {
-                    preferences.CustomSize = new Size(parameters.Width, parameters.Height);
+                    ViewServiceMode.CompactOverlay => ApplicationViewMode.CompactOverlay,
+                    _ => ApplicationViewMode.Default
+                };
+
+                var preferences = ViewModePreferences.CreateDefault(viewMode);
+                if (options.Width != 0 && options.Height != 0)
+                {
+                    preferences.CustomSize = new Size(options.Width, options.Height);
+                    preferences.ViewSizePreference = ViewSizePreference.Custom;
                 }
 
-                await ApplicationViewSwitcher.TryShowAsViewModeAsync(control.Id, parameters.ViewMode, preferences);
+                await ApplicationViewSwitcher.TryShowAsViewModeAsync(control.Id, viewMode, preferences);
+
+                if (options.ViewMode == ViewServiceMode.FullScreen)
+                {
+                    newView.DispatcherQueue.TryEnqueue(() => ApplicationView.GetForCurrentView().TryEnterFullScreenMode());
+                }
+                else if (options.Width != 0 && options.Height != 0)
+                {
+                    newView.DispatcherQueue.TryEnqueue(() => ApplicationView.GetForCurrentView().TryResizeView(new Size(options.Width, options.Height)));
+                }
+
                 return control;
             }
             catch
@@ -167,7 +197,7 @@ namespace Telegram.Services.ViewService
             {
                 if (window.IsInMainView)
                 {
-                    return Task.CompletedTask;
+                    return;
                 }
 
                 foreach (var service in window.NavigationServices)
@@ -175,11 +205,9 @@ namespace Telegram.Services.ViewService
                     if (parameter is long chatId && service.IsChatOpen(chatId, true))
                     {
                         oldControl = ViewLifetimeControl.GetForCurrentView();
-                        return Task.CompletedTask;
+                        return;
                     }
                 }
-
-                return Task.CompletedTask;
             });
 
             if (oldControl != null)
@@ -199,13 +227,13 @@ namespace Telegram.Services.ViewService
 
                 newView.DispatcherQueue.TryEnqueue(() =>
                 {
-                    var newWindow = Window.Current;
+                    var newWindow = WindowContext.Current;
                     var newAppView = ApplicationView.GetForCurrentView();
 
                     newAppView.Title = title;
-                    newAppView.PersistedStateId = "Floating";
+                    newWindow.PersistedId = "Floating";
 
-                    var nav = BootStrapper.Current.NavigationServiceFactory(BootStrapper.BackButton.Ignore, session, id, false);
+                    var nav = BootStrapper.Current.NavigationServiceFactory(newWindow, BootStrapper.BackButton.Ignore, session, id, false);
                     nav.Navigate(page, parameter);
 
                     var control = ViewLifetimeControl.GetForCurrentView();

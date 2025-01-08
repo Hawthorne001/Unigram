@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -41,7 +41,9 @@ namespace Telegram.Views.Settings.Popups
             }
 
             Title.Text = session.DeviceModel;
-            Subtitle.Text = Formatter.DateExtended(session.LastActiveDate);
+            Subtitle.Text = session.IsCurrent
+                ? Strings.Online
+                : Formatter.DateAt(session.LastActiveDate);
 
             Application.Badge = string.Format("{0} {1}", session.ApplicationName, session.ApplicationVersion);
 
@@ -67,8 +69,9 @@ namespace Telegram.Views.Settings.Popups
                 ? Visibility.Collapsed
                 : Visibility.Visible;
 
-            PrimaryButtonText = Strings.Terminate;
-            SecondaryButtonText = Strings.Done;
+            PrimaryButtonText = session.IsCurrent
+                ? string.Empty
+                : Strings.Terminate;
         }
 
         public bool CanAcceptCalls => AcceptCalls.IsChecked == true;
@@ -85,7 +88,7 @@ namespace Telegram.Views.Settings.Popups
 
         private async void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
         {
-            await Task.Delay(1000);
+            await Task.Delay(500);
             Icon.Play();
         }
 

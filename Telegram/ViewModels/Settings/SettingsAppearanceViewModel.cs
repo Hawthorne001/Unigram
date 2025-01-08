@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,11 +11,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Controls;
+using Telegram.Native;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Services.Settings;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.Views.Popups;
 using Telegram.Views.Settings;
@@ -23,12 +23,9 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsAppearanceViewModel : ViewModelBase
+    public partial class SettingsAppearanceViewModel : ViewModelBase
     {
         private readonly IThemeService _themeService;
-
-        private readonly Dictionary<int, int> _indexToSize = new Dictionary<int, int> { { 0, 12 }, { 1, 13 }, { 2, 14 }, { 3, 15 }, { 4, 16 }, { 5, 17 }, { 6, 18 } };
-        private readonly Dictionary<int, int> _sizeToIndex = new Dictionary<int, int> { { 12, 0 }, { 13, 1 }, { 14, 2 }, { 15, 3 }, { 16, 4 }, { 17, 5 }, { 18, 6 } };
 
         public SettingsAppearanceViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, IThemeService themeService)
             : base(clientService, settingsService, aggregator)
@@ -36,6 +33,16 @@ namespace Telegram.ViewModels.Settings
             _themeService = themeService;
 
             ChatThemes = new ObservableCollection<ChatThemeViewModel>();
+
+            var current = NativeUtils.GetScaleForCurrentView();
+            var stored = settingsService.Appearance.Scaling;
+
+            if (stored == 0 || settingsService.Appearance.UseDefaultScaling)
+            {
+                stored = current;
+            }
+
+            _scaling = stored;
         }
 
         public ObservableCollection<ChatThemeViewModel> ChatThemes { get; }
@@ -67,14 +74,14 @@ namespace Telegram.ViewModels.Settings
             };
 
             var defaultTheme = new ChatThemeViewModel(ClientService, "\U0001F3E0", defaultLight, defaultDark, false);
-            var themes = ClientService.GetChatThemes().Select(x => new ChatThemeViewModel(ClientService, x, false));
+            var themes = ClientService.ChatThemes.Select(x => new ChatThemeViewModel(ClientService, x, false));
 
             ChatThemes.AddRange(new[] { defaultTheme }.Union(themes));
 
             _selectedChatTheme = ChatThemes.FirstOrDefault(x => x.Name == Settings.Appearance.ChatTheme?.Name) ?? defaultTheme;
             RaisePropertyChanged(nameof(SelectedChatTheme));
 
-            return base.OnNavigatedToAsync(parameter, mode, state);
+            return Task.CompletedTask;
         }
 
         private ChatThemeViewModel _selectedChatTheme;
@@ -129,6 +136,55 @@ namespace Telegram.ViewModels.Settings
             set => Set(ref _emojiSetId, value);
         }
 
+        public bool UseDefaultScaling
+        {
+            get => Settings.Appearance.UseDefaultScaling;
+            set
+            {
+                if (Settings.Appearance.UseDefaultScaling != value)
+                {
+                    Settings.Appearance.UseDefaultScaling = value;
+
+                    if (value || Settings.Appearance.Scaling == 0)
+                    {
+                        NativeUtils.OverrideScaleForCurrentView(Settings.Appearance.Scaling = _scaling = NativeUtils.GetScaleForCurrentView());
+                        RaisePropertyChanged(nameof(Scaling));
+                    }
+
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private int _scaling;
+        public int Scaling
+        {
+            get => Array.IndexOf(_scalingIndexer, _scaling);
+            set
+            {
+                if (value >= 0 && value < _scalingIndexer.Length && _scaling != _scalingIndexer[value])
+                {
+                    NativeUtils.OverrideScaleForCurrentView(Settings.Appearance.Scaling = _scaling = _scalingIndexer[value]);
+                    UseDefaultScaling = false;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        private readonly int[] _scalingIndexer = new[]
+        {
+            100,
+            125,
+            150,
+            175,
+            200,
+            225,
+            250
+        };
+
+        private readonly Dictionary<int, int> _indexToSize = new() { { 0, 12 }, { 1, 13 }, { 2, 14 }, { 3, 15 }, { 4, 16 }, { 5, 17 }, { 6, 18 } };
+        private readonly Dictionary<int, int> _sizeToIndex = new() { { 12, 0 }, { 13, 1 }, { 14, 2 }, { 15, 3 }, { 16, 4 }, { 17, 5 }, { 18, 6 } };
+
         public double FontSize
         {
             get
@@ -172,7 +228,7 @@ namespace Telegram.ViewModels.Settings
                 if (Settings.Appearance.NightMode != NightMode.Disabled)
                 {
                     Settings.Appearance.NightMode = NightMode.Disabled;
-                    ToastPopup.Show(Strings.AutoNightModeOff, new LocalFileSource("ms-appx:///Assets/Toasts/AutoNightOff.tgs"));
+                    ShowToast(Strings.AutoNightModeOff, ToastPopupIcon.AutoNightOff);
                 }
 
                 Settings.Appearance.ForceNightMode = value;
@@ -206,6 +262,32 @@ namespace Telegram.ViewModels.Settings
             {
                 Settings.SwipeToReply = value;
                 RaisePropertyChanged();
+            }
+        }
+
+        public bool DoubleClickToReply
+        {
+            get => Settings.Appearance.IsQuickReplySelected;
+            set
+            {
+                if (Settings.Appearance.IsQuickReplySelected != value)
+                {
+                    Settings.Appearance.IsQuickReplySelected = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        public bool DoubleClickToReact
+        {
+            get => !Settings.Appearance.IsQuickReplySelected;
+            set
+            {
+                if (Settings.Appearance.IsQuickReplySelected == value)
+                {
+                    Settings.Appearance.IsQuickReplySelected = !value;
+                    RaisePropertyChanged();
+                }
             }
         }
 
@@ -321,7 +403,7 @@ namespace Telegram.ViewModels.Settings
             var accent = settings.AccentColor.ToColor();
             var outgoing = settings.OutgoingMessageAccentColor.ToColor();
 
-            await _themeService.CreateThemeAsync(ThemeAccentInfo.FromAccent(tint, accent, outgoing));
+            await _themeService.CreateThemeAsync(NavigationService, ThemeAccentInfo.FromAccent(tint, accent, outgoing));
         }
 
         public void OpenWallpaper()
@@ -350,7 +432,7 @@ namespace Telegram.ViewModels.Settings
         }
     }
 
-    public class ChatThemeViewModel
+    public partial class ChatThemeViewModel
     {
         public IClientService ClientService { get; }
 

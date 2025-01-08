@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,10 +15,11 @@ using Windows.ApplicationModel.AppService;
 using Windows.ApplicationModel.Background;
 using Windows.Foundation.Collections;
 using Windows.Foundation.Metadata;
+using Windows.UI.Xaml;
 
 namespace Telegram.Common
 {
-    public class NotifyIcon
+    public partial class NotifyIcon
     {
         private static AppServiceConnection _connection;
         private static BackgroundTaskDeferral _deferral;
@@ -77,7 +78,8 @@ namespace Telegram.Common
             {
                 if (response.Message.TryGet<string>("Debug", out var message))
                 {
-                    await MessagePopup.ShowAsync(message);
+                    // TODO: XamlRoot here is not needed, WinUI 3 will not have this code
+                    await MessagePopup.ShowAsync(null as XamlRoot, message);
                 }
             }
         }

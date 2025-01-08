@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,6 +10,7 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using WinRT;
 
 namespace Telegram.Views.Popups
 {
@@ -55,7 +56,7 @@ namespace Telegram.Views.Popups
         }
     }
 
-    public class ChooseOptionItem
+    public partial class ChooseOptionItem
     {
         public ChooseOptionItem(object value, string text, bool check)
         {
@@ -71,7 +72,8 @@ namespace Telegram.Views.Popups
         public string Footer { get; set; }
     }
 
-    public class SettingsOptionItem
+    [GeneratedBindableCustomProperty]
+    public partial class SettingsOptionItem
     {
         public SettingsOptionItem(string text)
         {
@@ -81,7 +83,8 @@ namespace Telegram.Views.Popups
         public string Text { get; set; }
     }
 
-    public class SettingsOptionItem<T> : SettingsOptionItem
+    [GeneratedBindableCustomProperty]
+    public partial class SettingsOptionItem<T> : SettingsOptionItem
     {
         public SettingsOptionItem(T value, string text)
             : base(text)

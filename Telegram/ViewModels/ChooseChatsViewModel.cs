@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,6 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.Views.Popups;
 using Windows.ApplicationModel.DataTransfer;
@@ -24,7 +23,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class ChooseChatsViewModel : ViewModelBase
+    public partial class ChooseChatsViewModel : ViewModelBase
     {
         private readonly ChooseChatsTracker _tracker;
 
@@ -38,44 +37,9 @@ namespace Telegram.ViewModels
             Items = new MvxObservableCollection<Chat>();
             SelectedItems = new MvxObservableCollection<Chat>();
 
+            Folders = new ObservableCollection<ChatFolderViewModel>();
+
             SendCommand = new RelayCommand(SendExecute, () => SelectedItems?.Count > 0);
-
-            ChatList chatList = ClientService.MainChatListPosition > 0 && ClientService.ChatFolders.Count > 0
-                ? new ChatListFolder(ClientService.ChatFolders[0].Id)
-                : new ChatListMain();
-
-            if (ClientService.ChatFolders.Count > 0)
-            {
-                var folders = ClientService.ChatFolders.ToList();
-                var index = Math.Min(ClientService.MainChatListPosition, folders.Count);
-
-                folders.Insert(index, new ChatFolderInfo { Id = Constants.ChatListMain, Title = Strings.FilterAllChats, Icon = new ChatFolderIcon("All") });
-
-                Folders = new ObservableCollection<ChatFolderViewModel>(folders.Select(x => new ChatFolderViewModel(x)));
-
-                foreach (var folder in Folders)
-                {
-                    if (folder.ChatList is ChatListMain)
-                    {
-                        continue;
-                    }
-
-                    var unreadCount = ClientService.GetUnreadCount(folder.ChatList);
-                    if (unreadCount == null)
-                    {
-                        continue;
-                    }
-
-                    folder.UpdateCount(unreadCount.UnreadChatCount);
-                }
-
-                // Important not to raise SelectedFolder setter
-                Set(ref _selectedFolder, Folders.FirstOrDefault());
-            }
-            else
-            {
-                Folders = new ObservableCollection<ChatFolderViewModel>();
-            }
         }
 
         public SearchChatsViewModel SearchChats { get; }
@@ -91,6 +55,17 @@ namespace Telegram.ViewModels
         }
 
         private ChooseChatsConfiguration _configuration;
+        public ChooseChatsConfiguration Configuration => _configuration;
+
+        public override INavigationService NavigationService
+        {
+            get => base.NavigationService;
+            set
+            {
+                SearchChats.NavigationService = value;
+                base.NavigationService = value;
+            }
+        }
 
         protected override Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
@@ -104,6 +79,7 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsChatSelection = false;
             }
@@ -111,6 +87,7 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Single;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = false;
                 IsChatSelection = false;
             }
@@ -123,16 +100,17 @@ namespace Telegram.ViewModels
 
                 if (configurationSwitchInline.TargetChat is TargetChatChosen chosen)
                 {
-                    Options.AllowBotChats = chosen.AllowBotChats;
-                    Options.AllowUserChats = chosen.AllowUserChats;
-                    Options.AllowGroupChats = chosen.AllowGroupChats;
-                    Options.AllowChannelChats = chosen.AllowChannelChats;
+                    Options.AllowBotChats = chosen.Types.AllowBotChats;
+                    Options.AllowUserChats = chosen.Types.AllowUserChats;
+                    Options.AllowGroupChats = chosen.Types.AllowGroupChats;
+                    Options.AllowChannelChats = chosen.Types.AllowChannelChats;
                 }
             }
             else if (parameter is ChooseChatsConfigurationPostText configurationPostText)
             {
                 SelectionMode = ListViewSelectionMode.Single;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsChatSelection = false;
 
@@ -143,13 +121,13 @@ namespace Telegram.ViewModels
                 SelectionMode = ListViewSelectionMode.None;
                 Options = ChooseChatsOptions.PostMessages;
                 IsCommentEnabled = false;
-                IsSendAsCopyEnabled = false;
                 IsChatSelection = false;
             }
             else if (parameter is ChooseChatsConfigurationShareMessage configurationShareMessage)
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsSendAsCopyEnabled = true;
                 IsChatSelection = false;
@@ -196,6 +174,7 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsSendAsCopyEnabled = true;
                 IsChatSelection = false;
@@ -204,6 +183,7 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsSendAsCopyEnabled = true;
                 IsChatSelection = false;
@@ -212,6 +192,7 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsChatSelection = false;
 
@@ -221,21 +202,128 @@ namespace Telegram.ViewModels
             {
                 SelectionMode = ListViewSelectionMode.Multiple;
                 Options = ChooseChatsOptions.PostMessages;
+                PrimaryButtonText = Strings.Send;
                 IsCommentEnabled = true;
                 IsChatSelection = false;
             }
             else if (parameter is ChooseChatsConfigurationStartBot configurationStartBot)
             {
                 SelectionMode = ListViewSelectionMode.Single;
-                Options = ChooseChatsOptions.InviteUsers;
+                Options = ChooseChatsOptions.GroupsAndChannels;
                 IsCommentEnabled = false;
                 IsChatSelection = false;
+
+                Title = Strings.AddToGroupOrChannel;
+            }
+            else if (parameter is ChooseChatsConfigurationRequestUsers configurationRequestUsers)
+            {
+                SelectionMode = configurationRequestUsers.MaxQuantity != 1
+                    ? ListViewSelectionMode.Multiple
+                    : ListViewSelectionMode.Single;
+                Options = new ChooseChatsOptionsRequestUsers(configurationRequestUsers);
+                IsCommentEnabled = false;
+                IsChatSelection = false;
+
+                if (configurationRequestUsers.RestrictUserIsBot && configurationRequestUsers.UserIsBot)
+                {
+                    Title = Strings.ChooseBot;
+                }
+                else
+                {
+                    Title = configurationRequestUsers.MaxQuantity != 1
+                        ? Strings.ChooseUsers
+                        : Strings.ChooseUser;
+                }
+            }
+            else if (parameter is ChooseChatsConfigurationRequestChat configurationRequestChat)
+            {
+                SelectionMode = ListViewSelectionMode.Single;
+                Options = new ChooseChatsOptionsRequestChat(configurationRequestChat);
+                IsCommentEnabled = false;
+                IsChatSelection = false;
+
+                Title = configurationRequestChat.ChatIsChannel
+                    ? Strings.ChooseChannel
+                    : Strings.ChooseGroup;
+            }
+            else if (parameter is ChooseChatsConfigurationVerifyChat)
+            {
+                SelectionMode = ListViewSelectionMode.None;
+                Options = ChooseChatsOptions.All;
+                ShouldCloseOnCommit = false;
+                IsCommentEnabled = false;
+                IsChatSelection = false;
+
+                Title = Strings.BotChooseChatToVerify;
+            }
+            else if (parameter is ChooseChatsConfigurationTransferGift transferGift)
+            {
+                SelectionMode = ListViewSelectionMode.None;
+                Options = ChooseChatsOptions.Users;
+                ShouldCloseOnCommit = false;
+                IsCommentEnabled = false;
+                IsChatSelection = false;
+
+                if (transferGift.Gift.Gift is SentGiftUpgraded upgraded)
+                {
+                    Title = string.Format(Strings.Gift2Transfer, upgraded.Gift.ToName());
+                }
             }
 
             #endregion
 
+            if (IsCommentEnabled)
+            {
+                LoadFolders();
+            }
+
             LoadChats();
             return Task.CompletedTask;
+        }
+
+        private void LoadFolders()
+        {
+            ChatList chatList = ClientService.MainChatListPosition > 0 && ClientService.ChatFolders.Count > 0
+                ? new ChatListFolder(ClientService.ChatFolders[0].Id)
+                : new ChatListMain();
+
+            if (ClientService.ChatFolders.Count > 0)
+            {
+                var folders = ClientService.ChatFolders.ToList();
+                var index = Math.Min(ClientService.MainChatListPosition, folders.Count);
+
+                folders.Insert(index, new ChatFolderInfo
+                {
+                    Id = Constants.ChatListMain,
+                    Name = new ChatFolderName(new FormattedText(Strings.FilterAllChats, Array.Empty<TextEntity>()), false),
+                    Icon = new ChatFolderIcon("All")
+                });
+
+                Folders = new ObservableCollection<ChatFolderViewModel>(folders.Select(x => new ChatFolderViewModel(ClientService, x)));
+
+                foreach (var folder in Folders)
+                {
+                    if (folder.ChatList is ChatListMain)
+                    {
+                        continue;
+                    }
+
+                    var unreadCount = ClientService.GetUnreadCount(folder.ChatList);
+                    if (unreadCount == null)
+                    {
+                        continue;
+                    }
+
+                    folder.UpdateCount(unreadCount.UnreadChatCount, Settings.Notifications.IncludeMutedChatsInFolderCounters);
+                }
+
+                // Important not to raise SelectedFolder setter
+                Set(ref _selectedFolder, Folders.FirstOrDefault());
+            }
+            else
+            {
+                Folders = new ObservableCollection<ChatFolderViewModel>();
+            }
         }
 
         private async void LoadChats()
@@ -344,7 +432,7 @@ namespace Telegram.ViewModels
             set => Set(ref _title, value);
         }
 
-        private string _primaryButtonText = Strings.Send;
+        private string _primaryButtonText = Strings.Done;
         public string PrimaryButtonText
         {
             get => _primaryButtonText;
@@ -412,7 +500,9 @@ namespace Telegram.ViewModels
 
         public MvxObservableCollection<Chat> Items { get; private set; }
 
-        public ObservableCollection<ChatFolderViewModel> Folders { get; }
+        public ObservableCollection<ChatFolderViewModel> Folders { get; private set; }
+
+        public Dictionary<long, long> SelectedTopics = new();
 
         private ChatFolderViewModel _selectedFolder;
         public ChatFolderViewModel SelectedFolder
@@ -468,15 +558,16 @@ namespace Telegram.ViewModels
 
             if (!string.IsNullOrEmpty(SendMessage?.Text))
             {
-                _isCommentEnabled = true;
-                _caption = SendMessage;
+                IsCommentEnabled = true;
+                Caption = SendMessage;
             }
 
-            if (_isCommentEnabled && !string.IsNullOrEmpty(_caption?.Text))
+            if (IsCommentEnabled && !string.IsNullOrEmpty(Caption?.Text))
             {
                 foreach (var chat in chats)
                 {
-                    var response = await ClientService.SendAsync(new SendMessage(chat.Id, 0, null, null, null, new InputMessageText(_caption, null, false)));
+                    SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                    var response = await ClientService.SendAsync(new SendMessage(chat.Id, messageThreadId, null, null, null, new InputMessageText(_caption, null, false)));
                 }
             }
 
@@ -494,9 +585,12 @@ namespace Telegram.ViewModels
 
                 foreach (var chat in chats)
                 {
-                    ClientService.Send(new ForwardMessages(chat.Id, 0, shareMessages.ChatId, shareMessages.MessageIds, null, _sendAsCopy || _removeCaptions, _removeCaptions));
+                    foreach (var messages in shareMessages.MessageIds.GroupBy(x => x.ChatId))
+                    {
+                        SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                        ClientService.Send(new ForwardMessages(chat.Id, messageThreadId, messages.Key, messages.Select(x => x.Id).ToList(), null, _sendAsCopy || _removeCaptions, _removeCaptions));
+                    }
                 }
-
             }
             else if (_configuration is ChooseChatsConfigurationShareMessage shareMessage)
             {
@@ -504,7 +598,8 @@ namespace Telegram.ViewModels
 
                 foreach (var chat in chats)
                 {
-                    ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageForwarded(shareMessage.ChatId, shareMessage.MessageId, shareMessage.WithMyScore, new MessageCopyOptions(_sendAsCopy || _removeCaptions, _removeCaptions, null))));
+                    SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                    ClientService.Send(new SendMessage(chat.Id, messageThreadId, null, null, null, new InputMessageForwarded(shareMessage.ChatId, shareMessage.MessageId, shareMessage.WithMyScore, new MessageCopyOptions(_sendAsCopy || _removeCaptions, _removeCaptions, null, false))));
                 }
             }
             else if (_configuration is ChooseChatsConfigurationShareStory shareStory)
@@ -513,17 +608,33 @@ namespace Telegram.ViewModels
 
                 foreach (var chat in chats)
                 {
-                    ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageStory(shareStory.ChatId, shareStory.StoryId)));
+                    SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                    ClientService.Send(new SendMessage(chat.Id, messageThreadId, null, null, null, new InputMessageStory(shareStory.ChatId, shareStory.StoryId)));
                 }
             }
             else if (_configuration is ChooseChatsConfigurationPostMessage postMessage)
             {
                 foreach (var chat in chats)
                 {
-                    ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, postMessage.Content));
+                    SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                    ClientService.Send(new SendMessage(chat.Id, messageThreadId, null, null, null, postMessage.Content));
                 }
 
                 //NavigationService.GoBack();
+            }
+            else if (_configuration is ChooseChatsConfigurationPostLink postLink && postLink.InternalLink != null)
+            {
+                var response = await ClientService.SendAsync(new GetInternalLink(postLink.InternalLink, true));
+                if (response is HttpUrl httpUrl)
+                {
+                    var formatted = new FormattedText(httpUrl.Url, Array.Empty<TextEntity>());
+
+                    foreach (var chat in chats)
+                    {
+                        SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                        ClientService.Send(new SendMessage(chat.Id, messageThreadId, null, null, null, new InputMessageText(formatted, null, false)));
+                    }
+                }
             }
             else if (ShareLink != null)
             {
@@ -531,7 +642,8 @@ namespace Telegram.ViewModels
 
                 foreach (var chat in chats)
                 {
-                    ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageText(formatted, null, false)));
+                    SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                    ClientService.Send(new SendMessage(chat.Id, messageThreadId, null, null, null, new InputMessageText(formatted, null, false)));
                 }
 
                 //NavigationService.GoBack();
@@ -558,7 +670,20 @@ namespace Telegram.ViewModels
             }
             else if (_configuration is ChooseChatsConfigurationSwitchInline switchInline)
             {
-                NavigationService.NavigateToChat(chats[0], state: NavigationState.GetSwitchQuery(switchInline.Query, switchInline.Bot.Id));
+                if (switchInline.Result != null)
+                {
+                    ShowForwardMessagesToast(chats, 1);
+
+                    foreach (var chat in chats)
+                    {
+                        SelectedTopics.TryGetValue(chat.Id, out long messageThreadId);
+                        ClientService.Send(new SendInlineQueryResultMessage(chat.Id, messageThreadId, null, null, switchInline.InlineQueryId, switchInline.Result.GetId(), false));
+                    }
+                }
+                else
+                {
+                    NavigationService.NavigateToChat(chats[0], state: NavigationState.GetSwitchQuery(switchInline.Query, switchInline.Bot.Id));
+                }
             }
             else if (_configuration is ChooseChatsConfigurationDataPackage configurationDataPackage)
             {
@@ -569,7 +694,7 @@ namespace Telegram.ViewModels
             }
             else if (_configuration is ChooseChatsConfigurationGroupCall groupCall)
             {
-                var response = await ClientService.SendAsync(new GetGroupCallInviteLink(groupCall.GroupCall.Id, false));
+                var response = await ClientService.SendAsync(new GetGroupCallInviteLink(groupCall.GroupCallId, false));
                 if (response is HttpUrl httpUrl)
                 {
                     var formatted = new FormattedText(string.Format(Strings.VoipGroupInviteText, httpUrl.Url), Array.Empty<TextEntity>());
@@ -580,10 +705,80 @@ namespace Telegram.ViewModels
                     }
                 }
             }
+            else if (_configuration is ChooseChatsConfigurationRequestUsers requestUsers)
+            {
+                var userIds = chats
+                    .Select(x => x.Type is ChatTypePrivate privata ? privata.UserId : 0)
+                    .Where(x => x != 0)
+                    .ToList();
+                ClientService.Send(new ShareUsersWithBot(requestUsers.ChatId, requestUsers.MessageId, requestUsers.Id, userIds, false));
+            }
+            else if (_configuration is ChooseChatsConfigurationVerifyChat verifyChat && ClientService.TryGetUserFull(verifyChat.BotUserId, out UserFullInfo verifyChatFullInfo))
+            {
+                var chat = chats[0];
+                var verifiedId = chats[0].ToMessageSender();
 
-            //App.InMemoryState.ForwardMessages = new List<TLMessage>(messages);
-            //NavigationService.GoBackAt(0);
+                var verification = await ClientService.GetBotVerificationAsync(chat);
+                if (verification?.BotUserId == verifyChat.BotUserId)
+                {
+                    var confirm = await VerifyChatPopup.ShowAsync(XamlRoot, ClientService, chat, true, false);
+                    if (confirm.Result == ContentDialogResult.Primary)
+                    {
+                        NavigationService.Hide(typeof(ChooseChatsPopup));
+
+                        var response = await ClientService.SendAsync(new RemoveMessageSenderBotVerification(verifyChat.BotUserId, verifiedId));
+                        if (response is Ok)
+                        {
+                            ShowToast(string.Format(Strings.BotSentRevokeVerifyRequest, chat.Title));
+                        }
+                        else if (response is Error error)
+                        {
+                            ToastPopup.ShowError(XamlRoot, error);
+                        }
+                    }
+                }
+                else
+                {
+                    var confirm = await VerifyChatPopup.ShowAsync(XamlRoot, ClientService, chat, false, verifyChatFullInfo.BotInfo.VerificationParameters.CanSetCustomDescription);
+                    if (confirm.Result == ContentDialogResult.Primary)
+                    {
+                        NavigationService.Hide(typeof(ChooseChatsPopup));
+
+                        var response = await ClientService.SendAsync(new SetMessageSenderBotVerification(verifyChat.BotUserId, verifiedId, confirm.Text));
+                        if (response is Ok)
+                        {
+                            ShowToast(string.Format(Strings.BotSentVerifyRequest, chat.Title));
+                        }
+                        else if (response is Error error)
+                        {
+                            ToastPopup.ShowError(XamlRoot, error);
+                        }
+                    }
+                }
+            }
+            else if (_configuration is ChooseChatsConfigurationTransferGift transferGift && chats[0].Type is ChatTypePrivate transferGiftPrivate)
+            {
+                var confirm = await TransferGiftPopup.ShowAsync(XamlRoot, ClientService, transferGift.Gift, chats[0]);
+                if (confirm == ContentDialogResult.Primary)
+                {
+                    NavigationService.Hide(typeof(ChooseChatsPopup));
+
+                    var response = await ClientService.SendAsync(new TransferGift(transferGift.Gift.SenderUserId, transferGift.Gift.MessageId, transferGiftPrivate.UserId, transferGift.Gift.TransferStarCount));
+                    if (response is Ok && transferGift.Gift.Gift is SentGiftUpgraded upgraded)
+                    {
+                        Aggregator.Publish(new UpdateGiftIsSold(transferGift.Gift.SenderUserId, transferGift.Gift.MessageId));
+
+                        ShowToast(string.Format(Strings.Gift2TransferredText, upgraded.Gift.ToName(), chats[0].Title));
+                    }
+                    else if (response is Error error)
+                    {
+                        ToastPopup.ShowError(XamlRoot, error);
+                    }
+                }
+            }
         }
+
+        public bool ShouldCloseOnCommit { get; private set; } = true;
 
         private ListViewSelectionMode _selectionMode = ListViewSelectionMode.Multiple;
         public ListViewSelectionMode SelectionMode
@@ -601,45 +796,45 @@ namespace Telegram.ViewModels
                 {
                     if (userId == ClientService.Options.MyId)
                     {
-                        ToastPopup.Show(messagesCount > 1
+                        ShowToast(messagesCount > 1
                             ? Strings.FwdMessagesToSavedMessages
-                            : Strings.FwdMessageToSavedMessages, new LocalFileSource("ms-appx:///Assets/Toasts/SavedMessages.tgs"));
+                            : Strings.FwdMessageToSavedMessages, ToastPopupIcon.SavedMessages);
                     }
                     else
                     {
-                        ToastPopup.Show(messagesCount > 1
+                        ShowToast(messagesCount > 1
                             ? string.Format(Strings.FwdMessagesToUser, chat.Title)
-                            : string.Format(Strings.FwdMessageToUser, chat.Title), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                            : string.Format(Strings.FwdMessageToUser, chat.Title), ToastPopupIcon.Forward);
                     }
                 }
                 else if (chat.IsBasicGroup(out _))
                 {
-                    ToastPopup.Show(messagesCount > 1
+                    ShowToast(messagesCount > 1
                         ? string.Format(Strings.FwdMessagesToGroup, chat.Title)
-                        : string.Format(Strings.FwdMessageToGroup, chat.Title), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                        : string.Format(Strings.FwdMessageToGroup, chat.Title), ToastPopupIcon.Forward);
 
                 }
                 else if (chat.IsSupergroup(out _, out bool isChannel))
                 {
                     if (isChannel)
                     {
-                        ToastPopup.Show(messagesCount > 1
+                        ShowToast(messagesCount > 1
                             ? string.Format(Strings.FwdMessagesToChats, chat.Title)
-                            : string.Format(Strings.FwdMessageToChats, chat.Title), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                            : string.Format(Strings.FwdMessageToChats, chat.Title), ToastPopupIcon.Forward);
                     }
                     else
                     {
-                        ToastPopup.Show(messagesCount > 1
+                        ShowToast(messagesCount > 1
                             ? string.Format(Strings.FwdMessagesToGroup, chat.Title)
-                            : string.Format(Strings.FwdMessageToGroup, chat.Title), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                            : string.Format(Strings.FwdMessageToGroup, chat.Title), ToastPopupIcon.Forward);
                     }
                 }
             }
             else
             {
-                ToastPopup.Show(messagesCount > 1
+                ShowToast(messagesCount > 1
                     ? Locale.Declension(Strings.R.FwdMessagesToManyChats, chats.Count)
-                    : Locale.Declension(Strings.R.FwdMessageToManyChats, chats.Count), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                    : Locale.Declension(Strings.R.FwdMessageToManyChats, chats.Count), ToastPopupIcon.Forward);
             }
         }
 
@@ -649,22 +844,22 @@ namespace Telegram.ViewModels
             {
                 if (ClientService.IsSavedMessages(chats[0]))
                 {
-                    ToastPopup.Show(Strings.StorySharedToSavedMessages, new LocalFileSource("ms-appx:///Assets/Toasts/SavedMessages.tgs"));
+                    ShowToast(Strings.StorySharedToSavedMessages, ToastPopupIcon.SavedMessages);
                 }
                 else
                 {
-                    ToastPopup.Show(string.Format(Strings.StorySharedTo, chats[0].Title), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                    ShowToast(string.Format(Strings.StorySharedTo, chats[0].Title), ToastPopupIcon.Forward);
                 }
             }
             else
             {
-                ToastPopup.Show(Locale.Declension(Strings.R.StorySharedToManyChats, chats.Count), new LocalFileSource("ms-appx:///Assets/Toasts/Forward.tgs"));
+                ShowToast(Locale.Declension(Strings.R.StorySharedToManyChats, chats.Count), ToastPopupIcon.Forward);
             }
         }
 
     }
 
-    public class ChooseChatsTracker
+    public partial class ChooseChatsTracker
     {
         private readonly IClientService _clientService;
 
@@ -701,7 +896,7 @@ namespace Telegram.ViewModels
                 return false;
             }
 
-            if (Options.AllowAll || Allow(chat))
+            if (Options.Allow(_clientService, chat))
             {
                 Track(chat);
                 return true;
@@ -720,64 +915,6 @@ namespace Telegram.ViewModels
             }
         }
 
-        private bool Allow(Chat chat)
-        {
-            switch (chat.Type)
-            {
-                case ChatTypeBasicGroup:
-                    if (Options.AllowGroupChats)
-                    {
-                        if (Options.CanPostMessages)
-                        {
-                            return _clientService.CanPostMessages(chat);
-                        }
-                        else if (Options.CanInviteUsers)
-                        {
-                            return _clientService.CanInviteUsers(chat);
-                        }
-
-                        return true;
-                    }
-                    return false;
-                case ChatTypePrivate privata:
-                    if (privata.UserId == _clientService.Options.MyId)
-                    {
-                        return Options.AllowSelf;
-                    }
-                    else if (_clientService.TryGetUser(privata.UserId, out User user))
-                    {
-                        if (user.Type is UserTypeBot)
-                        {
-                            return Options.AllowBotChats && !Options.CanShareContact;
-                        }
-                        else if (Options.CanShareContact)
-                        {
-                            return user.PhoneNumber.Length > 0;
-                        }
-                    }
-                    return Options.AllowUserChats;
-                case ChatTypeSecret:
-                    return Options.AllowSecretChats;
-                case ChatTypeSupergroup supergroup:
-                    if (supergroup.IsChannel ? Options.AllowChannelChats : Options.AllowGroupChats)
-                    {
-                        if (Options.CanPostMessages)
-                        {
-                            return _clientService.CanPostMessages(chat);
-                        }
-                        else if (Options.CanInviteUsers)
-                        {
-                            return _clientService.CanInviteUsers(chat);
-                        }
-
-                        return true;
-                    }
-                    return false;
-                default:
-                    return false;
-            }
-        }
-
         public bool Filter(User user)
         {
             if (_knownUsers != null && _knownUsers.Contains(user.Id))
@@ -785,7 +922,7 @@ namespace Telegram.ViewModels
                 return false;
             }
 
-            if (Options.AllowAll || Allow(user))
+            if (Options.Allow(_clientService, user))
             {
                 Track(user);
                 return true;
@@ -797,24 +934,6 @@ namespace Telegram.ViewModels
         private void Track(User user)
         {
             _knownUsers?.Add(user.Id);
-        }
-
-        private bool Allow(User user)
-        {
-            if (user.Id == _clientService.Options.MyId)
-            {
-                return Options.AllowSelf;
-            }
-            else if (user.Type is UserTypeBot)
-            {
-                return Options.AllowBotChats && !Options.CanShareContact;
-            }
-            else if (Options.CanShareContact)
-            {
-                return user.PhoneNumber.Length > 0;
-            }
-
-            return Options.AllowUserChats;
         }
     }
 }

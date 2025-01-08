@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class BackgroundInfo
+    public partial class BackgroundInfo
     {
         public InputBackground Background { get; set; }
         public BackgroundType Type { get; set; }
@@ -37,7 +37,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class BackgroundParameters
+    public partial class BackgroundParameters
     {
         public string Slug { get; }
 
@@ -61,7 +61,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class PatternInfo
+    public partial class PatternInfo
     {
         public long BackgroundId { get; }
 
@@ -74,7 +74,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class BackgroundViewModel : ViewModelBase, IDelegable<IBackgroundDelegate>
+    public partial class BackgroundViewModel : ViewModelBase, IDelegable<IBackgroundDelegate>
     {
         public IBackgroundDelegate Delegate { get; set; }
 
@@ -276,7 +276,7 @@ namespace Telegram.ViewModels
                 Item = new Background(Item.Id, false, Item.IsDark, Item.Name, Item.Document, Item.Type switch
                 {
                     BackgroundTypeFill => new BackgroundTypeFill(GetFill()),
-                    BackgroundTypePattern => new BackgroundTypePattern(GetFill(), _intensity < 0 ? 100 + _intensity : _intensity, _intensity < 0, false),
+                    BackgroundTypePattern => new BackgroundTypePattern(GetFill(), Math.Abs(_intensity), _intensity < 0, false),
                     BackgroundTypeWallpaper => new BackgroundTypeWallpaper(_isBlurEnabled, false),
                     _ => null
                 });
@@ -469,7 +469,7 @@ namespace Telegram.ViewModels
             var response = await ClientService.SendAsync(new GetBackgroundUrl(background.Name, background.Type));
             if (response is HttpUrl url)
             {
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostLink(url));
+                await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostLink(url));
             }
         }
 
@@ -488,6 +488,10 @@ namespace Telegram.ViewModels
                     {
                         ClientService.Send(new SetChatBackground(chatId, background.Background, background.Type, 30, onlySelf));
                     }
+                }
+                else if (background.Background == null && background.Type == null)
+                {
+                    ClientService.Send(new DeleteDefaultBackground(background.ForDarkTheme));
                 }
                 else
                 {
@@ -510,10 +514,17 @@ namespace Telegram.ViewModels
             // This is a new background and it has to be uploaded to Telegram servers
             if (background.Id == Constants.WallpaperLocalId)
             {
-                var item = await ApplicationData.Current.TemporaryFolder.GetFileAsync(Constants.WallpaperLocalFileName);
-                var generated = await item.ToGeneratedAsync(ConversionType.Copy, forceCopy: true);
+                try
+                {
+                    var item = await ApplicationData.Current.TemporaryFolder.GetFileAsync(Constants.WallpaperLocalFileName);
+                    var generated = await item.ToGeneratedAsync(ConversionType.Copy, forceCopy: true);
 
-                return new BackgroundInfo(new InputBackgroundLocal(generated), new BackgroundTypeWallpaper(_isBlurEnabled, false), dark);
+                    return new BackgroundInfo(new InputBackgroundLocal(generated), new BackgroundTypeWallpaper(_isBlurEnabled, false), dark);
+                }
+                catch
+                {
+                    return null;
+                }
             }
             else
             {
@@ -531,7 +542,7 @@ namespace Telegram.ViewModels
                     }
                     else if (background.Type is BackgroundTypePattern)
                     {
-                        type = new BackgroundTypePattern(fill, _intensity < 0 ? 100 + _intensity : _intensity, _intensity < 0, false);
+                        type = new BackgroundTypePattern(fill, Math.Abs(_intensity), _intensity < 0, false);
                     }
                     else if (background.Type is BackgroundTypeWallpaper)
                     {

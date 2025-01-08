@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,7 +7,6 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Telegram.Common;
 using Telegram.Navigation;
 using Telegram.Services;
@@ -16,14 +15,13 @@ using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls.Chats
 {
-    public class ChatBackgroundControl : GridEx
+    public partial class ChatBackgroundControl : GridEx
     {
         private IClientService _clientService;
         private IEventAggregator _aggregator;
@@ -38,9 +36,9 @@ namespace Telegram.Controls.Chats
         public ChatBackgroundControl()
         {
             _presenter = new ChatBackgroundPresenter();
-            _compositor = Window.Current.Compositor;
+            _compositor = BootStrapper.Current.Compositor;
 
-            ElementComposition.GetElementVisual(this).Clip = _compositor.CreateInsetClip();
+            this.CreateInsetClip();
 
             Children.Add(_presenter);
 
@@ -237,7 +235,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatBackgroundPreview : Grid
+    public partial class ChatBackgroundPreview : Grid
     {
         private readonly ChatBackgroundFreeform _background = new(false);
 
@@ -275,7 +273,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatBackgroundFreeform
+    public partial class ChatBackgroundFreeform
     {
         private static readonly Color[] _colors = new Color[]
         {
@@ -347,11 +345,18 @@ namespace Telegram.Controls.Chats
         public static ImageSource Create(BackgroundFillFreeformGradient freeform, int offset = 0)
         {
             var colors = freeform.GetColors();
-
             var next = Gather(_positions, offset % 8);
-            var bitmap = GenerateGradient(50, 50, colors, next);
 
+            var bitmap = GenerateGradient(50, 50, colors, next);
             return bitmap;
+        }
+
+        public static void Update(WriteableBitmap bitmap, BackgroundFillFreeformGradient freeform, int offset = 0)
+        {
+            var colors = freeform.GetColors();
+            var next = Gather(_positions, offset % 8);
+
+            GenerateGradient(bitmap, colors, next);
         }
 
         public void Next(BackgroundFillFreeformGradient freeform, WriteableBitmap bitmap, Vector2[] positions)
@@ -408,13 +413,6 @@ namespace Telegram.Controls.Chats
             }
 
             return result;
-        }
-
-        [ComImport]
-        [Guid("905A0FEF-BC53-11DF-8C49-001E4FC686DA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        interface IBufferByteAccess
-        {
-            unsafe void Buffer(out byte* value);
         }
 
         private static unsafe WriteableBitmap GenerateGradient(int width, int height, Color[] colors, Vector2[] positions)

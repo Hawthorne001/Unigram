@@ -13,7 +13,9 @@
                         Background="{x:Null}"
                         OverlayBrush="{x:Null}"
                         Loaded="OnLoaded"
-                        Unloaded="OnUnloaded">
+                        Unloaded="OnUnloaded"
+                        PreviewKeyDown="OnPreviewKeyDown"
+                        ProcessKeyboardAccelerators="OnProcessKeyboardAccelerators">
 
     <controls:OverlayWindow.Resources>
         <ControlTemplate x:Key="HorizontalNextTemplate"
@@ -376,7 +378,7 @@
                                   Grid.Column="2"
                                   Canvas.ZIndex="1000">
                                 <chats:ChatRecordButton x:Name="btnVoiceMessage"
-                                                        RecordingStarted="ButtonRecord_Started"
+                                                        RecordingStarting="ButtonRecord_Started"
                                                         RecordingStopped="ButtonRecord_Stopped"
                                                         CornerRadius="4,4,13,4"
                                                         AllowFocusOnInteraction="False"

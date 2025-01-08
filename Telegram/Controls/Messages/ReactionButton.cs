@@ -1,17 +1,19 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using Telegram.Common;
+using Telegram.Controls.Views;
 using Telegram.Converters;
 using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.Foundation;
 using Windows.System;
+using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
@@ -21,9 +23,8 @@ using Windows.UI.Xaml.Media.Imaging;
 
 namespace Telegram.Controls.Messages
 {
-    public class ReactionButton : ToggleButtonEx
+    public partial class ReactionButton : ToggleButtonEx
     {
-        private Image Presenter;
         private CustomEmojiIcon Icon;
         private Popup Overlay;
         protected AnimatedTextBlock Count;
@@ -43,15 +44,38 @@ namespace Telegram.Controls.Messages
 
         public string GetAutomationName()
         {
-            if (_interaction is MessageReaction interaction)
+            if (_reaction is MessageReaction interaction)
             {
+                string GetAutomationName(MessageSender sender, string emoji)
+                {
+                    if (_message.ClientService.TryGetUser(sender, out Td.Api.User user))
+                    {
+                        if (user.Id == _message.ClientService.Options.MyId)
+                        {
+                            return string.Format(Strings.AccDescrYouReactedWith, emoji);
+                        }
+
+                        return string.Format(Strings.AccDescrReactedWith, user.FullName(true), emoji);
+                    }
+                    else if (_message.ClientService.TryGetChat(sender, out Chat chat))
+                    {
+                        return string.Format(Strings.AccDescrReactedWith, chat.Title, emoji);
+                    }
+
+                    return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, interaction.TotalCount, emoji);
+                }
+
                 if (interaction.Type is ReactionTypeEmoji emoji)
                 {
-                    return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, interaction.TotalCount, emoji.Emoji);
+                    return interaction.TotalCount > 1 || interaction.RecentSenderIds.Count == 0
+                        ? Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, interaction.TotalCount, emoji.Emoji)
+                        : GetAutomationName(interaction.RecentSenderIds[0], emoji.Emoji);
                 }
-                else if (_sticker is Sticker sticker)
+                else
                 {
-                    return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, interaction.TotalCount, string.Format(Strings.AccDescrCustomEmoji, sticker.Emoji));
+                    return interaction.TotalCount > 1 || interaction.RecentSenderIds.Count == 0
+                        ? Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, interaction.TotalCount, Strings.AccDescrCustomEmoji2)
+                        : GetAutomationName(interaction.RecentSenderIds[0], Strings.AccDescrCustomEmoji2);
                 }
             }
 
@@ -59,104 +83,72 @@ namespace Telegram.Controls.Messages
         }
 
         protected MessageViewModel _message;
-        protected MessageReaction _interaction;
-        private EmojiReaction _reaction;
-        private Sticker _sticker;
+        protected MessageReaction _reaction;
+        private ReactionType _reactionType;
+
         private UnreadReaction _unread;
 
-        public MessageReaction Reaction => _interaction;
-        public EmojiReaction EmojiReaction => _reaction;
-        public Sticker CustomReaction => _sticker;
-
-        private long _presenterId;
+        public MessageReaction Reaction => _reaction;
 
         public void SetUnread(UnreadReaction unread)
         {
-            if (Presenter == null)
+            if (Icon == null)
             {
                 _unread = unread;
-                return;
             }
-
-            _unread = unread;
-
-            if (unread != null)
+            else
             {
-                Animate();
+                _unread = null;
+
+                if (unread != null)
+                {
+                    Animate();
+                }
             }
         }
 
-        public async void SetReaction(MessageViewModel message, MessageReaction interaction, EmojiReaction value)
+        public void SetReaction(MessageViewModel message, MessageReaction reaction)
         {
-            if (Presenter == null)
+            if (Icon == null)
             {
                 _message = message;
-                _interaction = interaction;
-                _reaction = value;
+                _reaction = reaction;
                 return;
             }
 
             var recycled = message.Id == _message?.Id
                 && message.ChatId == _message?.ChatId
-                && interaction.Type.AreTheSame(_interaction?.Type);
+                && reaction.Type.AreTheSame(_reaction?.Type);
 
             _message = message;
-            _interaction = interaction;
-            _reaction = value;
+            _reaction = reaction;
 
-            UpdateInteraction(message, interaction, recycled);
+            UpdateInteraction(message, reaction, recycled);
 
-            var around = value?.AroundAnimation?.StickerValue;
-            if (around != null && around.Local.CanBeDownloaded && !around.Local.IsDownloadingActive && !around.Local.IsDownloadingCompleted)
-            {
-                _message.ClientService.DownloadFile(around.Id, 32);
-            }
-
-            var center = value?.CenterAnimation?.StickerValue;
-            if (center == null || center.Id == _presenterId)
+            if (reaction.Type.AreTheSame(_reactionType))
             {
                 return;
             }
 
-            _presenterId = center.Id;
-            Presenter.Source = null;
+            _reactionType = reaction.Type;
 
-            var bitmap = await EmojiCache.GetLottieFrameAsync(_message.ClientService, center, 32, 32);
-            if (center.Id == _presenterId)
+            using (Icon.BeginBatchUpdate())
             {
-                Presenter.Source = bitmap;
+                var custom = reaction.Type is ReactionTypeCustomEmoji;
+                var size = reaction.Type is ReactionTypeCustomEmoji or ReactionTypePaid ? 20 : 32;
+
+                Icon.Width = Icon.Height = size;
+                Icon.FrameSize = new Size(size, size);
+                Icon.LoopCount = custom ? 3 : 1;
+                Icon.IsCachingEnabled = reaction.Type is not ReactionTypePaid;
+                Icon.IsViewportAware = custom;
+
+                Icon.Source = new ReactionFileSource(message.ClientService, reaction.Type)
+                {
+                    UseCenterAnimation = true,
+                    IsUnique = true
+                };
             }
-        }
-
-        public void SetReaction(MessageViewModel message, MessageReaction interaction, Sticker value)
-        {
-            if (Presenter == null)
-            {
-                _message = message;
-                _interaction = interaction;
-                _sticker = value;
-                return;
-            }
-
-            var recycled = message.Id == _message?.Id
-                && message.ChatId == _message?.ChatId
-                && interaction.Type.AreTheSame(_interaction?.Type);
-
-            _message = message;
-            _interaction = interaction;
-            _sticker = value;
-
-            UpdateInteraction(message, interaction, recycled);
-
-            if (_presenterId == value?.StickerValue.Id)
-            {
-                return;
-            }
-
-            _presenterId = value.StickerValue.Id;
-
-            Icon ??= GetTemplateChild(nameof(Icon)) as CustomEmojiIcon;
-            Icon.Source = new DelayedFileSource(message.ClientService, value);
         }
 
         protected virtual void UpdateInteraction(MessageViewModel message, MessageReaction interaction, bool recycled)
@@ -226,16 +218,13 @@ namespace Telegram.Controls.Messages
 
         protected override void OnApplyTemplate()
         {
-            Presenter = GetTemplateChild(nameof(Presenter)) as Image;
             Overlay = GetTemplateChild(nameof(Overlay)) as Popup;
+            Icon = GetTemplateChild(nameof(Icon)) as CustomEmojiIcon;
+            Icon.Ready += OnReady;
 
-            if (_sticker != null)
+            if (_reaction != null)
             {
-                SetReaction(_message, _interaction, _sticker);
-            }
-            else if (_interaction != null)
-            {
-                SetReaction(_message, _interaction, _reaction);
+                SetReaction(_message, _reaction);
             }
 
             SetUnread(_unread);
@@ -243,15 +232,63 @@ namespace Telegram.Controls.Messages
             base.OnApplyTemplate();
         }
 
+        private void OnReady(object sender, EventArgs e)
+        {
+            SetUnread(_unread);
+        }
+
         protected override void OnToggle()
         {
             //base.OnToggle();
         }
 
+        public virtual void OnContextRequested(ContextRequestedEventArgs args)
+        {
+            var message = _message;
+            if (message == null || message.IsChannelPost)
+            {
+                return;
+            }
+
+            var flyout = new MenuFlyout();
+            var popup = new InteractionsView(message.ClientService, message.ChatId, message.Id, _reactionType)
+            {
+                Width = 264,
+                Height = 48 * _reaction.TotalCount,
+                MinHeight = 48,
+                MaxHeight = 360
+            };
+
+            void handler(InteractionsView sender, ItemClickEventArgs e)
+            {
+                sender.ItemClick -= handler;
+                flyout.Hide();
+
+                if (e.ClickedItem is AddedReaction addedReaction)
+                {
+                    message.Delegate.NavigationService.NavigateToSender(addedReaction.SenderId);
+                }
+                else if (e.ClickedItem is MessageViewer messageViewer)
+                {
+                    message.Delegate.NavigationService.NavigateToUser(messageViewer.UserId);
+                }
+            }
+
+            popup.ItemClick += handler;
+
+            flyout.Items.Add(new MenuFlyoutContent
+            {
+                Content = popup,
+                Padding = new Thickness(0)
+            });
+
+            flyout.ShowAt(this, args);
+        }
+
         private void OnClick(object sender, RoutedEventArgs e)
         {
-            var chosen = _interaction;
-            if (chosen != null && Presenter != null)
+            var chosen = _reaction;
+            if (chosen != null && Icon != null && _message?.Id != 0)
             {
                 OnClick(_message, chosen);
             }
@@ -273,22 +310,26 @@ namespace Telegram.Controls.Messages
             }
             else
             {
-                message.ClientService.Send(new AddMessageReaction(message.ChatId, message.Id, chosen.Type, false, false));
-            }
-
-            if (chosen.IsChosen is false)
-            {
                 Animate();
+                message.ClientService.Send(new AddMessageReaction(message.ChatId, message.Id, chosen.Type, false, false));
             }
         }
 
-        private async void Animate()
+        protected async void Animate()
         {
-            if (_reaction != null)
+            if (_reactionType is ReactionTypeEmoji emoji)
             {
-                AnimateReaction();
+                var response = await _message.ClientService.SendAsync(new GetEmojiReaction(emoji.Emoji));
+                if (response is EmojiReaction reaction && reaction.AroundAnimation != null)
+                {
+                    var around = await _message.ClientService.DownloadFileAsync(reaction.AroundAnimation.StickerValue, 32);
+                    if (around.Local.IsDownloadingCompleted && this.IsConnected())
+                    {
+                        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => Animate(around, true));
+                    }
+                }
             }
-            else
+            else if (_reactionType is ReactionTypeCustomEmoji customEmoji)
             {
                 var response = await _message.ClientService.SendAsync(new GetCustomEmojiReactionAnimations());
                 if (response is Stickers stickers)
@@ -297,177 +338,65 @@ namespace Telegram.Controls.Messages
                     var next = random.Next(0, stickers.StickersValue.Count);
 
                     var around = await _message.ClientService.DownloadFileAsync(stickers.StickersValue[next].StickerValue, 32);
-                    if (around.Local.IsDownloadingCompleted && IsLoaded && _sticker?.FullType is StickerFullTypeCustomEmoji customEmoji)
+                    if (around.Local.IsDownloadingCompleted && this.IsConnected())
                     {
-                        if (Icon != null)
-                        {
-                            Icon.Source = new CustomEmojiFileSource(_message.ClientService, customEmoji.CustomEmojiId);
-                            Icon.Play();
-                        }
-
-                        _centerCompleted = true;
-                        _aroundCompleted = false;
-
-                        var presenter = Presenter;
-                        var popup = Overlay;
-
-                        var dispatcher = DispatcherQueue.GetForCurrentThread();
-
-                        var aroundView = new AnimatedImage();
-                        aroundView.Width = 32 * 3;
-                        aroundView.Height = 32 * 3;
-                        aroundView.LoopCount = 1;
-                        aroundView.FrameSize = new Size(32 * 3, 32 * 3);
-                        aroundView.DecodeFrameType = DecodePixelType.Logical;
-                        aroundView.AutoPlay = true;
-                        aroundView.Source = new LocalFileSource(around);
-                        aroundView.LoopCompleted += (s, args) =>
-                        {
-                            dispatcher.TryEnqueue(Continue2);
-                        };
-
-                        var root = new Grid();
-                        root.Width = 32 * 3;
-                        root.Height = 32 * 3;
-                        root.Children.Add(aroundView);
-
-                        popup.Child = root;
-                        popup.IsOpen = true;
+                        _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => Animate(around, true));
                     }
                 }
             }
-        }
-
-        private void AnimateReaction()
-        {
-            var reaction = _reaction;
-            if (reaction == null)
+            else if (_reactionType is ReactionTypePaid)
             {
-                return;
-            }
+                var random = new Random();
+                var next = random.Next(1, 6);
 
-            var center = reaction.CenterAnimation?.StickerValue;
-            var around = reaction.AroundAnimation?.StickerValue;
-
-            if (center == null || around == null)
-            {
-                return;
-            }
-
-            if (center.Local.IsDownloadingCompleted && around.Local.IsDownloadingCompleted)
-            {
-                _centerCompleted = false;
-                _aroundCompleted = false;
-
-                var presenter = Presenter;
-                var popup = Overlay;
-
-                var dispatcher = DispatcherQueue.GetForCurrentThread();
-
-                var centerView = new AnimatedImage();
-                centerView.Width = 32;
-                centerView.Height = 32;
-                centerView.LoopCount = 1;
-                centerView.FrameSize = new Size(32, 32);
-                centerView.DecodeFrameType = DecodePixelType.Logical;
-                centerView.AutoPlay = true;
-                centerView.Source = new LocalFileSource(center);
-                centerView.Ready += (s, args) =>
+                var around = TdExtensions.GetLocalFile($"Assets\\Animations\\PaidReactionAround{next}.tgs");
+                if (around.Local.IsDownloadingCompleted && this.IsConnected())
                 {
-                    dispatcher.TryEnqueue(Start);
-                };
-                centerView.LoopCompleted += (s, args) =>
-                {
-                    dispatcher.TryEnqueue(Continue1);
-                };
-
-                var aroundView = new AnimatedImage();
-                aroundView.Width = 32 * 3;
-                aroundView.Height = 32 * 3;
-                aroundView.LoopCount = 1;
-                aroundView.FrameSize = new Size(32 * 3, 32 * 3);
-                aroundView.DecodeFrameType = DecodePixelType.Logical;
-                aroundView.AutoPlay = true;
-                aroundView.Source = new LocalFileSource(around);
-                aroundView.LoopCompleted += (s, args) =>
-                {
-                    dispatcher.TryEnqueue(Continue2);
-                };
-
-                var root = new Grid();
-                root.Width = 32 * 3;
-                root.Height = 32 * 3;
-                root.Children.Add(centerView);
-                root.Children.Add(aroundView);
-
-                popup.Child = root;
-                popup.IsOpen = true;
-            }
-            else
-            {
-                if (center.Local.CanBeDownloaded && !center.Local.IsDownloadingActive)
-                {
-                    _message.ClientService.DownloadFile(center.Id, 32);
-                }
-
-                if (around.Local.CanBeDownloaded && !around.Local.IsDownloadingActive)
-                {
-                    _message.ClientService.DownloadFile(around.Id, 32);
+                    _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => Animate(around, false));
                 }
             }
         }
 
-        private bool _centerCompleted;
-        private bool _aroundCompleted;
-
-        private void Start()
+        protected void Animate(File around, bool cache)
         {
-            Logger.Info();
+            Icon?.Play();
 
-            var presenter = Presenter;
-            if (presenter == null)
+            var popup = Overlay;
+            var dispatcher = DispatcherQueue.GetForCurrentThread();
+
+            var aroundView = new AnimatedImage();
+            aroundView.Width = 32 * 3;
+            aroundView.Height = 32 * 3;
+            aroundView.LoopCount = 1;
+            aroundView.FrameSize = new Size(32 * 3, 32 * 3);
+            aroundView.DecodeFrameType = DecodePixelType.Logical;
+            aroundView.IsCachingEnabled = cache;
+            aroundView.AutoPlay = true;
+            aroundView.Source = new LocalFileSource(around);
+            aroundView.LoopCompleted += (s, args) =>
             {
-                return;
-            }
+                dispatcher.TryEnqueue(Continue);
+            };
 
-            presenter.Opacity = 0;
-        }
+            var root = new Grid();
+            root.Width = 32 * 3;
+            root.Height = 32 * 3;
+            root.Children.Add(aroundView);
 
-        private void Continue1()
-        {
-            Logger.Info();
-
-            _centerCompleted = true;
-
-            if (_aroundCompleted)
-            {
-                Continue();
-            }
-        }
-
-        private void Continue2()
-        {
-            Logger.Info();
-
-            _aroundCompleted = true;
-
-            if (_centerCompleted)
-            {
-                Continue();
-            }
+            popup.Child = root;
+            popup.XamlRoot = XamlRoot;
+            popup.IsOpen = true;
         }
 
         private void Continue()
         {
-            var presenter = Presenter;
-            var popup = Overlay;
+            Logger.Info();
 
-            if (presenter == null || popup == null)
+            var popup = Overlay;
+            if (popup == null)
             {
                 return;
             }
-
-            presenter.Opacity = 1;
 
             popup.IsOpen = false;
             popup.Child = null;
@@ -549,7 +478,7 @@ namespace Telegram.Controls.Messages
         //}
     }
 
-    public class ReactionButtonAutomationPeer : ToggleButtonAutomationPeer
+    public partial class ReactionButtonAutomationPeer : ToggleButtonAutomationPeer
     {
         private readonly ReactionButton _owner;
 

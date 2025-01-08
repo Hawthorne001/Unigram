@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,7 +16,7 @@ using Telegram.Td.Api;
 
 namespace Telegram
 {
-    public sealed class Logger
+    public sealed partial class Logger
     {
         public enum LogLevel
         {
@@ -49,7 +49,7 @@ namespace Telegram
 
         public static void Error(Exception exception, [CallerMemberName] string member = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int line = 0)
         {
-            Log(LogLevel.Error, exception.ToString(), member, filePath, line);
+            Log(LogLevel.Error, Environment.StackTrace, member, filePath, line);
 
 #if !DEBUG
             var report = WatchDog.BuildReport(exception);
@@ -136,7 +136,7 @@ namespace Telegram
         }
     }
 
-    public class RuntimeException : Exception
+    public partial class RuntimeException : Exception
     {
         public RuntimeException(Exception innerException)
             : base(innerException.Message, innerException)

@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ namespace Telegram.ViewModels.Stories
         Read
     }
 
-    public class ActiveStoriesViewModel : ComposeViewModel
+    public partial class ActiveStoriesViewModel : ComposeViewModel
     {
         private readonly IClientService _clientService;
         private readonly long _chatId;
@@ -36,7 +36,7 @@ namespace Telegram.ViewModels.Stories
 
         public ChatActiveStories Item => _activeStories;
 
-        public ActiveStoriesViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ChatActiveStories activeStories)
+        public ActiveStoriesViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ChatActiveStories activeStories, Chat chat)
             : base(clientService, settingsService, aggregator)
         {
             _clientService = clientService;
@@ -45,7 +45,7 @@ namespace Telegram.ViewModels.Stories
             _activeStories = activeStories;
             _task = new TaskCompletionSource<bool>();
 
-            Chat = clientService.GetChat(activeStories.ChatId);
+            Chat = chat;
             IsMyStory = Chat.Type is ChatTypePrivate privata && privata.UserId == clientService.Options.MyId;
 
             _messageDelegate = new ChatMessageDelegate(this, Chat);
@@ -193,7 +193,7 @@ namespace Telegram.ViewModels.Stories
 
         public override Task<MessageSendOptions> PickMessageSendOptionsAsync(bool? schedule = null, bool? silent = null, bool reorder = false)
         {
-            return Task.FromResult(new MessageSendOptions(silent ?? false, false, false, Settings.Stickers.DynamicPackOrder && reorder, null, 0, false));
+            return Task.FromResult(new MessageSendOptions(silent ?? false, false, false, false, Settings.Stickers.DynamicPackOrder && reorder, null, 0, 0, false));
         }
 
         public void Handle(UpdateStory update)

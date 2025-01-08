@@ -252,9 +252,7 @@
 
     </UserControl.Resources>
 
-    <Grid Background="{ThemeResource SettingsItemBackground}"
-          Margin="0,0,8,8"
-          CornerRadius="8">
+    <Grid Background="{ThemeResource PageSubHeaderBackgroundBrush2}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
@@ -266,10 +264,6 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <Border BorderBrush="{ThemeResource NavigationViewContentGridBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Grid.ColumnSpan="9" />
 
         <Button x:Name="ViewButton"
                 Click="View_Click"
@@ -442,8 +436,8 @@
                                     Height="40"
                                     Grid.Column="7"
                                     IsOneWay="False"
-                                    AutomationProperties.Name="{CustomResource Shuffle}"
-                                    ToolTipService.ToolTip="{CustomResource Shuffle}" />
+                                    AutomationProperties.Name="{CustomResource ReverseOrder}"
+                                    ToolTipService.ToolTip="{CustomResource ReverseOrder}" />
 
         <!--<controls:GlyphToggleButton
             x:Name="ShuffleButton"

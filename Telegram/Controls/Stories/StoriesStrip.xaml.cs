@@ -240,7 +240,7 @@ namespace Telegram.Controls.Stories
                     var transform = container.TransformToVisual(null);
                     var point = transform.TransformPoint(new Point());
 
-                    var origin = new Rect(point.X + 8 + 4, point.Y + 12 + 4, 40, 40);
+                    var origin = new Rect(point.X + 12 + 4, point.Y + 12 + 4, 40, 40);
 
                     ViewModel.OpenStory(activeStories, origin, GetOrigin);
                 }
@@ -261,7 +261,7 @@ namespace Telegram.Controls.Stories
                 var transform = container.TransformToVisual(null);
                 var point = transform.TransformPoint(new Point());
 
-                return new Rect(point.X + 8 + 4, point.Y + 12 + 4, 40, 40);
+                return new Rect(point.X + 12 + 4, point.Y + 12 + 4, 40, 40);
             }
 
             return Rect.Empty;
@@ -457,7 +457,7 @@ namespace Telegram.Controls.Stories
                 "(_.Padding - _.First * 12) * (1 - _.Progress)");
 
             var storiesVisualOffsetAnimation = compositor.CreateExpressionAnimation(
-                "-22 + (48 * _.Progress)");
+                "-24 + (48 * _.Progress)");
 
             var headerVisualOffsetAnimation = compositor.CreateExpressionAnimation(
                 "84 * _.Progress");
@@ -548,7 +548,7 @@ namespace Telegram.Controls.Stories
             if (test != null && _collapsed)
             {
                 var transform = test.TransformToVisual(ControlledList);
-                var point = transform.TransformPoint(new Point()).ToVector2();
+                var point = transform.TransformVector2();
 
                 Logger.Info(point.Y);
 

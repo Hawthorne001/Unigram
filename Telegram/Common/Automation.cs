@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -66,7 +66,14 @@ namespace Telegram.Common
             }
             else if (message.Content is MessageVoiceNote voiceNote)
             {
-                builder.Append($"{Strings.AttachAudio}");
+                if (message.SelfDestructType is MessageSelfDestructTypeImmediately)
+                {
+                    builder.Append($"{Strings.AttachOnceAudio}");
+                }
+                else
+                {
+                    builder.Append($"{Strings.AttachAudio}");
+                }
 
                 if (voiceNote.Caption != null && !string.IsNullOrEmpty(voiceNote.Caption.Text))
                 {
@@ -84,7 +91,14 @@ namespace Telegram.Common
             }
             else if (message.Content is MessageVideoNote)
             {
-                builder.Append($"{Strings.AttachRound}");
+                if (message.SelfDestructType is MessageSelfDestructTypeImmediately)
+                {
+                    builder.Append($"{Strings.AttachOnceRound}");
+                }
+                else
+                {
+                    builder.Append($"{Strings.AttachRound}");
+                }
             }
             else if (message.Content is MessageAnimation animation)
             {
@@ -134,7 +148,7 @@ namespace Telegram.Common
             else if (message.Content is MessagePoll poll)
             {
                 builder.Append($"{Strings.Poll}. ");
-                builder.Append($"{poll.Poll.Question}");
+                builder.Append($"{poll.Poll.Question.Text}");
             }
             else if (message.Content is MessageCall call)
             {
@@ -242,6 +256,62 @@ namespace Telegram.Common
                     return Locale.Declension(Strings.R.Files, album.Messages.Count) + ", ";
                 }
             }
+            else if (message.Content is MessagePaidAlbum paidAlbum)
+            {
+                var caption = string.Empty;
+                if (!string.IsNullOrEmpty(paidAlbum.Caption.Text))
+                {
+                    caption = paidAlbum.Caption.Text + ", ";
+                }
+
+                var photos = paidAlbum.Media.Count(x => x.IsPhoto());
+                var videos = paidAlbum.Media.Count - photos;
+
+                if (paidAlbum.Media.Count > 0 && paidAlbum.Media[0].IsVideo())
+                {
+                    if (photos > 0)
+                    {
+                        return Locale.Declension(Strings.R.Videos, videos) + ", " + Locale.Declension(Strings.R.Photos, photos) + ", " + caption;
+                    }
+
+                    return Locale.Declension(Strings.R.Videos, videos) + ", " + caption;
+                }
+
+                if (videos > 0)
+                {
+                    return Locale.Declension(Strings.R.Photos, photos) + ", " + Locale.Declension(Strings.R.Videos, videos) + ", " + caption;
+                }
+
+                return Locale.Declension(Strings.R.Photos, photos) + ", " + caption;
+            }
+            else if (message.Content is MessagePaidMedia paidMedia)
+            {
+                var caption = string.Empty;
+                if (!string.IsNullOrEmpty(paidMedia.Caption.Text))
+                {
+                    caption = paidMedia.Caption.Text + ", ";
+                }
+
+                var photos = paidMedia.Media.Count(x => x.IsPhoto());
+                var videos = paidMedia.Media.Count - photos;
+
+                if (paidMedia.Media.Count > 0 && paidMedia.Media[0].IsVideo())
+                {
+                    if (photos > 0)
+                    {
+                        return Locale.Declension(Strings.R.Videos, videos) + ", " + Locale.Declension(Strings.R.Photos, photos) + ", " + caption;
+                    }
+
+                    return Locale.Declension(Strings.R.Videos, videos) + ", " + caption;
+                }
+
+                if (videos > 0)
+                {
+                    return Locale.Declension(Strings.R.Photos, photos) + ", " + Locale.Declension(Strings.R.Videos, videos) + ", " + caption;
+                }
+
+                return Locale.Declension(Strings.R.Photos, photos) + ", " + caption;
+            }
             else if (message.Content is MessageText text)
             {
                 if (altText != null)
@@ -271,9 +341,21 @@ namespace Telegram.Common
             {
                 return Strings.AttachPhotoExpired + ", ";
             }
+            else if (message.Content is MessageExpiredVideoNote)
+            {
+                return Strings.AttachRoundExpired + ", ";
+            }
+            else if (message.Content is MessageExpiredVoiceNote)
+            {
+                return Strings.AttachVoiceExpired + ", ";
+            }
             else if (message.Content is MessageVideoNote videoNote)
             {
-                var result = Strings.AttachRound + ", " + (videoNote.IsViewed ? "" : Strings.AccDescrMsgNotPlayed + ", ");
+                var result = message.SelfDestructType is MessageSelfDestructTypeImmediately
+                    ? Strings.AttachOnceRound
+                    : Strings.AttachRound;
+
+                result += ", " + (videoNote.IsViewed ? "" : Strings.AccDescrMsgNotPlayed + ", ");
 
                 if (details)
                 {
@@ -299,7 +381,11 @@ namespace Telegram.Common
 
             if (message.Content is MessageVoiceNote voiceNote)
             {
-                var result = Strings.AttachAudio + GetCaption(voiceNote.Caption.Text) + ", " + (voiceNote.IsListened ? "" : Strings.AccDescrMsgNotPlayed + ", ");
+                var result = message.SelfDestructType is MessageSelfDestructTypeImmediately
+                    ? Strings.AttachOnceAudio
+                    : Strings.AttachAudio;
+
+                result += GetCaption(voiceNote.Caption.Text) + ", " + (voiceNote.IsListened ? "" : Strings.AccDescrMsgNotPlayed + ", ");
 
                 if (details)
                 {
@@ -351,11 +437,11 @@ namespace Telegram.Common
                 string result;
                 if (performer == null && title == null)
                 {
-                    result = Strings.AttachMusic + GetCaption(audio.Caption.Text) + ", ";
+                    result = Strings.AttachMusic + ", " + audio.Audio.FileName + GetCaption(audio.Caption.Text) + ", ";
                 }
                 else
                 {
-                    result = $"{performer ?? Strings.AudioUnknownArtist} - {title ?? Strings.AudioUnknownTitle}" + GetCaption(audio.Caption.Text) + ", ";
+                    result = Strings.AttachMusic + ", " + $"{performer ?? Strings.AudioUnknownArtist} - {title ?? Strings.AudioUnknownTitle}" + GetCaption(audio.Caption.Text) + ", ";
                 }
 
                 if (details)
@@ -391,7 +477,7 @@ namespace Telegram.Common
             }
             else if (message.Content is MessageInvoice invoice)
             {
-                return Strings.PaymentInvoice + ", " + invoice.Title + ", ";
+                return Strings.PaymentInvoice + ", " + invoice.ProductInfo.Title + ", ";
             }
             else if (message.Content is MessageContact)
             {
@@ -425,11 +511,11 @@ namespace Telegram.Common
 
                     if (type != null)
                     {
-                        return type + ", " + poll.Poll.Question + ", ";
+                        return type + ", " + poll.Poll.Question.Text + ", ";
                     }
                 }
 
-                return Strings.Poll + ", " + poll.Poll.Question + ", ";
+                return Strings.Poll + ", " + poll.Poll.Question.Text + ", ";
             }
             else if (message.Content is MessageCall call)
             {

@@ -1,23 +1,27 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
+using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.UI.Xaml.Controls;
+using Rg.DiffUtils;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Collections;
 using Telegram.Common;
 using Telegram.Controls;
+using Telegram.Controls.Chats;
 using Telegram.Controls.Media;
 using Telegram.Converters;
 using Telegram.Entities;
+using Telegram.Navigation;
 using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
@@ -26,25 +30,31 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using Windows.UI.Composition;
 using Windows.UI.Core;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Documents;
+using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Views.Popups
 {
-    public sealed partial class SendFilesPopup : ContentPopup, IViewWithAutocomplete, INotifyPropertyChanged
+    public sealed partial class SendFilesPopup : ContentPopup, IViewWithAutocomplete, INotifyPropertyChanged, IDiffHandler<StorageMedia>
     {
         public ComposeViewModel ViewModel { get; private set; }
         public MvxObservableCollection<StorageMedia> Items { get; private set; }
 
-        private ICollection _autocomplete;
-        public ICollection Autocomplete
+        public DiffObservableCollection<StorageMedia> ItemsView { get; private set; }
+
+        private IAutocompleteCollection _autocomplete;
+        public IAutocompleteCollection Autocomplete
         {
             get => _autocomplete;
             set
@@ -57,23 +67,38 @@ namespace Telegram.Views.Popups
             }
         }
 
-        private bool _mediaAllowed;
+        private bool _photoAllowed;
+        private bool _videoAllowed;
+        private bool _audioAllowed;
         private bool _documentAllowed;
 
-        public bool IsMediaOnly => _mediaAllowed && _documentAllowed && Items.All(x => x is StoragePhoto or StorageVideo);
-        public bool IsAlbumAvailable
+        public bool IsMediaAllowed
         {
             get
             {
-                if (IsMediaSelected)
+                if (_photoAllowed && Items.Any(x => x is StoragePhoto))
                 {
-                    return Items.Count > 1 && Items.Count <= 10 && Items.All(x => (x is StoragePhoto || x is StorageVideo) && x.Ttl == null);
+                    return true;
+                }
+                else if (_videoAllowed && Items.Any(x => x is StorageVideo))
+                {
+                    return true;
+                }
+                else if (_audioAllowed && Items.Any(x => x is StorageAudio))
+                {
+                    return true;
                 }
 
-                return Items.Count is > 1 and <= 10;
+                return false;
             }
         }
-        public bool IsTtlAvailable { get; }
+
+        private bool _editing;
+
+        private bool _ttlAllowed;
+        public bool IsTtlAvailable => _ttlAllowed && Items.Count == 1;
+
+        public bool HasPaidMediaAllowed { get; set; }
 
         private bool _isMediaSelected;
         public bool IsMediaSelected
@@ -107,31 +132,70 @@ namespace Telegram.Views.Popups
             }
         }
 
-        public string SendWithoutCompression
+        public string TitleText
         {
             get
             {
                 if (IsMediaSelected)
                 {
-                    return Items.Count == 1 ? Strings.SendAsFile : Strings.SendAsFiles;
+                    if (Items.All(x => x is StoragePhoto))
+                    {
+                        return string.Format(Strings.SendItems, Locale.Declension(Strings.R.Photos, Items.Count));
+                    }
+                    else if (Items.All(x => x is StorageVideo))
+                    {
+                        return string.Format(Strings.SendItems, Locale.Declension(Strings.R.Videos, Items.Count));
+                    }
+                    else if (Items.All(x => x is StoragePhoto or StorageVideo))
+                    {
+                        return string.Format(Strings.SendItems, Locale.Declension(Strings.R.Media, Items.Count));
+                    }
                 }
 
                 return string.Format(Strings.SendItems, Locale.Declension(Strings.R.Files, Items.Count));
             }
         }
 
-        private bool _wasAlbum = true;
+        public bool IsAlbum { get; private set; } = true;
 
-        private bool _isAlbum = true;
-        public bool IsAlbum
+        private bool _showCaptionAboveMedia;
+        public bool ShowCaptionAboveMedia
         {
-            get => _isAlbum;
+            get => _showCaptionAboveMedia;
             set
             {
-                if (_isAlbum != value)
+                if (_showCaptionAboveMedia != value)
                 {
-                    _isAlbum = IsAlbumAvailable && value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAlbum)));
+                    _showCaptionAboveMedia = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ShowCaptionAboveMedia)));
+                }
+            }
+        }
+
+        private bool _sendWithSpoiler;
+        public bool SendWithSpoiler
+        {
+            get => _sendWithSpoiler;
+            set
+            {
+                if (_sendWithSpoiler != value)
+                {
+                    _sendWithSpoiler = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SendWithSpoiler)));
+                }
+            }
+        }
+
+        private long _starCount;
+        public long StarCount
+        {
+            get => _starCount;
+            set
+            {
+                if (_starCount != value)
+                {
+                    _starCount = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StarCount)));
                 }
             }
         }
@@ -147,11 +211,10 @@ namespace Telegram.Views.Popups
         public bool CanSchedule { get; set; }
         public bool IsSavedMessages { get; set; }
 
-        public bool Spoiler { get; private set; }
         public bool? Schedule { get; private set; }
         public bool? Silent { get; private set; }
 
-        public SendFilesPopup(ComposeViewModel viewModel, IEnumerable<StorageMedia> items, bool media, bool mediaAllowed, bool documentAllowed, bool ttl, bool schedule, bool savedMessages)
+        public SendFilesPopup(ComposeViewModel viewModel, IEnumerable<StorageMedia> items, bool media, ChatPermissions permissions, bool ttlAllowed, bool schedule, bool savedMessages, bool editing)
         {
             InitializeComponent();
 
@@ -175,22 +238,24 @@ namespace Telegram.Views.Popups
 
             Logger.Info(builder);
 
-            PrimaryButtonText = Strings.Send;
-            SecondaryButtonText = Strings.Cancel;
-
-            IsTtlAvailable = ttl;
             IsSavedMessages = savedMessages;
             CanSchedule = schedule;
 
-            _mediaAllowed = mediaAllowed;
-            _documentAllowed = documentAllowed;
+            _editing = editing;
+            _ttlAllowed = ttlAllowed;
+            _photoAllowed = permissions.CanSendPhotos;
+            _videoAllowed = permissions.CanSendVideos;
+            _audioAllowed = permissions.CanSendAudios;
+            _documentAllowed = permissions.CanSendDocuments;
 
             DataContext = viewModel;
             ViewModel = viewModel;
 
+            ItemsView = new DiffObservableCollection<StorageMedia>(this, Constants.DiffOptions);
+
             Items = new MvxObservableCollection<StorageMedia>(items);
             Items.CollectionChanged += OnCollectionChanged;
-            IsMediaSelected = media && mediaAllowed && Items.All(x => x is StoragePhoto or StorageVideo);
+            IsMediaSelected = media && IsMediaAllowed;
             IsFilesSelected = !IsMediaSelected;
 
             EmojiPanel.DataContext = EmojiDrawerViewModel.Create(viewModel.SessionId);
@@ -203,7 +268,7 @@ namespace Telegram.Views.Popups
 
         private void OnCollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SendWithoutCompression)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TitleText)));
 
             if (Items.Count > 0)
             {
@@ -298,10 +363,10 @@ namespace Telegram.Views.Popups
                 return;
             }
 
-            var content = args.ItemContainer.ContentTemplateRoot as Grid;
-
             if (args.Item is User user)
             {
+                var content = args.ItemContainer.ContentTemplateRoot as Grid;
+
                 var photo = content.Children[0] as ProfilePicture;
                 var title = content.Children[1] as TextBlock;
 
@@ -321,8 +386,29 @@ namespace Telegram.Views.Popups
 
                 photo.SetUser(ViewModel.ClientService, user, 32);
             }
+            else if (args.Item is Sticker sticker)
+            {
+                var content = args.ItemContainer.ContentTemplateRoot as Grid;
+
+                var animated = content.Children[0] as AnimatedImage;
+                animated.Source = new DelayedFileSource(ViewModel.ClientService, sticker);
+
+                AutomationProperties.SetName(args.ItemContainer, sticker.Emoji);
+            }
+            else if (args.Item is EmojiData emoji)
+            {
+                AutomationProperties.SetName(args.ItemContainer, emoji.Value);
+            }
 
             args.Handled = true;
+        }
+
+        private void Autocomplete_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            var above = ShowCaptionAboveMedia;
+            var visible = e.NewSize.Height > 0;
+
+            CaptionInput.CornerRadius = new CornerRadius(above ? 2 : visible ? 0 : 2, above ? 2 : visible ? 0 : 2, above ? visible ? 0 : 2 : 2, above ? visible ? 0 : 2 : 2);
         }
 
         private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -331,6 +417,8 @@ namespace Telegram.Views.Popups
             {
                 return;
             }
+
+            args.Handled = true;
 
             var storage = args.Item as StorageMedia;
             if (storage == null)
@@ -344,28 +432,137 @@ namespace Telegram.Views.Popups
                 return;
             }
 
+            if (root.Children[0] is StorageAlbumPanel albumPanel && storage is StorageAlbum album)
+            {
+                UpdatePaidMedia(root);
+
+                albumPanel.UpdateMessage(album);
+                return;
+            }
+
             if (root is AspectView aspect)
             {
                 aspect.Constraint = new Size(storage.Width, storage.Height);
             }
 
-            var glyph = root.FindName("Glyph") as TextBlock;
-            glyph.Text = storage is StoragePhoto
-                ? Icons.Image
-                : storage is StorageVideo
-                ? Icons.Play
-                : Icons.Document;
+            var glyph = root.FindName("Glyph");
+            if (glyph is AnimatedGlyphButton animated)
+            {
+                animated.Tag = storage;
+                animated.Glyph = storage is StoragePhoto
+                    ? Icons.ImageFilled24
+                    : storage is StorageVideo or StorageAudio
+                    ? Icons.PlayFilled24
+                    : Icons.DocumentFilled24;
+            }
+            else if (glyph is TextBlock text)
+            {
+                text.Text = storage is StoragePhoto
+                    ? Icons.ImageFilled24
+                    : storage is StorageVideo or StorageAudio
+                    ? Icons.PlayFilled24
+                    : Icons.DocumentFilled24;
+            }
 
             var title = root.FindName("Title") as TextBlock;
+            var titleTrim = root.FindName("TitleTrim") as TextBlock;
             var subtitle = root.FindName("Subtitle") as TextBlock;
 
-            if (title == null || subtitle == null)
+            if (title == null || titleTrim == null || subtitle == null)
             {
                 return;
             }
 
-            title.Text = storage.File.Name;
-            subtitle.Text = FileSizeConverter.Convert((long)storage.Size);
+            if (storage is StorageAudio audio)
+            {
+                if (string.IsNullOrEmpty(audio.Performer) || string.IsNullOrEmpty(audio.Title))
+                {
+                    var index = storage.File.Name.LastIndexOf('.');
+                    if (index > 0)
+                    {
+                        title.Text = storage.File.Name.Substring(0, index + 1);
+                        titleTrim.Text = storage.File.Name.Substring(index + 1);
+                    }
+                    else
+                    {
+                        title.Text = storage.File.Name;
+                        titleTrim.Text = string.Empty;
+                    }
+                }
+                else
+                {
+                    title.Text = $"{audio.Performer} - {audio.Title}";
+                    titleTrim.Text = string.Empty;
+                }
+
+                subtitle.Text = audio.Duration;
+                subtitle.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                var index = storage.File.Name.LastIndexOf('.');
+                if (index > 0)
+                {
+                    title.Text = storage.File.Name.Substring(0, index + 1);
+                    titleTrim.Text = storage.File.Name.Substring(index + 1);
+                }
+                else
+                {
+                    title.Text = storage.File.Name;
+                    titleTrim.Text = string.Empty;
+                }
+
+                if (storage.Size > 0)
+                {
+                    subtitle.Text = FileSizeConverter.Convert((long)storage.Size);
+                    subtitle.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    subtitle.Visibility = Visibility.Collapsed;
+                }
+            }
+        }
+
+        private void FileItem_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            var content = sender as Grid;
+            var storage = ScrollingHost.ItemFromContainer(content) as StorageMedia;
+
+            var glyph = content.FindName("Glyph") as AnimatedGlyphButton;
+            glyph.Glyph = Icons.DeleteFilled24;
+        }
+
+        private void FileItem_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            var content = sender as Grid;
+            var storage = content.DataContext as StorageMedia;
+
+            var glyph = content.FindName("Glyph") as AnimatedGlyphButton;
+            if (glyph != null)
+            {
+                glyph.Glyph = storage is StoragePhoto
+                    ? Icons.ImageFilled24
+                    : storage is StorageVideo or StorageAudio
+                    ? Icons.PlayFilled24
+                    : Icons.DocumentFilled24;
+            }
+        }
+
+        private void MediaItem_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            var content = sender as Grid;
+            var rootGrid = content.FindName("RootGrid") as Grid;
+
+            rootGrid.Opacity = 1;
+        }
+
+        private void MediaItem_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            var content = sender as Grid;
+            var rootGrid = content.FindName("RootGrid") as Grid;
+
+            rootGrid.Opacity = 0;
         }
 
         private void Grid_Loaded(object sender, RoutedEventArgs e)
@@ -387,12 +584,16 @@ namespace Telegram.Views.Popups
         private void UpdateTemplate(Grid root, StorageMedia storage)
         {
             var overlay = root.FindName("Overlay") as Border;
+            overlay.Visibility = storage is StorageVideo ? Visibility.Visible : Visibility.Collapsed;
 
             var mute = root.FindName("Mute") as ToggleButton;
             var crop = root.FindName("Crop") as ToggleButton;
             var ttl = root.FindName("Ttl") as ToggleButton;
 
-            overlay.Visibility = storage is StorageVideo ? Visibility.Visible : Visibility.Collapsed;
+            if (mute == null)
+            {
+                return;
+            }
 
             if (storage is StorageVideo video)
             {
@@ -477,7 +678,16 @@ namespace Telegram.Views.Popups
                     var photo = await StorageMedia.CreateAsync(cache);
                     if (photo != null)
                     {
-                        Items.Add(photo);
+                        photo.IsScreenshot = true;
+
+                        if (_editing)
+                        {
+                            Items.ReplaceWith(new[] { photo });
+                        }
+                        else
+                        {
+                            Items.Add(photo);
+                        }
 
                         UpdateView();
                         UpdatePanel();
@@ -488,9 +698,13 @@ namespace Telegram.Views.Popups
                     var items = await package.GetStorageItemsAsync();
                     var results = await StorageMedia.CreateAsync(items);
 
-                    foreach (var item in results)
+                    if (_editing)
                     {
-                        Items.Add(item);
+                        Items.ReplaceWith(results.Take(1));
+                    }
+                    else
+                    {
+                        Items.AddRange(results);
                     }
 
                     UpdateView();
@@ -500,77 +714,212 @@ namespace Telegram.Views.Popups
             catch { }
         }
 
-        private int _itemsState = -1;
-        private int _panelState = -1;
-
         private void UpdateView()
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMediaOnly)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAlbumAvailable)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMediaAllowed)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TitleText)));
 
-            if (IsMediaSelected && !IsMediaOnly && !_mediaAllowed)
+            if (IsMediaSelected && !IsMediaAllowed && _documentAllowed)
             {
                 IsMediaSelected = false;
                 IsFilesSelected = true;
             }
+
+            MoreButton.Visibility = Items.Any(x => x is StoragePhoto or StorageVideo or StorageAudio)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
-        private void UpdatePanel()
+        private void UpdateCollection()
         {
-            if (IsAlbum && !IsAlbumAvailable)
-            {
-                IsAlbum = false;
-            }
-            else if (_wasAlbum && IsAlbumAvailable)
-            {
-                IsAlbum = true;
-            }
+            var view = new List<StorageMedia>();
 
-            var state = IsAlbum && IsAlbumAvailable && IsMediaSelected ? 1 : 0;
-            if (state != _panelState)
+            if (IsMediaSelected)
             {
-                _panelState = state;
-                if (state == 1)
+                var album = new List<StorageMedia>();
+
+                void AddAlbum()
                 {
-                    FindName(nameof(AlbumPanel));
-                    AlbumPanel.Visibility = Visibility.Visible;
-
-                    if (ListPanel != null)
+                    if (album.Count > 0)
                     {
-                        ListPanel.Visibility = Visibility.Collapsed;
+                        view.Add(new StorageAlbum(album));
+                        album = new List<StorageMedia>();
                     }
                 }
-                else
-                {
-                    if (Album != null)
-                    {
-                        AlbumPanel.Visibility = Visibility.Collapsed;
-                    }
-
-                    FindName(nameof(ListPanel));
-                    ListPanel.Visibility = Visibility.Visible;
-                }
-            }
-
-            if (Album?.ItemsPanelRoot is SendFilesAlbumPanel panel && IsAlbum)
-            {
-                var layout = new List<Size>();
 
                 foreach (var item in Items)
                 {
-                    layout.Add(new Size(item.Width, item.Height));
+                    if ((item is StoragePhoto && _photoAllowed) || (item is StorageVideo && _videoAllowed))
+                    {
+                        if (album.Count > 9)
+                        {
+                            AddAlbum();
+                        }
+
+                        album.Add(item);
+                    }
+                    else
+                    {
+                        AddAlbum();
+
+                        if (item is StorageDocument || (item is StoragePhoto && _photoAllowed) || (item is StorageVideo && _videoAllowed) || (item is StorageAudio && _audioAllowed))
+                        {
+                            view.Add(item);
+                        }
+                        else
+                        {
+                            view.Add(new StorageDocument(item));
+                        }
+                    }
                 }
 
-                panel.Sizes = layout;
-                panel.Invalidate();
+                AddAlbum();
+            }
+            else
+            {
+                foreach (var item in Items)
+                {
+                    if (item is StorageDocument)
+                    {
+                        view.Add(item);
+                    }
+                    else
+                    {
+                        view.Add(new StorageDocument(item));
+                    }
+                }
             }
 
-            var mediaState = IsMediaSelected ? 1 : 0;
-            if (mediaState != _itemsState && ScrollingHost != null)
+            ItemsView.CollectionChanged -= ItemsView_CollectionChanged;
+            ItemsView.ReplaceDiff(view);
+            ItemsView.CollectionChanged += ItemsView_CollectionChanged;
+        }
+
+        private async void UpdatePanel()
+        {
+            UpdateCollection();
+
+            if (ScrollingHost.ItemsPanelRoot is ItemsStackPanel panel && IsAlbum)
             {
-                _itemsState = mediaState;
-                ScrollingHost.ItemTemplate = Resources[mediaState == 1 ? "MediaItemTemplate" : "FileItemTemplate"] as DataTemplate;
+                void UpdateSelectorItem(Grid content)
+                {
+                    if (content.Children[0] is StorageAlbumPanel album)
+                    {
+                        UpdatePaidMedia(content);
+
+                        foreach (var child in album.Children)
+                        {
+                            if (child is ContentControl { ContentTemplateRoot: Grid inner })
+                            {
+                                UpdateSelectorItem(inner);
+                            }
+                        }
+
+                        return;
+                    }
+
+                    UpdateTemplate(content, content.DataContext as StorageMedia);
+
+                    var particles = content.FindName("Particles") as AnimatedImage;
+                    if (particles != null)
+                    {
+                        particles.Source = SendWithSpoiler || StarCount > 0
+                            ? new ParticlesImageSource()
+                            : null;
+                    }
+
+                    var border = content.FindName("BackDrop") as Border;
+                    if (border != null)
+                    {
+                        if (SendWithSpoiler || StarCount > 0)
+                        {
+                            var graphicsEffect = new GaussianBlurEffect
+                            {
+                                Name = "Blur",
+                                BlurAmount = 3,
+                                BorderMode = EffectBorderMode.Hard,
+                                Source = new CompositionEffectSourceParameter("Backdrop")
+                            };
+
+                            var compositor = BootStrapper.Current.Compositor;
+                            var effectFactory = compositor.CreateEffectFactory(graphicsEffect, new[] { "Blur.BlurAmount" });
+                            var effectBrush = effectFactory.CreateBrush();
+                            var backdrop = compositor.CreateBackdropBrush();
+                            effectBrush.SetSourceParameter("Backdrop", backdrop);
+
+                            var blurVisual = compositor.CreateSpriteVisual();
+                            blurVisual.RelativeSizeAdjustment = Vector2.One;
+                            blurVisual.Brush = effectBrush;
+
+                            ElementCompositionPreview.SetElementChildVisual(border, blurVisual);
+                        }
+                        else
+                        {
+                            ElementCompositionPreview.SetElementChildVisual(border, null);
+                        }
+                    }
+                }
+
+                await ScrollingHost.UpdateLayoutAsync();
+
+                ScrollingHost.ForEach<StorageMedia>((selector, item) =>
+                {
+                    if (item is StoragePhoto or StorageVideo or StorageAlbum && selector.ContentTemplateRoot is Grid content)
+                    {
+                        UpdateSelectorItem(content);
+                    }
+                });
             }
+        }
+
+        private void UpdatePaidMedia(Grid root)
+        {
+            var PaidMediaButton = root.FindName("PaidMediaButton") as FrameworkElement;
+
+            if (StarCount > 0)
+            {
+                var text = Locale.Declension(Strings.R.UnlockPaidContent, StarCount);
+                var index = text.IndexOf("\u2B50\uFE0F");
+
+                var TextPart1 = root.FindName("TextPart1") as Run;
+                var TextPart2 = root.FindName("TextPart2") as Run;
+
+                TextPart1.Text = text.Substring(0, index);
+                TextPart2.Text = text.Substring(index + 2);
+
+                PaidMediaButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                PaidMediaButton.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ItemsView_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            var items = new List<StorageMedia>();
+
+            foreach (var item in ItemsView)
+            {
+                if (item is StorageAlbum album)
+                {
+                    items.AddRange(album.Media);
+                }
+                else if (item is StorageDocument document)
+                {
+                    items.Add(document.Original ?? document);
+                }
+                else
+                {
+                    items.Add(item);
+                }
+            }
+
+            Items.CollectionChanged -= OnCollectionChanged;
+            Items.ReplaceWith(items);
+            Items.CollectionChanged += OnCollectionChanged;
+
+            UpdateCollection();
         }
 
         private void PivotRadioButton_Click(object sender, RoutedEventArgs e)
@@ -581,8 +930,8 @@ namespace Telegram.Views.Popups
 
         private void Album_Click(object sender, RoutedEventArgs e)
         {
-            _wasAlbum = AlbumButton.IsChecked == true;
-            IsAlbum = _wasAlbum;
+            //_wasAlbum = AlbumButton.IsChecked == true;
+            //IsAlbum = _wasAlbum;
 
             UpdateView();
             UpdatePanel();
@@ -612,7 +961,7 @@ namespace Telegram.Views.Popups
             void Update(MessageSelfDestructType ttl)
             {
                 media.Ttl = ttl;
-                ToastPopup.Show(sender as FrameworkElement,
+                ToastPopup.Show(XamlRoot,
                     media is StorageVideo
                         ? ttl is MessageSelfDestructTypeTimer timer1
                         ? Locale.Declension(Strings.R.TimerPeriodVideoSetSeconds, timer1.SelfDestructTime)
@@ -624,10 +973,12 @@ namespace Telegram.Views.Popups
                         : ttl is MessageSelfDestructTypeImmediately
                         ? Strings.TimerPeriodPhotoSetOnce
                         : Strings.TimerPeriodPhotoKeep,
-                    new LocalFileSource(ttl == null
-                        ? "ms-appx:///Assets/Toasts/AutoRemoveOff.tgs"
-                        : "ms-appx:///Assets/Toasts/AutoRemoveOn.tgs"),
-                    TeachingTipPlacementMode.TopLeft);
+                    ttl == null
+                        ? ToastPopupIcon.AutoRemoveOff
+                        : ToastPopupIcon.AutoRemoveOn);
+
+                UpdateView();
+                UpdatePanel();
             }
 
             var command = new RelayCommand<MessageSelfDestructType>(Update);
@@ -670,13 +1021,42 @@ namespace Telegram.Views.Popups
             var button = sender as ToggleButton;
             if (button.Tag is StorageMedia media)
             {
-                var dialog = new EditMediaPopup(media);
+                var parent = button.GetParent<AspectView>();
+                if (parent != null)
+                {
+                    ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("EditMediaPopup", parent);
+                }
 
-                var confirm = await dialog.ShowAsync();
+                var popup = new EditMediaPopup(media);
+
+                var confirm = await popup.ShowAsync(XamlRoot);
                 if (confirm == ContentDialogResult.Primary)
                 {
                     media.Refresh();
+
+                    UpdateView();
+                    UpdatePanel();
                 }
+            }
+        }
+
+        private async void Album_ItemClick(object sender, StorageMedia args)
+        {
+            var parent = sender as UIElement;
+            if (parent != null)
+            {
+                ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("EditMediaPopup", parent);
+            }
+
+            var popup = new EditMediaPopup(args);
+
+            var confirm = await popup.ShowAsync(XamlRoot);
+            if (confirm == ContentDialogResult.Primary)
+            {
+                args.Refresh();
+
+                UpdateView();
+                UpdatePanel();
             }
         }
 
@@ -689,36 +1069,43 @@ namespace Telegram.Views.Popups
             }
         }
 
-        protected override void OnApplyTemplate()
+        private void Send_Click(object sender, RoutedEventArgs e)
         {
-            IsPrimaryButtonSplit = CanSchedule;
-
-            var button = GetTemplateChild("PrimarySplitButton") as Button;
-            if (button != null && CanSchedule)
-            {
-                button.Click += PrimaryButton_ContextRequested;
-            }
-
-            base.OnApplyTemplate();
+            Accept();
         }
 
-        private void PrimaryButton_ContextRequested(object sender, RoutedEventArgs args)
+        private void Send_ContextRequested(object sender, ContextRequestedEventArgs args)
         {
-            var self = IsSavedMessages;
-
-            var flyout = new MenuFlyout();
-
-            var media = Items.All(x => x is StoragePhoto or StorageVideo);
-            if (media && !IsFilesSelected)
+            if (CanSchedule)
             {
-                flyout.CreateFlyoutItem(() => Spoiler = !Spoiler, Spoiler ? Strings.DisablePhotoSpoiler : Strings.EnablePhotoSpoiler, Icons.TabInPrivate);
-                flyout.CreateFlyoutSeparator();
+                var self = IsSavedMessages;
+
+                var flyout = new MenuFlyout();
+
+                flyout.CreateFlyoutItem(SendWithoutGrouping, Strings.SendWithoutGrouping, "\uE90C");
+                flyout.CreateFlyoutItem(SendWithoutSound, Strings.SendWithoutSound, Icons.AlertOff);
+                flyout.CreateFlyoutItem(SendScheduled, self ? Strings.SetReminder : Strings.ScheduleMessage, Icons.CalendarClock);
+
+                flyout.ShowAt(sender as UIElement, FlyoutPlacementMode.TopEdgeAlignedRight);
             }
+        }
 
-            flyout.CreateFlyoutItem(() => { Silent = true; Hide(ContentDialogResult.Primary); }, Strings.SendWithoutSound, Icons.AlertOff);
-            flyout.CreateFlyoutItem(() => { Schedule = true; Hide(ContentDialogResult.Primary); }, self ? Strings.SetReminder : Strings.ScheduleMessage, Icons.CalendarClock);
+        private void SendWithoutGrouping()
+        {
+            IsAlbum = false;
+            Hide(ContentDialogResult.Primary);
+        }
 
-            flyout.ShowAt(sender as DependencyObject, FlyoutPlacementMode.BottomEdgeAlignedRight);
+        private void SendWithoutSound()
+        {
+            Silent = true;
+            Hide(ContentDialogResult.Primary);
+        }
+
+        private void SendScheduled()
+        {
+            Schedule = true;
+            Hide(ContentDialogResult.Primary);
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -751,7 +1138,7 @@ namespace Telegram.Views.Popups
             var focused = FocusManager.GetFocusedElement();
             if (focused is null or (not TextBox and not RichEditBox and not Button and not MenuFlyoutItem))
             {
-                var popups = VisualTreeHelper.GetOpenPopups(Window.Current);
+                var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot);
 
                 foreach (var popup in popups)
                 {
@@ -784,48 +1171,237 @@ namespace Telegram.Views.Popups
         {
             // We don't want to unfocus the text are when the context menu gets opened
             EmojiPanel.ViewModel.Update();
-            EmojiFlyout.ShowAt(CaptionInput, new FlyoutShowOptions { ShowMode = FlyoutShowMode.Transient });
+            EmojiFlyout.ShowAt(CaptionPanel, new FlyoutShowOptions { ShowMode = FlyoutShowMode.Transient });
         }
 
         private void Emoji_ItemClick(object sender, ItemClickEventArgs e)
         {
             if (e.ClickedItem is EmojiData emoji)
             {
-                EmojiFlyout.Hide();
-
                 CaptionInput.InsertText(emoji.Value);
                 CaptionInput.Focus(FocusState.Programmatic);
             }
             else if (e.ClickedItem is StickerViewModel sticker)
             {
-                EmojiFlyout.Hide();
-
                 CaptionInput.InsertEmoji(sticker);
                 CaptionInput.Focus(FocusState.Programmatic);
             }
         }
+
+        private int ConvertCaptionRow(bool above)
+        {
+            ListAutocomplete.VerticalAlignment = above
+                ? VerticalAlignment.Top
+                : VerticalAlignment.Bottom;
+
+            ListAutocomplete.Margin = new Thickness(0);
+            ListAutocomplete.BorderThickness = new Thickness(1, above ? 0 : 1, 1, above ? 1 : 0);
+            ListAutocomplete.CornerRadius = new CornerRadius(above ? 0 : 2, above ? 0 : 2, above ? 2 : 0, above ? 2 : 0);
+
+            CaptionBorder.BorderThickness = new Thickness(0, 1, 0, above ? 1 : 0);
+
+            return above ? 0 : 2;
+        }
+
+        private void More_ContextRequested(object sender, RoutedEventArgs e)
+        {
+            var flyout = new MenuFlyout();
+
+            if (StarCount > 0)
+            {
+                flyout.CreateFlyoutItem(MakeContentPaid, Strings.PaidMediaPriceButton, Icons.Coin);
+            }
+            else
+            {
+                if (_documentAllowed && IsMediaAllowed)
+                {
+                    var withCompressionText =
+                        Items.All(x => x is StoragePhoto)
+                        ? Items.Count != 1 ? Strings.SendAsPhotos : Strings.SendAsPhoto
+                        : Items.All(x => x is StorageVideo) ? Items.Count != 1 ? Strings.SendAsVideo : Strings.SendAsVideos
+                        : Strings.SendAsMedia;
+
+                    flyout.CreateFlyoutItem(ToggleIsFilesSelected, false, withCompressionText, IsFilesSelected ? null : Icons.Checkmark, Windows.System.VirtualKey.P, Windows.System.VirtualKeyModifiers.Control);
+                    flyout.CreateFlyoutItem(ToggleIsFilesSelected, true, Items.Count != 1 ? Strings.SendAsFiles : Strings.SendAsFile, IsFilesSelected ? Icons.Checkmark : null, Windows.System.VirtualKey.F, Windows.System.VirtualKeyModifiers.Control);
+                }
+
+                if (IsMediaSelected && Items.All(x => x is StoragePhoto or StorageVideo))
+                {
+                    flyout.CreateFlyoutSeparator();
+
+                    flyout.CreateFlyoutItem(ToggleSendWithSpoiler, SendWithSpoiler ? Strings.DisablePhotoSpoiler : Strings.EnablePhotoSpoiler, Icons.SpoilerMedia);
+                    flyout.CreateFlyoutItem(ToggleShowCaptionAboveMedia, ShowCaptionAboveMedia ? Strings.CaptionBelow : Strings.CaptionAbove, ShowCaptionAboveMedia ? Icons.MoveDown : Icons.MoveUp);
+
+                    if (HasPaidMediaAllowed)
+                    {
+                        flyout.CreateFlyoutItem(MakeContentPaid, Strings.PaidMediaButton, Icons.Coin);
+                    }
+                }
+            }
+
+            flyout.ShowAt(sender as DependencyObject, FlyoutPlacementMode.BottomEdgeAlignedRight);
+        }
+
+        private void ToggleIsFilesSelected(bool value)
+        {
+            IsFilesSelected = value;
+            UpdateView();
+            UpdatePanel();
+
+            if (value)
+            {
+                ShowCaptionAboveMedia = false;
+            }
+        }
+
+        private void ToggleShowCaptionAboveMedia()
+        {
+            ShowCaptionAboveMedia = !ShowCaptionAboveMedia;
+        }
+
+        private void ToggleSendWithSpoiler()
+        {
+            SendWithSpoiler = !SendWithSpoiler;
+            UpdatePanel();
+        }
+
+        private async void MakeContentPaid()
+        {
+            var popup = new InputTeachingTip(InputPopupType.Stars);
+            popup.Value = StarCount;
+            popup.Maximum = ViewModel.ClientService.Options.PaidMediaMessageStarCountMax;
+
+            popup.Title = Strings.PaidContentTitle;
+            popup.Header = Strings.PaidContentPriceTitle;
+            popup.ActionButtonContent = Strings.PaidContentUpdateButton;
+            popup.ActionButtonStyle = BootStrapper.Current.Resources["AccentButtonStyle"] as Style;
+            popup.CloseButtonContent = Strings.Cancel;
+            popup.PreferredPlacement = TeachingTipPlacementMode.Center;
+            popup.IsLightDismissEnabled = true;
+            popup.ShouldConstrainToRootBounds = true;
+
+            //popup.Validating += (s, args) =>
+            //{
+            //    if (args.Value < ClientService.Options.StarWithdrawalCountMin)
+            //    {
+            //        ToastPopup.Show(Locale.Declension(Strings.R.BotStarsWithdrawMinLimit, ClientService.Options.StarWithdrawalCountMin), ToastPopupIcon.Info);
+            //        args.Cancel = true;
+            //    }
+            //};
+
+            var confirm = await popup.ShowAsync();
+            if (confirm != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            StarCount = (long)popup.Value;
+            IsFilesSelected = false;
+            IsAlbum = true;
+
+            UpdateView();
+            UpdatePanel();
+        }
+
+        public bool CompareItems(StorageMedia oldItem, StorageMedia newItem)
+        {
+            if (oldItem is StorageAlbum oldAlbum && newItem is StorageAlbum newAlbum)
+            {
+                if (oldAlbum.Media.Count != newAlbum.Media.Count)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < oldAlbum.Media.Count; i++)
+                {
+                    if (CompareItems(oldAlbum.Media[i], newAlbum.Media[i]))
+                    {
+                        continue;
+                    }
+
+                    return false;
+                }
+
+                return true;
+            }
+            if (oldItem is StoragePhoto oldPhoto && newItem is StoragePhoto newPhoto)
+            {
+                // Compare crop etc
+                return oldPhoto.File.Path == newPhoto.File.Path;
+            }
+            else if (oldItem is StorageVideo oldVideo && newItem is StorageVideo newVideo)
+            {
+                // Compare crop etc
+                return oldVideo.File.Path == newVideo.File.Path;
+            }
+            else
+            {
+                return oldItem.File?.Path == newItem.File?.Path
+                    && oldItem.GetType() == newItem.GetType();
+            }
+        }
+
+        public void UpdateItem(StorageMedia oldItem, StorageMedia newItem)
+        {
+            if (oldItem is StorageAlbum album)
+            {
+                var container = ScrollingHost.ContainerFromItem(album) as SelectorItem;
+                var content = container?.ContentTemplateRoot as Grid;
+
+                if (content != null && content.Children[0] is StorageAlbumPanel panel)
+                {
+                    album.Invalidate();
+                    panel.Invalidate();
+                }
+            }
+        }
     }
 
-    public class SendFilesAlbumPanel : Grid
+    public class StorageMediaTemplateSelector : DataTemplateSelector
     {
-        public const double ITEM_MARGIN = 2;
-        public const double MAX_WIDTH = 320 + ITEM_MARGIN;
-        public const double MAX_HEIGHT = 420 + ITEM_MARGIN;
+        public DataTemplate FileTemplate { get; set; }
+
+        public DataTemplate AlbumTemplate { get; set; }
+
+        protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
+        {
+            return item switch
+            {
+                StorageAlbum => AlbumTemplate,
+                _ => FileTemplate
+            };
+        }
+    }
+
+    public sealed partial class StorageAlbumPanel : Grid
+    {
+        private StorageAlbum _album;
+
+        public StorageAlbumPanel()
+        {
+            // I don't like this much, but it's the easier way to add margins between children
+            Margin = new Thickness(0, 0, -MessageAlbum.ITEM_MARGIN, -MessageAlbum.ITEM_MARGIN);
+        }
 
         private (Rect[], Size) _positions;
-        private ((Rect, MosaicItemPosition)[], Size)? _positionsBase;
 
-        public List<Size> Sizes;
+        public void Invalidate()
+        {
+            _positions = default;
+
+            InvalidateMeasure();
+            InvalidateArrange();
+        }
 
         protected override Size MeasureOverride(Size availableSize)
         {
-            var sizes = Sizes;
-            if (sizes == null || sizes.Count == 1)
+            var album = _album;
+            if (album == null || album.Media.Count < 1)
             {
                 return base.MeasureOverride(availableSize);
             }
 
-            var positions = GetPositionsForWidth(availableSize.Width);
+            var positions = album.GetPositionsForWidth(availableSize.Width);
 
             for (int i = 0; i < Math.Min(positions.Item1.Length, Children.Count); i++)
             {
@@ -838,8 +1414,14 @@ namespace Telegram.Views.Popups
 
         protected override Size ArrangeOverride(Size finalSize)
         {
+            var album = _album;
+            if (album == null || album.Media.Count < 1)
+            {
+                return base.ArrangeOverride(finalSize);
+            }
+
             var positions = _positions;
-            if (positions.Item1 == null || positions.Item1.Length == 1)
+            if (positions.Item1 == null || positions.Item1.Length < 1)
             {
                 return base.ArrangeOverride(finalSize);
             }
@@ -849,44 +1431,54 @@ namespace Telegram.Views.Popups
                 Children[i].Arrange(positions.Item1[i]);
             }
 
-            return positions.Item2;
+            return finalSize;
         }
 
-        public void Invalidate()
+        public event EventHandler<StorageMedia> ItemClick;
+
+        public void UpdateMessage(StorageAlbum album)
         {
-            _positionsBase = null;
+            _album = album;
+            Children.Clear();
 
-            InvalidateMeasure();
-            InvalidateArrange();
-        }
-
-        private (Rect[], Size) GetPositionsForWidth(double w)
-        {
-            var positions = _positionsBase ??= MosaicAlbumLayout.chatMessageBubbleMosaicLayout(new Size(MAX_WIDTH, MAX_HEIGHT), Sizes);
-
-            var ratio = w / MAX_WIDTH;
-            var rects = new Rect[positions.Item1.Length];
-
-            for (int i = 0; i < rects.Length; i++)
+            foreach (var pos in album.Media)
             {
-                var rect = positions.Item1[i].Item1;
+                var element = new Button
+                {
+                    ContentTemplate = ItemTemplate,
+                    Content = pos,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    VerticalContentAlignment = VerticalAlignment.Stretch,
+                    MinWidth = 0,
+                    MinHeight = 0,
+                    MaxWidth = MessageAlbum.MAX_WIDTH,
+                    MaxHeight = MessageAlbum.MAX_HEIGHT,
+                    Margin = new Thickness(0, 0, MessageAlbum.ITEM_MARGIN, MessageAlbum.ITEM_MARGIN),
+                    Padding = new Thickness(0),
+                    Style = BootStrapper.Current.Resources["EmptyButtonStyle"] as Style
+                };
 
-                var width = Math.Max(0, rect.Width * ratio);
-                var height = Math.Max(0, rect.Height * ratio);
+                element.Click += Element_Click;
 
-                width = double.IsNaN(width) ? 0 : width;
-                height = double.IsNaN(height) ? 0 : height;
-
-                rects[i] = new Rect(rect.X * ratio, rect.Y * ratio, width, height);
+                Children.Add(element);
             }
-
-            var finalWidth = Math.Max(0, positions.Item2.Width * ratio);
-            var finalHeight = Math.Max(0, positions.Item2.Height * ratio);
-
-            finalWidth = double.IsNaN(finalWidth) ? 0 : finalWidth;
-            finalHeight = double.IsNaN(finalHeight) ? 0 : finalHeight;
-
-            return (rects, new Size(finalWidth, finalHeight));
         }
+
+        private void Element_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button element && element.Content is StorageMedia item)
+            {
+                ItemClick?.Invoke(sender, item);
+            }
+        }
+
+        public DataTemplate ItemTemplate
+        {
+            get { return (DataTemplate)GetValue(ItemTemplateProperty); }
+            set { SetValue(ItemTemplateProperty, value); }
+        }
+
+        public static readonly DependencyProperty ItemTemplateProperty =
+            DependencyProperty.Register("ItemTemplate", typeof(DataTemplate), typeof(StorageAlbumPanel), new PropertyMetadata(null));
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,7 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Telegram.Controls;
+using Telegram.Navigation.Services;
 using Telegram.Td.Api;
 using Windows.ApplicationModel.ExtendedExecution;
 using Windows.Devices.Enumeration;
@@ -35,12 +35,12 @@ namespace Telegram.Services
         Task<Geolocator> StartTrackingAsync();
         void StopTracking();
 
-        Task<Location> GetPositionAsync();
+        Task<Location> GetPositionAsync(INavigationService navigation);
 
         Task<GetVenuesResult> GetVenuesAsync(long chatId, double latitude, double longitude, string query = null, string offset = null);
     }
 
-    public class LocationService : ILocationService
+    public partial class LocationService : ILocationService
     {
         private readonly IClientService _clientService;
 
@@ -100,11 +100,11 @@ namespace Telegram.Services
             StopTracking();
         }
 
-        public async Task<Location> GetPositionAsync()
+        public async Task<Location> GetPositionAsync(INavigationService navigation)
         {
             try
             {
-                var accessStatus = await CheckDeviceAccessAsync();
+                var accessStatus = await CheckDeviceAccessAsync(navigation);
                 if (accessStatus)
                 {
                     var geolocator = new Geolocator { DesiredAccuracy = PositionAccuracy.Default };
@@ -121,7 +121,7 @@ namespace Telegram.Services
             return null;
         }
 
-        public async Task<bool> CheckDeviceAccessAsync()
+        public async Task<bool> CheckDeviceAccessAsync(INavigationService navigation)
         {
             var access = DeviceAccessInformation.CreateFromDeviceClass(DeviceClass.Location);
             if (access.CurrentStatus == DeviceAccessStatus.Unspecified)
@@ -138,7 +138,7 @@ namespace Telegram.Services
             {
                 var message = Strings.PermissionNoLocationPosition;
 
-                var confirm = await MessagePopup.ShowAsync(message, Strings.AppName, Strings.PermissionOpenSettings, Strings.OK);
+                var confirm = await navigation.ShowPopupAsync(message, Strings.AppName, Strings.PermissionOpenSettings, Strings.OK);
                 if (confirm == ContentDialogResult.Primary)
                 {
                     await Launcher.LaunchUriAsync(new Uri("ms-settings:appsfeatures-app"));

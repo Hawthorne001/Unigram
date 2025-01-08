@@ -1,7 +1,9 @@
-﻿using Microsoft.Graphics.Canvas.Geometry;
+﻿using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Telegram.Common;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Hosting;
@@ -18,6 +20,33 @@ namespace Windows.UI.Xaml.Hosting
             }
 
             return ElementCompositionPreview.GetElementVisual(element);
+        }
+
+        public static void SetElementChildVisual(UIElement element, Visual visual)
+        {
+            try
+            {
+                ElementCompositionPreview.SetElementChildVisual(element, visual);
+            }
+            catch
+            {
+                // TODO
+            }
+        }
+
+        public static CanvasDevice GetSharedDevice()
+        {
+            try
+            {
+                // This often throws the following exception:
+                // The GPU device instance has been suspended. Use GetDeviceRemovedReason to determine the appropriate action. (Exception from HRESULT: 0x887A0005)
+                // TODO: it's unclear when and why this happens, nor if this is a good solution to the problem.
+                return CanvasDevice.GetSharedDevice();
+            }
+            catch
+            {
+                return CanvasDevice.GetSharedDevice(true);
+            }
         }
     }
 }

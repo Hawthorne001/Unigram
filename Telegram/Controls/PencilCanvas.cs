@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -21,7 +21,7 @@ using Windows.UI.Xaml.Input;
 namespace Telegram.Controls
 {
     [TemplatePart(Name = "Canvas", Type = typeof(CanvasControl))]
-    public class PencilCanvas : Control
+    public partial class PencilCanvas : Control
     {
         private static readonly Color? ERASING_STROKE = null;
         private static readonly float ERASING_STROKE_THICKNESS = 20;
@@ -268,7 +268,7 @@ namespace Telegram.Controls
         Eraser
     }
 
-    public sealed class SmoothPathBuilder
+    public sealed partial class SmoothPathBuilder
     {
         private List<Vector2> _controlPoints;
         private List<Vector2> _path;

@@ -1,12 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using System.Globalization;
-using Telegram.Navigation;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.UI.Xaml;
@@ -16,7 +15,7 @@ using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class VenueContent : Control, IContent
+    public sealed partial class VenueContent : Control, IContent
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -63,8 +62,8 @@ namespace Telegram.Controls.Messages.Content
                 return;
             }
 
-            var width = 320 * WindowContext.Current.RasterizationScale;
-            var height = 200 * WindowContext.Current.RasterizationScale;
+            var width = 320 * XamlRoot.RasterizationScale;
+            var height = 200 * XamlRoot.RasterizationScale;
 
             var latitude = venue.Venue.Location.Latitude.ToString(CultureInfo.InvariantCulture);
             var longitude = venue.Venue.Location.Longitude.ToString(CultureInfo.InvariantCulture);

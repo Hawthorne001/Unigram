@@ -30,6 +30,20 @@
             <RowDefinition Height="Auto" />
             <RowDefinition />
         </Grid.RowDefinitions>
+        <!-- TODO: Hide in forward popup -->
+        <controls:TopNavView x:Name="ChatFolders"
+                             SelectedIndex="{x:Bind ViewModel.SelectedTab, Mode=TwoWay}"
+                             ScrollViewer.IsHorizontalScrollChainingEnabled="False"
+                             FocusFollowsSingleSelection="True"
+                             SingleSelectionFollowsFocus="False"
+                             Height="40"
+                             BorderBrush="{ThemeResource SettingsItemBorderBrush}"
+                             BorderThickness="0,0,0,0">
+            <controls:TopNavViewItem Content="{CustomResource FilterChats}" />
+            <controls:TopNavViewItem Content="{CustomResource FilterChannels}" />
+            <controls:TopNavViewItem Content="{CustomResource AppsTab}" />
+        </controls:TopNavView>
+
         <!--<ListView x:Load="False"
                                           x:Name="PippoFranco"
                                           SelectionMode="None"
@@ -70,7 +84,7 @@
                                 </ListView>-->
 
         <ListView x:Name="ScrollingHost"
-                  ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                  ItemsSource="{x:Bind ViewModel.ItemsView, Mode=OneWay}"
                   IsItemClickEnabled="True"
                   SelectionMode="Single"
                   ItemClick="OnItemClick"
@@ -86,19 +100,17 @@
                                            ChoosingItemContainer="TopChats_ChoosingItemContainer"
                                            ContainerContentChanging="TopChats_ContainerContentChanging"
                                            ItemsSource="{x:Bind ViewModel.TopChats}"
-                                           Style="{StaticResource HorizontalListViewStyle}"
-                                           Padding="4,0">
+                                           Style="{StaticResource HorizontalListViewStyle}">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Width="64"
+                                <StackPanel Width="72"
                                             Padding="0,12"
                                             Background="Transparent">
                                     <Grid Width="48"
                                           Height="48"
-                                          Margin="8,0">
+                                          Margin="12,0">
                                         <controls:ProfilePicture Width="48"
-                                                                 Height="48"
-                                                                 IsEnabled="False" />
+                                                                 Height="48" />
                                         <controls:BadgeControl VerticalAlignment="Top"
                                                                HorizontalAlignment="Right" />
                                         <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
@@ -118,7 +130,7 @@
                                     <TextBlock Margin="0,4,0,0"
                                                TextAlignment="Center"
                                                TextWrapping="NoWrap"
-                                               TextTrimming="WordEllipsis"
+                                               TextTrimming="CharacterEllipsis"
                                                FontFamily="{ThemeResource EmojiThemeFontFamily}"
                                                Style="{StaticResource CaptionTextBlockStyle}" />
                                 </StackPanel>
@@ -189,5 +201,38 @@
                 <TransitionCollection />
             </ListView.ItemContainerTransitions>
         </ListView>
+
+        <Grid x:Name="EmptyState"
+              x:Load="{x:Bind ViewModel.IsEmpty, Mode=OneWay}"
+              VerticalAlignment="Center"
+              Margin="0,-96,0,0"
+              Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition />
+            </Grid.RowDefinitions>
+            <controls:AnimatedImage Source="ms-appx:///Assets/Animations/EmptyContacts.tgs"
+                                    IsCachingEnabled="False"
+                                    AutoPlay="True"
+                                    FrameSize="140,140"
+                                    DecodeFrameType="Logical"
+                                    LoopCount="1"
+                                    Width="140"
+                                    Height="140"
+                                    Margin="0,0,0,12" />
+
+            <TextBlock Text="{CustomResource NoResult}"
+                       Style="{StaticResource PopupTextBlockStyle}"
+                       TextAlignment="Center"
+                       VerticalAlignment="Top"
+                       Margin="0,0,0,8"
+                       Grid.Row="1" />
+
+            <TextBlock Loaded="EmptyState_Loaded"
+                       Style="{StaticResource BodyTextBlockStyle}"
+                       TextAlignment="Center"
+                       Grid.Row="2" />
+        </Grid>
     </Grid>
 </UserControl>

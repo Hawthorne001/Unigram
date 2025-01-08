@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -27,7 +27,7 @@ using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls.Messages
 {
-    public class MessageReplyPattern : Control
+    public partial class MessageReplyPattern : Control
     {
         private static readonly Vector4[] _clones = new[]
         {
@@ -103,7 +103,7 @@ namespace Telegram.Controls.Messages
         #endregion
     }
 
-    public sealed class MessageReply : MessageReferenceBase
+    public sealed partial class MessageReply : MessageReferenceBase
     {
         public MessageReply()
         {
@@ -300,7 +300,7 @@ namespace Telegram.Controls.Messages
                     AccentDash.Stripe1 = null;
                     AccentDash.Stripe2 = null;
 
-                    Margin = new Thickness(-8, -6, -8, -6);
+                    Margin = new Thickness(-8, -2, -8, -4);
                 }
                 else if ((_accent != accent || _light) && !white)
                 {
@@ -437,7 +437,7 @@ namespace Telegram.Controls.Messages
         }
     }
 
-    public class MessageReplyAutomationPeer : HyperlinkButtonAutomationPeer
+    public partial class MessageReplyAutomationPeer : HyperlinkButtonAutomationPeer
     {
         private readonly MessageReply _owner;
 

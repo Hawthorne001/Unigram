@@ -74,9 +74,6 @@
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\StaticThreads.cpp">
       <Filter>tgcalls</Filter>
     </ClCompile>
-    <ClCompile Include="..\Libraries\tgcalls\tgcalls\FakeVideoTrackSource.cpp">
-      <Filter>tgcalls</Filter>
-    </ClCompile>
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\third-party\json11.cpp">
       <Filter>tgcalls\third-party</Filter>
     </ClCompile>
@@ -147,12 +144,6 @@
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\v2\SignalingEncryption.cpp">
       <Filter>tgcalls\v2</Filter>
     </ClCompile>
-    <ClCompile Include="..\Libraries\tgcalls\tgcalls\v2_4_0_0\InstanceV2_4_0_0Impl.cpp">
-      <Filter>tgcalls\v2_4_0_0</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Libraries\tgcalls\tgcalls\v2_4_0_0\Signaling_4_0_0.cpp">
-      <Filter>tgcalls\v2_4_0_0</Filter>
-    </ClCompile>
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\v2\InstanceV2ReferenceImpl.cpp">
       <Filter>tgcalls\v2</Filter>
     </ClCompile>
@@ -183,6 +174,9 @@
     <ClCompile Include="..\Libraries\tgcalls\tgcalls\v2\DirectNetworkingImpl.cpp">
       <Filter>tgcalls\v2</Filter>
     </ClCompile>
+    <ClCompile Include="VoipVideoOutputSink.cpp" />
+    <ClCompile Include="LoopbackCapture.cpp" />
+    <ClCompile Include="MediaChannelDescriptionsRequestedEventArgs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -255,7 +249,6 @@
       <Filter>tgcalls\platform</Filter>
     </ClInclude>
     <ClInclude Include="VoipVideoCapture.h" />
-    <ClInclude Include="VoipVideoRenderer.h" />
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\group\GroupInstanceImpl.h">
       <Filter>tgcalls\group</Filter>
     </ClInclude>
@@ -275,9 +268,6 @@
       <Filter>tgcalls</Filter>
     </ClInclude>
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\AudioFrame.h">
-      <Filter>tgcalls</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Libraries\tgcalls\tgcalls\FakeVideoTrackSource.h">
       <Filter>tgcalls</Filter>
     </ClInclude>
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\third-party\json11.hpp">
@@ -368,12 +358,6 @@
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\v2\SignalingEncryption.h">
       <Filter>tgcalls\v2</Filter>
     </ClInclude>
-    <ClInclude Include="..\Libraries\tgcalls\tgcalls\v2_4_0_0\InstanceV2_4_0_0Impl.h">
-      <Filter>tgcalls\v2_4_0_0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\Libraries\tgcalls\tgcalls\v2_4_0_0\Signaling_4_0_0.h">
-      <Filter>tgcalls\v2_4_0_0</Filter>
-    </ClInclude>
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\v2\InstanceV2ReferenceImpl.h">
       <Filter>tgcalls\v2</Filter>
     </ClInclude>
@@ -410,6 +394,10 @@
     <ClInclude Include="..\Libraries\tgcalls\tgcalls\DirectConnectionChannel.h">
       <Filter>tgcalls</Filter>
     </ClInclude>
+    <ClInclude Include="VoipVideoOutputSink.h" />
+    <ClInclude Include="VoipVideoOutput.h" />
+    <ClInclude Include="LoopbackCapture.h" />
+    <ClInclude Include="MediaChannelDescriptionsRequestedEventArgs.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VoipManager.rc" />
@@ -425,10 +413,12 @@
     <Midl Include="VoipGroupDescriptor.idl" />
     <Midl Include="GroupNetworkStateChangedEventArgs.idl" />
     <Midl Include="BroadcastPartRequestedEventArgs.idl" />
-    <Midl Include="VoipVideoRendererToken.idl" />
     <Midl Include="VoipScreenCapture.idl" />
     <Midl Include="VoipVideoChannelInfo.idl" />
     <Midl Include="BroadcastTimeRequestedEventArgs.idl" />
+    <Midl Include="VoipVideoOutputSink.idl" />
+    <Midl Include="FrameReceivedEventArgs.idl" />
+    <Midl Include="MediaChannelDescriptionsRequestedEventArgs.idl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -472,5 +462,8 @@
     <Filter Include="tgcalls\utils">
       <UniqueIdentifier>{ac972e92-c547-4d44-9376-7044e6f1a914}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="$(MSBuildThisFileDirectory)..\..\natvis\wil.natvis" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,10 +22,12 @@ namespace Telegram.Controls.Chats
         ServiceUnread,
         ServicePhoto,
         ServiceBackground,
-        ServiceGift
+        ServiceGift,
+        ServiceGiftCode,
+        ServiceUpgradedGift,
     }
 
-    public class ChatHistoryViewItem : ListViewItemEx
+    public partial class ChatHistoryViewItem : ListViewItemEx
     {
         private readonly ChatHistoryView _owner;
         private ChatHistoryViewItemType _typeName;
@@ -48,7 +50,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class AccessibleChatListViewItem : ListViewItem
+    public partial class AccessibleChatListViewItem : ListViewItem
     {
         private readonly IClientService _clientService;
 
@@ -68,7 +70,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class TableAccessibleChatListViewItem : TableListViewItem
+    public partial class TableAccessibleChatListViewItem : TableListViewItem
     {
         private readonly IClientService _clientService;
 
@@ -88,7 +90,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatListViewAutomationPeer : ListViewItemAutomationPeer
+    public partial class ChatListViewAutomationPeer : ListViewItemAutomationPeer
     {
         private readonly ListViewItem _owner;
         private readonly IClientService _clientService;
@@ -136,7 +138,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatGridViewItem : GridViewItem
+    public partial class ChatGridViewItem : GridViewItem
     {
         private readonly IClientService _clientService;
 
@@ -156,7 +158,7 @@ namespace Telegram.Controls.Chats
         }
     }
 
-    public class ChatGridViewAutomationPeer : GridViewItemAutomationPeer
+    public partial class ChatGridViewAutomationPeer : GridViewItemAutomationPeer
     {
         private readonly ChatGridViewItem _owner;
         private readonly IClientService _clientService;

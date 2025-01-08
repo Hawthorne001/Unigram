@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,15 +8,15 @@ using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Effects;
 using System;
 using Telegram.Common;
+using Telegram.Navigation;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Core;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Media
 {
-    public class SolidGaussianBrush : XamlCompositionBrushBase
+    public partial class SolidGaussianBrush : XamlCompositionBrushBase
     {
         private bool m_isConnected;
         private CompositionBrush m_brush;
@@ -65,7 +65,7 @@ namespace Telegram.Controls.Media
             {
                 if (!PowerSavingPolicy.AreMaterialsEnabled)
                 {
-                    m_brush = Window.Current.Compositor.CreateColorBrush(FallbackColor);
+                    m_brush = BootStrapper.Current.Compositor.CreateColorBrush(FallbackColor);
                     CompositionBrush = m_brush;
                 }
                 else
@@ -97,8 +97,8 @@ namespace Telegram.Controls.Media
                     compositeEffect.Sources.Add(saturationEffect);
                     compositeEffect.Sources.Add(tintColorEffect);
 
-                    var effectFactory = Window.Current.Compositor.CreateEffectFactory(compositeEffect);
-                    var backdrop = Window.Current.Compositor.CreateBackdropBrush();
+                    var effectFactory = BootStrapper.Current.Compositor.CreateEffectFactory(compositeEffect);
+                    var backdrop = BootStrapper.Current.Compositor.CreateBackdropBrush();
 
                     var brush = effectFactory.CreateBrush();
                     brush.SetSourceParameter("Backdrop", backdrop);

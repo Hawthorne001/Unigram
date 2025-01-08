@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,7 +17,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsPasscodeViewModel : ViewModelBase, IHandle
+    public partial class SettingsPasscodeViewModel : ViewModelBase, IHandle
     {
         private readonly IPasscodeService _passcodeService;
 
@@ -100,7 +100,7 @@ namespace Telegram.ViewModels.Settings
         {
             if (_passcodeService.IsEnabled)
             {
-                var confirm = await ShowPopupAsync(Strings.DisablePasscodeConfirmMessage, Strings.DisablePasscode, Strings.DisablePasscodeTurnOff, Strings.Cancel, true);
+                var confirm = await ShowPopupAsync(Strings.DisablePasscodeConfirmMessage, Strings.DisablePasscode, Strings.DisablePasscodeTurnOff, Strings.Cancel, destructive: true);
                 if (confirm == ContentDialogResult.Primary)
                 {
                     _passcodeService.Reset();

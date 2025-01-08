@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,7 +9,7 @@ using System;
 namespace Telegram.Common
 {
     // https://github.com/DrKLO/Telegram/blob/master/TMessagesProj/src/main/java/org/telegram/messenger/time/SunDate.java
-    public class SunDate
+    public partial class SunDate
     {
         private const double DEGRAD = Math.PI / 180.0;
         private const double RADEG = 180.0 / Math.PI;

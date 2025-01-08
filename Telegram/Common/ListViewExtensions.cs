@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -35,7 +35,7 @@ namespace Telegram.Common
 
             // calculate the position object in order to know how much to scroll to
             var transform = selectorItem.TransformToVisual((UIElement)scrollViewer.Content);
-            var position = transform.TransformPoint(new Point(0, 0));
+            var position = transform.TransformPoint(new Point());
 
             if (scrollViewer.VerticalScrollMode == ScrollMode.Disabled)
             {
@@ -179,6 +179,17 @@ namespace Telegram.Common
             //}
 
             return listViewBase.GetChild<ScrollViewer>();
+        }
+
+        public static bool ChangeView(this ListViewBase listViewBase, double? horizontalOffset, double? verticalOffset, float? zoomFactor, bool disableAnimation = false)
+        {
+            var scrollViewer = listViewBase.GetScrollViewer();
+            if (scrollViewer != null)
+            {
+                return scrollViewer.ChangeView(horizontalOffset, verticalOffset, zoomFactor, disableAnimation);
+            }
+
+            return false;
         }
 
         public static void SetVerticalPadding(this ScrollViewer scrollViewer, double padding)

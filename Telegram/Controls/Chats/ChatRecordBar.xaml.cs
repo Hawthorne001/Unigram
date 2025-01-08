@@ -1,15 +1,26 @@
 ﻿using System;
 using System.Numerics;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Composition;
 using Telegram.Controls.Media;
+using Telegram.Native;
+using Telegram.Navigation;
 using Telegram.Td.Api;
+using Windows.Graphics.Imaging;
+using Windows.Media.Capture;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace Telegram.Controls.Chats
 {
@@ -24,11 +35,14 @@ namespace Telegram.Controls.Chats
 
         private readonly CompositionBlobVisual _blobVisual;
 
+        private Popup _videoPopup;
+        private CaptureElement _videoElement;
+
         public ChatRecordBar()
         {
             InitializeComponent();
 
-            var visual = DropShadowEx.Attach(ArrowShadow, 2);
+            var visual = VisualUtilities.DropShadow(ArrowShadow, 2);
             visual.Offset = new Vector3(0, 1, 0);
 
             ElementCompositionPreview.SetIsTranslationEnabled(Ellipse, true);
@@ -83,7 +97,7 @@ namespace Telegram.Controls.Chats
             ControlledButton.StopRecording(true);
         }
 
-        private void VoiceButton_QuantumProcessed(object sender, float amplitude)
+        private void OnQuantumProcessed(object sender, float amplitude)
         {
             _blobVisual.UpdateLevel(amplitude * 40);
         }
@@ -109,14 +123,83 @@ namespace Telegram.Controls.Chats
 
             _controlledButton = value;
 
-            _controlledButton.RecordingStarted += VoiceButton_RecordingStarted;
-            _controlledButton.RecordingStopped += VoiceButton_RecordingStopped;
-            _controlledButton.RecordingLocked += VoiceButton_RecordingLocked;
-            _controlledButton.QuantumProcessed += VoiceButton_QuantumProcessed;
-            _controlledButton.ManipulationDelta += VoiceButton_ManipulationDelta;
+            _controlledButton.RecordingStarting += OnRecordingStarting;
+            _controlledButton.RecordingStarted += OnRecordingStarted;
+            _controlledButton.RecordingStopped += OnRecordingStopped;
+            _controlledButton.RecordingLocked += OnRecordingLocked;
+            _controlledButton.QuantumProcessed += OnQuantumProcessed;
+            _controlledButton.ManipulationDelta += OnManipulationDelta;
         }
 
-        private void VoiceButton_RecordingStarted(object sender, EventArgs e)
+        private async void OnRecordingStarted(object sender, EventArgs e)
+        {
+            try
+            {
+                if (sender is not MediaCapture mediaCapture || mediaCapture.MediaCaptureSettings.StreamingCaptureMode == StreamingCaptureMode.Audio)
+                {
+                    return;
+                }
+
+                _videoElement = new CaptureElement
+                {
+                    Source = mediaCapture,
+                    Stretch = Stretch.UniformToFill,
+                    Width = 272,
+                    Height = 272,
+                    RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),
+                    RenderTransform = new ScaleTransform
+                    {
+                        ScaleX = -1
+                    }
+                };
+
+                var videoRoot = new Grid
+                {
+                    Width = 272,
+                    Height = 272,
+                    Background = await LoadLastFrameAsync(),
+                    CornerRadius = new CornerRadius(272 / 2),
+                    Translation = new Vector3(0, 0, 128),
+                    Shadow = new ThemeShadow()
+                };
+
+                videoRoot.Children.Add(_videoElement);
+                videoRoot.Children.Add(new SelfDestructTimer
+                {
+                    Width = 272,
+                    Height = 272,
+                    Center = 272 / 2,
+                    Radius = 272 / 2 - 3,
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    Maximum = 60,
+                    Value = DateTime.Now.AddMinutes(1)
+                });
+
+                _videoPopup = new Popup
+                {
+                    XamlRoot = XamlRoot,
+                    IsHitTestVisible = false,
+                    Child = new Border
+                    {
+                        Width = XamlRoot.Size.Width,
+                        Height = XamlRoot.Size.Height,
+                        Background = new SolidColorBrush(ActualTheme == ElementTheme.Light
+                                ? Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)
+                                : Color.FromArgb(0x99, 0x00, 0x00, 0x00)),
+                        Child = videoRoot
+                    }
+                };
+
+                _videoPopup.IsOpen = true;
+                _ = mediaCapture.StartPreviewAsync();
+            }
+            catch
+            {
+                // As everything happens asynchronously, the media capture could be already disposed
+            }
+        }
+
+        private void OnRecordingStarting(object sender, EventArgs e)
         {
             // TODO: video message
             Visibility = Visibility.Visible;
@@ -132,6 +215,15 @@ namespace Telegram.Controls.Chats
                 _blobVisual.Clear();
             }
 
+            if (_videoPopup != null)
+            {
+                _videoPopup.IsOpen = false;
+                _videoPopup = null;
+
+                _videoElement.Source = null;
+                _videoElement = null;
+            }
+
             ChatRecordPopup.IsOpen = true;
             ChatRecordGlyph.Text = ControlledButton.Mode == ChatRecordMode.Video
                 ? Icons.VideoNoteFilled24
@@ -142,28 +234,30 @@ namespace Telegram.Controls.Chats
 
             _slideVisual.Opacity = 1;
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var compositor = BootStrapper.Current.Compositor;
+
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 _elapsedTimer.Start();
                 AttachExpression();
             };
 
-            var slideAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var slideAnimation = compositor.CreateScalarKeyFrameAnimation();
             slideAnimation.InsertKeyFrame(0, slideWidth + 36);
             slideAnimation.InsertKeyFrame(1, 0);
             slideAnimation.Duration = TimeSpan.FromMilliseconds(300);
 
-            var elapsedAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var elapsedAnimation = compositor.CreateScalarKeyFrameAnimation();
             elapsedAnimation.InsertKeyFrame(0, -elapsedWidth);
             elapsedAnimation.InsertKeyFrame(1, 0);
             elapsedAnimation.Duration = TimeSpan.FromMilliseconds(300);
 
-            var visibleAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var visibleAnimation = compositor.CreateScalarKeyFrameAnimation();
             visibleAnimation.InsertKeyFrame(0, 0);
             visibleAnimation.InsertKeyFrame(1, 1);
 
-            var ellipseAnimation = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var ellipseAnimation = compositor.CreateVector3KeyFrameAnimation();
             ellipseAnimation.InsertKeyFrame(0, new Vector3(56f / 96f));
             ellipseAnimation.InsertKeyFrame(1, new Vector3(1));
             ellipseAnimation.Duration = TimeSpan.FromMilliseconds(200);
@@ -175,13 +269,83 @@ namespace Telegram.Controls.Chats
 
             batch.End();
 
-            StartTyping?.Invoke(this, ControlledButton.IsChecked.Value ? new ChatActionRecordingVideoNote() : new ChatActionRecordingVoiceNote());
+            StartTyping?.Invoke(this, ControlledButton.IsChecked.Value
+                ? new ChatActionRecordingVideoNote()
+                : new ChatActionRecordingVoiceNote());
         }
 
         public event EventHandler<ChatAction> StartTyping;
         public event EventHandler CancelTyping;
 
-        private void VoiceButton_RecordingStopped(object sender, EventArgs e)
+        private async Task<Brush> LoadLastFrameAsync()
+        {
+            try
+            {
+                var file = await ApplicationData.Current.TemporaryFolder.TryGetItemAsync("LastVideoFrame.png");
+                if (file != null)
+                {
+                    var bitmap = new BitmapImage();
+
+                    using (var stream = new InMemoryRandomAccessStream())
+                    {
+                        try
+                        {
+                            await Task.Run(() => PlaceholderImageHelper.Current.DrawThumbnailPlaceholder(file.Path, 3, stream));
+                            await bitmap.SetSourceAsync(stream);
+                        }
+                        catch { }
+                    }
+
+                    return new ImageBrush
+                    {
+                        ImageSource = bitmap
+                    };
+                }
+            }
+            catch
+            {
+                // Catching as this would break the UI otherwise
+            }
+
+            return new SolidColorBrush(Colors.Black);
+        }
+
+        private async Task SaveLastFrameAsync()
+        {
+            try
+            {
+                var element = _videoElement;
+                if (element == null || !element.IsConnected())
+                {
+                    return;
+                }
+
+                var target = new RenderTargetBitmap();
+                await target.RenderAsync(_videoElement);
+                var pixels = await target.GetPixelsAsync();
+
+                var file = await ApplicationData.Current.TemporaryFolder.CreateFileAsync("LastVideoFrame.png", CreationCollisionOption.ReplaceExisting);
+                using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
+                var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+
+                var width = (uint)target.PixelWidth;
+                var height = (uint)target.PixelHeight;
+
+                encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, width, height, 96, 96, pixels.ToArray());
+
+                encoder.BitmapTransform.ScaledWidth = 80;
+                encoder.BitmapTransform.ScaledHeight = 80;
+                encoder.BitmapTransform.Flip = BitmapFlip.Horizontal;
+
+                await encoder.FlushAsync();
+            }
+            catch
+            {
+                // Catching as this would break the UI otherwise
+            }
+        }
+
+        private async void OnRecordingStopped(object sender, EventArgs e)
         {
             //if (btnVoiceMessage.IsLocked)
             //{
@@ -192,12 +356,23 @@ namespace Telegram.Controls.Chats
 
             _blobVisual.StopAnimating();
 
+            await SaveLastFrameAsync();
+
+            if (_videoPopup != null)
+            {
+                _videoPopup.IsOpen = false;
+                _videoPopup = null;
+
+                _videoElement.Source = null;
+                _videoElement = null;
+            }
+
             AttachExpression();
 
             var slidePosition = ActualSize.X - 48 - 36;
             var difference = slidePosition - ElapsedPanel.ActualSize.X;
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 _elapsedTimer.Stop();
@@ -235,12 +410,12 @@ namespace Telegram.Controls.Chats
                 _ellipseVisual.Properties.InsertVector3("Translation", point);
             };
 
-            var slideAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var slideAnimation = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             slideAnimation.InsertKeyFrame(0, _slideVisual.Offset.X);
             slideAnimation.InsertKeyFrame(1, -slidePosition);
             slideAnimation.Duration = TimeSpan.FromMilliseconds(200);
 
-            var visibleAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var visibleAnimation = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             visibleAnimation.InsertKeyFrame(0, 1);
             visibleAnimation.InsertKeyFrame(1, 0);
 
@@ -252,7 +427,7 @@ namespace Telegram.Controls.Chats
                 var pause = ElementComposition.GetElementVisual(PauseRoot);
                 pause.CenterPoint = new Vector3(18);
 
-                var scale = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+                var scale = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
                 scale.InsertKeyFrame(0, Vector3.One);
                 scale.InsertKeyFrame(1, Vector3.Zero);
 
@@ -266,13 +441,13 @@ namespace Telegram.Controls.Chats
             CancelTyping?.Invoke(this, EventArgs.Empty);
         }
 
-        private void VoiceButton_RecordingLocked(object sender, EventArgs e)
+        private void OnRecordingLocked(object sender, EventArgs e)
         {
             ChatRecordGlyph.Text = Icons.SendFilled;
 
             DetachExpression();
 
-            var ellipseAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var ellipseAnimation = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             ellipseAnimation.InsertKeyFrame(0, -57);
             ellipseAnimation.InsertKeyFrame(1, 0);
 
@@ -292,14 +467,14 @@ namespace Telegram.Controls.Chats
             var pause = ElementComposition.GetElementVisual(PauseRoot);
             pause.CenterPoint = new Vector3(18);
 
-            var scale = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale.InsertKeyFrame(0, Vector3.Zero);
             scale.InsertKeyFrame(1, Vector3.One);
 
             pause.StartAnimation("Scale", scale);
         }
 
-        private void VoiceButton_ManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
+        private void OnManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
         {
             Vector3 point;
             if (ControlledButton.IsLocked || !ControlledButton.IsRecording)
@@ -344,12 +519,12 @@ namespace Telegram.Controls.Chats
 
         private void AttachExpression()
         {
-            var elapsedExpression = Window.Current.Compositor.CreateExpressionAnimation("min(0, slide.Offset.X + ((root.Size.X - 48 - 36 - slide.Size.X) - elapsed.Size.X))");
+            var elapsedExpression = BootStrapper.Current.Compositor.CreateExpressionAnimation("min(0, slide.Offset.X + ((root.Size.X - 48 - 36 - slide.Size.X) - elapsed.Size.X))");
             elapsedExpression.SetReferenceParameter("slide", _slideVisual);
             elapsedExpression.SetReferenceParameter("elapsed", _elapsedVisual);
             elapsedExpression.SetReferenceParameter("root", _rootVisual);
 
-            var ellipseExpression = Window.Current.Compositor.CreateExpressionAnimation("Vector3(max(0, min(1, 1 + slide.Offset.X / (root.Size.X - 48 - 36))), max(0, min(1, 1 + slide.Offset.X / (root.Size.X - 48 - 36))), 1)");
+            var ellipseExpression = BootStrapper.Current.Compositor.CreateExpressionAnimation("Vector3(max(0, min(1, 1 + slide.Offset.X / (root.Size.X - 48 - 36))), max(0, min(1, 1 + slide.Offset.X / (root.Size.X - 48 - 36))), 1)");
             ellipseExpression.SetReferenceParameter("slide", _slideVisual);
             ellipseExpression.SetReferenceParameter("elapsed", _elapsedVisual);
             ellipseExpression.SetReferenceParameter("root", _rootVisual);
@@ -388,9 +563,9 @@ namespace Telegram.Controls.Chats
 
                 WaveformLabel.Text = result.Duration.ToString("m\\:ss");
                 Waveform.Visibility = Visibility.Visible;
-                Waveform.UpdateWaveform(new VoiceNote(0, result.Waveform, string.Empty, null, null));
+                Waveform.UpdateWaveform(new VoiceNote(-1, result.Waveform, string.Empty, null, null));
 
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
                 var ellipse = compositor.CreateRoundedRectangleGeometry();
                 ellipse.CornerRadius = new Vector2(WaveformBackground.ActualSize.Y / 2);
                 ellipse.Size = new Vector2(WaveformBackground.ActualSize.Y, WaveformBackground.ActualSize.Y);
@@ -435,7 +610,7 @@ namespace Telegram.Controls.Chats
                 WaveformLabel.Text = string.Empty;
                 Waveform.Visibility = Visibility.Collapsed;
 
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
                 var ellipse = compositor.CreateRoundedRectangleGeometry();
                 ellipse.CornerRadius = new Vector2(WaveformBackground.ActualSize.Y / 2);
                 ellipse.Size = new Vector2(WaveformBackground.ActualSize.Y, WaveformBackground.ActualSize.Y);

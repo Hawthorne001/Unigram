@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,6 @@ using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Native;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.Views.Popups;
 using Windows.UI.Xaml.Controls;
@@ -162,7 +161,7 @@ namespace Telegram.ViewModels
             };
 
             // TODO: add undo button
-            ToastPopup.Show(toast, new LocalFileSource("ms-appx:///Assets/Toasts/Translate.tgs"));
+            ShowToast(toast, ToastPopupIcon.Translate);
         }
 
         public async void ShowTranslate()
@@ -206,7 +205,7 @@ namespace Telegram.ViewModels
             var toast = string.Format(Strings.AddedToDoNotTranslate, languageName);
 
             // TODO: add undo button
-            ToastPopup.Show(toast, new LocalFileSource("ms-appx:///Assets/Toasts/Translate.tgs"));
+            ShowToast(toast, ToastPopupIcon.Translate);
 
             var languages = Settings.Translate.DoNot;
             languages.Add(DetectedLanguage);

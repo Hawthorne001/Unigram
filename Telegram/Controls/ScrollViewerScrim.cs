@@ -1,11 +1,12 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System.Numerics;
 using Telegram.Common;
+using Telegram.Navigation;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -15,7 +16,7 @@ using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls
 {
-    public class ScrollViewerScrim : Control
+    public partial class ScrollViewerScrim : Control
     {
         private CompositionPropertySet _propertySet;
 
@@ -26,6 +27,8 @@ namespace Telegram.Controls
         public ScrollViewerScrim()
         {
             DefaultStyleKey = typeof(ScrollViewerScrim);
+
+            this.CreateInsetClip();
 
             Loaded += OnLoaded;
             RegisterPropertyChangedCallback(BackgroundProperty, OnBackgroundChanged);
@@ -109,7 +112,7 @@ namespace Telegram.Controls
             }
 
             _scrollViewer = scrollViewer;
-            _propertySet = Window.Current.Compositor.CreatePropertySet();
+            _propertySet = BootStrapper.Current.Compositor.CreatePropertySet();
             _propertySet.InsertScalar("ScrollableHeight", (float)scrollViewer.ScrollableHeight);
             _propertySet.InsertScalar("TopInset", _topInset);
             _propertySet.InsertScalar("BottomInset", _bottomInset);
@@ -118,11 +121,11 @@ namespace Telegram.Controls
             var bottom = ElementComposition.GetElementVisual(_bottomScrim);
             var props = ElementCompositionPreview.GetScrollViewerManipulationPropertySet(scrollViewer);
 
-            var topAnimation = Window.Current.Compositor.CreateExpressionAnimation("Clamp(-(Scroll.Translation.Y / Props.TopInset), 0, 1)");
+            var topAnimation = BootStrapper.Current.Compositor.CreateExpressionAnimation("Clamp(-(Scroll.Translation.Y / Props.TopInset), 0, 1)");
             topAnimation.SetReferenceParameter("Scroll", props);
             topAnimation.SetReferenceParameter("Props", _propertySet);
 
-            var bottomAnimation = Window.Current.Compositor.CreateExpressionAnimation("Clamp((Props.ScrollableHeight + Scroll.Translation.Y) / Props.BottomInset, 0, 1)");
+            var bottomAnimation = BootStrapper.Current.Compositor.CreateExpressionAnimation("Clamp((Props.ScrollableHeight + Scroll.Translation.Y) / Props.BottomInset, 0, 1)");
             bottomAnimation.SetReferenceParameter("Scroll", props);
             bottomAnimation.SetReferenceParameter("Props", _propertySet);
 

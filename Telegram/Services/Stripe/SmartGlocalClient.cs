@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using JsonValue = Windows.Data.Json.JsonValue;
 
 namespace Telegram.Services.Stripe
 {
-    public class SmartGlocalClient : IDisposable
+    public partial class SmartGlocalClient : IDisposable
     {
         private readonly string _publicToken;
         private HttpClient _client;

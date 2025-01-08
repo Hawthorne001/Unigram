@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsAdvancedViewModel : ViewModelBase, IHandle
+    public partial class SettingsAdvancedViewModel : ViewModelBase, IHandle
     {
         private readonly ICloudUpdateService _cloudUpdateService;
         private CloudUpdate _update;
@@ -168,7 +168,7 @@ namespace Telegram.ViewModels.Settings
             }
             else if (update.File != null && launch && Constants.RELEASE)
             {
-                await CloudUpdateService.LaunchAsync(Dispatcher, false);
+                await CloudUpdateService.LaunchAsync(NavigationService, false);
             }
 
             UpdateFile(update, update?.Document, true);

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,9 @@ using System.Text;
 using System.Threading;
 using Telegram.Common;
 using Telegram.Controls.Chats;
+using Telegram.Converters;
 using Telegram.Native;
+using Telegram.Services.Calls;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.UI;
@@ -25,6 +27,20 @@ namespace Telegram.Td.Api
 {
     public static class TdExtensions
     {
+        public static bool ShowCaptionAboveMedia(this MessageViewModel message)
+        {
+            return message.Content switch
+            {
+                MessageAnimation animation => animation.ShowCaptionAboveMedia,
+                MessagePhoto photo => photo.ShowCaptionAboveMedia,
+                MessageVideo video => video.ShowCaptionAboveMedia,
+                MessageAlbum album => album.ShowCaptionAboveMedia,
+                MessagePaidAlbum paidAlbum => paidAlbum.ShowCaptionAboveMedia,
+                MessagePaidMedia paidMedia => paidMedia.ShowCaptionAboveMedia,
+                _ => false
+            };
+        }
+
         public static bool Is24x7(this BusinessOpeningHours hours)
         {
             if (hours == null || hours.OpeningHours.Empty())
@@ -45,6 +61,84 @@ namespace Telegram.Td.Api
             }
 
             return last >= 24 * 60 * 7 - 1;
+        }
+
+        public static string CommissionPercent(this AffiliateProgramParameters parameters)
+        {
+            return (parameters.CommissionPerMille / 10d).ToString("0.##") + "%";
+        }
+
+        public static string Duration(this AffiliateProgramParameters parameters)
+        {
+            return parameters.MonthCount > 0
+                ? parameters.MonthCount >= 12
+                ? Locale.Declension(Strings.R.Years, parameters.MonthCount / 12)
+                : Locale.Declension(Strings.R.Months, parameters.MonthCount)
+                : Strings.Lifetime;
+        }
+
+        public static bool IsHls(this MessageVideo video)
+        {
+            if (video.Video.Duration == 0 || video.AlternativeVideos.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var alternative in video.AlternativeVideos)
+            {
+                if (alternative.Width == 0 || alternative.Height == 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static bool IsNegative(this StarAmount amount)
+        {
+            return amount?.StarCount < 0 || amount?.NanostarCount < 0;
+        }
+
+        public static bool IsPositive(this StarAmount amount)
+        {
+            return amount?.StarCount > 0 || amount?.NanostarCount > 0;
+        }
+
+        public static string ToValue(this StarAmount amount, bool transaction = false)
+        {
+            var integerAmount = amount.StarCount;
+            var decimalAmount = amount.NanostarCount;
+
+            var symbol = amount.StarCount < 0 || !transaction ? string.Empty : "+";
+
+            if (decimalAmount < 0 || integerAmount < 0)
+            {
+                symbol = "-";
+            }
+
+            integerAmount = Math.Abs(integerAmount);
+            decimalAmount = Math.Abs(decimalAmount);
+
+            var culture = new CultureInfo(NativeUtils.GetCurrentCulture());
+            var separator = culture.NumberFormat.NumberDecimalSeparator;
+
+            if (amount.NanostarCount != 0)
+            {
+                return symbol + string.Format(culture, "{0:N0}{2}{1}", integerAmount, decimalAmount, separator).TrimEnd('0');
+            }
+
+            return symbol + integerAmount.ToString("N0", culture);
+        }
+
+        public static string TotalText(this Gift gift)
+        {
+            return Formatter.ShortNumber(gift.TotalCount);
+        }
+
+        public static string RemainingText(this Gift gift)
+        {
+            return Locale.Declension(Strings.R.Gift2Availability4Value, gift.RemainingCount, gift.TotalCount.ToString("N0"));
         }
 
         public static int CountUnread(this ChatActiveStories activeStories, out bool closeFriends)
@@ -232,7 +326,7 @@ namespace Telegram.Td.Api
                 return oldCustomEmoji.CustomEmojiId == newCustomEmoji.CustomEmojiId;
             }
 
-            return false;
+            return x is ReactionTypePaid && y is ReactionTypePaid;
         }
 
         public static bool AreTheSame(this MessageSelfDestructType x, MessageSelfDestructType y)
@@ -245,7 +339,7 @@ namespace Telegram.Td.Api
             else if (x is MessageSelfDestructTypeImmediately
                 && y is MessageSelfDestructTypeImmediately)
             {
-                return false;
+                return true;
             }
 
             return x == null && y == null;
@@ -253,13 +347,13 @@ namespace Telegram.Td.Api
 
         public static bool AreTheSame(this ChatAvailableReactions x, ChatAvailableReactions y)
         {
-            if (x is ChatAvailableReactionsAll && y is ChatAvailableReactionsAll)
+            if (x is ChatAvailableReactionsAll xAll && y is ChatAvailableReactionsAll yAll)
             {
-                return true;
+                return xAll.MaxReactionCount == yAll.MaxReactionCount;
             }
             else if (x is ChatAvailableReactionsSome xSome && y is ChatAvailableReactionsSome ySome)
             {
-                if (xSome.Reactions?.Count != ySome.Reactions?.Count)
+                if (xSome.Reactions?.Count != ySome.Reactions?.Count || xSome.MaxReactionCount != ySome.MaxReactionCount)
                 {
                     return false;
                 }
@@ -639,6 +733,12 @@ namespace Telegram.Td.Api
             return new InputThumbnail(new InputFileId(photo.Photo.Id), photo.Width, photo.Height);
         }
 
+        public static Thumbnail GetThumbnail(this Photo photo)
+        {
+            var small = photo?.GetSmall();
+            return small?.ToThumbnail();
+        }
+
         public static Thumbnail ToThumbnail(this PhotoSize photo)
         {
             if (photo == null)
@@ -706,6 +806,24 @@ namespace Telegram.Td.Api
             {
                 yield return text.Substring(a * maxLength, maxLength);
             }
+        }
+
+        public static FormattedText Concat(params FormattedText[] text)
+        {
+            var builder = new StringBuilder();
+            var entities = new List<TextEntity>();
+
+            foreach (var part in text)
+            {
+                foreach (var entity in part.Entities)
+                {
+                    entities.Add(new TextEntity(builder.Length + entity.Offset, entity.Length, entity.Type));
+                }
+
+                builder.Append(part.Text);
+            }
+
+            return new FormattedText(builder.ToString(), entities);
         }
 
         public static FormattedText Substring(this FormattedText text, long startIndex, long length)
@@ -809,6 +927,7 @@ namespace Telegram.Td.Api
                 case TextEntityTypeUnderline:
                 case TextEntityTypeSpoiler:
                 case TextEntityTypeBlockQuote:
+                case TextEntityTypeExpandableBlockQuote:
                 case TextEntityTypeCustomEmoji:
                 case TextEntityTypeCode:
                 case TextEntityTypePre:
@@ -828,11 +947,31 @@ namespace Telegram.Td.Api
                 case MessageGame game:
                     return game.Game.Photo;
                 case MessageInvoice invoice:
-                    return invoice.Photo;
+                    return invoice.ProductInfo.Photo;
                 case MessagePhoto photo:
                     return photo.Photo;
                 case MessageText text:
-                    return text.WebPage?.Photo;
+                    return text.LinkPreview?.Type switch
+                    {
+                        LinkPreviewTypeAlbum album => album.Media[0] switch
+                        {
+                            LinkPreviewAlbumMediaPhoto albumPhoto => albumPhoto.Photo,
+                            _ => null
+                        },
+                        LinkPreviewTypePhoto photo => photo.Photo,
+                        LinkPreviewTypeEmbeddedAudioPlayer embeddedAudioPlayer => embeddedAudioPlayer.Thumbnail,
+                        LinkPreviewTypeEmbeddedAnimationPlayer embeddedAnimationPlayer => embeddedAnimationPlayer.Thumbnail,
+                        LinkPreviewTypeEmbeddedVideoPlayer embeddedVideoPlayer => embeddedVideoPlayer.Thumbnail,
+                        LinkPreviewTypeApp app => app.Photo,
+                        LinkPreviewTypeArticle article => article.Photo,
+                        LinkPreviewTypeChannelBoost channelBoost => channelBoost.Photo.ToPhoto(),
+                        LinkPreviewTypeChat chat => chat.Photo.ToPhoto(),
+                        LinkPreviewTypeSupergroupBoost supergroupBoost => supergroupBoost.Photo.ToPhoto(),
+                        LinkPreviewTypeUser user => user.Photo.ToPhoto(),
+                        LinkPreviewTypeVideoChat videoChat => videoChat.Photo.ToPhoto(),
+                        LinkPreviewTypeWebApp webApp => webApp.Photo,
+                        _ => null
+                    };
                 case MessageChatChangePhoto chatChangePhoto:
                     return chatChangePhoto.Photo.ToPhoto();
                 default:
@@ -881,43 +1020,35 @@ namespace Telegram.Td.Api
                 case MessageSticker sticker:
                     return (sticker.Sticker.StickerValue, null, null);
                 case MessageText text:
-                    if (text.WebPage != null && text.WebPage.Animation != null)
+                    return text.LinkPreview?.Type switch
                     {
-                        return (text.WebPage.Animation.AnimationValue, text.WebPage.Animation.Thumbnail, text.WebPage.Animation.FileName);
-                    }
-                    else if (text.WebPage != null && text.WebPage.Audio != null)
-                    {
-                        return (text.WebPage.Audio.AudioValue, text.WebPage.Audio.AlbumCoverThumbnail, text.WebPage.Audio.FileName);
-                    }
-                    else if (text.WebPage != null && text.WebPage.Document != null)
-                    {
-                        return (text.WebPage.Document.DocumentValue, text.WebPage.Document.Thumbnail, text.WebPage.Document.FileName);
-                    }
-                    else if (text.WebPage != null && text.WebPage.Sticker != null)
-                    {
-                        return (text.WebPage.Sticker.StickerValue, null, null);
-                    }
-                    else if (text.WebPage != null && text.WebPage.Video != null)
-                    {
-                        return (text.WebPage.Video.VideoValue, text.WebPage.Video.Thumbnail, text.WebPage.Video.FileName);
-                    }
-                    else if (text.WebPage != null && text.WebPage.VideoNote != null)
-                    {
-                        return (text.WebPage.VideoNote.Video, text.WebPage.VideoNote.Thumbnail, null);
-                    }
-                    else if (text.WebPage != null && text.WebPage.VoiceNote != null)
-                    {
-                        return (text.WebPage.VoiceNote.Voice, null, null);
-                    }
-                    else if (text.WebPage != null && text.WebPage.Photo != null)
-                    {
-                        var big = text.WebPage.Photo.GetBig();
-                        if (big != null)
+                        LinkPreviewTypeAlbum album => album.Media[0] switch
                         {
-                            return (big.Photo, null, null);
-                        }
-                    }
-                    break;
+                            LinkPreviewAlbumMediaPhoto albumPhoto => (albumPhoto.Photo.GetBig()?.Photo, null, null),
+                            LinkPreviewAlbumMediaVideo albumVideo => (albumVideo.Video.VideoValue, albumVideo.Video.Thumbnail, albumVideo.Video.FileName),
+                            _ => (null, null, null)
+                        },
+                        LinkPreviewTypeAnimation animation => (animation.Animation.AnimationValue, animation.Animation.Thumbnail, animation.Animation.FileName),
+                        LinkPreviewTypeAudio audio => (audio.Audio.AudioValue, audio.Audio.AlbumCoverThumbnail, audio.Audio.FileName),
+                        LinkPreviewTypeBackground background => (background.Document?.DocumentValue, background.Document?.Thumbnail, background.Document?.FileName),
+                        LinkPreviewTypeDocument document => (document.Document.DocumentValue, document.Document.Thumbnail, document.Document.FileName),
+                        LinkPreviewTypeEmbeddedAudioPlayer embeddedAudioPlayer => (embeddedAudioPlayer.Thumbnail?.GetFile(), null, null),
+                        LinkPreviewTypeEmbeddedAnimationPlayer embeddedAnimationPlayer => (embeddedAnimationPlayer.Thumbnail?.GetFile(), null, null),
+                        LinkPreviewTypeEmbeddedVideoPlayer embeddedVideoPlayer => (embeddedVideoPlayer.Thumbnail?.GetFile(), null, null),
+                        LinkPreviewTypeSticker sticker => (sticker.Sticker.StickerValue, sticker.Sticker.Thumbnail, null),
+                        LinkPreviewTypeVideo video => (video.Video.VideoValue, video.Video.Thumbnail, video.Video.FileName),
+                        LinkPreviewTypeVideoNote videoNote => (videoNote.VideoNote.Video, videoNote.VideoNote.Thumbnail, null),
+                        LinkPreviewTypePhoto photo => (photo.Photo.GetFile(), null, null),
+                        LinkPreviewTypeApp app => (app.Photo.GetFile(), null, null),
+                        LinkPreviewTypeArticle article => (article.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeChannelBoost channelBoost => (channelBoost.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeChat chat => (chat.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeSupergroupBoost supergroupBoost => (supergroupBoost.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeUser user => (user.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeVideoChat videoChat => (videoChat.Photo?.GetFile(), null, null),
+                        LinkPreviewTypeWebApp webApp => (webApp.Photo?.GetFile(), null, null),
+                        _ => (null, null, null)
+                    };
                 case MessageVideo video:
                     return (video.Video.VideoValue, video.Video.Thumbnail, video.Video.FileName);
                 case MessageVideoNote videoNote:
@@ -929,46 +1060,103 @@ namespace Telegram.Td.Api
             return (null, null, null);
         }
 
-        public static Thumbnail GetThumbnail(this WebPage webPage)
+        public static Minithumbnail GetMinithumbnail(this LinkPreview linkPreview)
         {
-            if (webPage.Animation != null)
+            return linkPreview?.Type switch
             {
-                return webPage.Animation.Thumbnail;
-            }
-            else if (webPage.Audio != null)
-            {
-                return webPage.Audio.AlbumCoverThumbnail;
-            }
-            else if (webPage.Document != null)
-            {
-                return webPage.Document.Thumbnail;
-            }
-            else if (webPage.Sticker != null)
-            {
-                return webPage.Sticker.Thumbnail;
-            }
-            else if (webPage.Video != null)
-            {
-                return webPage.Video.Thumbnail;
-            }
-            else if (webPage.VideoNote != null)
-            {
-                return webPage.VideoNote.Thumbnail;
-            }
-            else if (webPage.VoiceNote != null)
-            {
-                return null;
-            }
-            else if (webPage.Photo != null)
-            {
-                var small = webPage.Photo.GetSmall();
-                if (small != null)
+                LinkPreviewTypeAlbum album => album.Media[0] switch
                 {
-                    return small.ToThumbnail();
-                }
+                    LinkPreviewAlbumMediaPhoto albumPhoto => albumPhoto.Photo.Minithumbnail,
+                    LinkPreviewAlbumMediaVideo albumVideo => albumVideo.Video.Minithumbnail,
+                    _ => null
+                },
+                LinkPreviewTypeAnimation animation => animation.Animation.Minithumbnail,
+                LinkPreviewTypeAudio audio => audio.Audio.AlbumCoverMinithumbnail,
+                LinkPreviewTypeBackground background => background.Document?.Minithumbnail,
+                LinkPreviewTypeDocument document => document.Document.Minithumbnail,
+                LinkPreviewTypeEmbeddedAudioPlayer embeddedAudioPlayer => embeddedAudioPlayer.Thumbnail?.Minithumbnail,
+                LinkPreviewTypeEmbeddedAnimationPlayer embeddedAnimationPlayer => embeddedAnimationPlayer.Thumbnail?.Minithumbnail,
+                LinkPreviewTypeEmbeddedVideoPlayer embeddedVideoPlayer => embeddedVideoPlayer.Thumbnail?.Minithumbnail,
+                LinkPreviewTypeVideo video => video.Video.Minithumbnail,
+                LinkPreviewTypeVideoNote videoNote => videoNote.VideoNote.Minithumbnail,
+                LinkPreviewTypePhoto photo => photo.Photo.Minithumbnail,
+                LinkPreviewTypeApp app => app.Photo.Minithumbnail,
+                LinkPreviewTypeArticle article => article.Photo?.Minithumbnail,
+                LinkPreviewTypeChannelBoost channelBoost => channelBoost.Photo?.Minithumbnail,
+                LinkPreviewTypeChat chat => chat.Photo?.Minithumbnail,
+                LinkPreviewTypeSupergroupBoost supergroupBoost => supergroupBoost.Photo?.Minithumbnail,
+                LinkPreviewTypeUser user => user.Photo?.Minithumbnail,
+                LinkPreviewTypeVideoChat videoChat => videoChat.Photo?.Minithumbnail,
+                LinkPreviewTypeWebApp webApp => webApp.Photo?.Minithumbnail,
+                _ => null
+            };
+        }
+
+        public static Thumbnail GetThumbnail(this LinkPreview linkPreview)
+        {
+            return linkPreview?.Type switch
+            {
+                LinkPreviewTypeAlbum album => album.Media[0] switch
+                {
+                    LinkPreviewAlbumMediaPhoto albumPhoto => albumPhoto.Photo.GetThumbnail(),
+                    LinkPreviewAlbumMediaVideo albumVideo => albumVideo.Video.Thumbnail,
+                    _ => null
+                },
+                LinkPreviewTypeAnimation animation => animation.Animation.Thumbnail,
+                LinkPreviewTypeAudio audio => audio.Audio.AlbumCoverThumbnail,
+                LinkPreviewTypeBackground background => background.Document?.Thumbnail,
+                LinkPreviewTypeDocument document => document.Document.Thumbnail,
+                LinkPreviewTypeEmbeddedAudioPlayer embeddedAudioPlayer => embeddedAudioPlayer.Thumbnail?.GetThumbnail(),
+                LinkPreviewTypeEmbeddedAnimationPlayer embeddedAnimationPlayer => embeddedAnimationPlayer.Thumbnail?.GetThumbnail(),
+                LinkPreviewTypeEmbeddedVideoPlayer embeddedVideoPlayer => embeddedVideoPlayer.Thumbnail?.GetThumbnail(),
+                LinkPreviewTypeSticker sticker => sticker.Sticker.Thumbnail,
+                LinkPreviewTypeVideo video => video.Video.Thumbnail,
+                LinkPreviewTypeVideoNote videoNote => videoNote.VideoNote.Thumbnail,
+                LinkPreviewTypePhoto photo => photo.Photo.GetThumbnail(),
+                LinkPreviewTypeApp app => app.Photo.GetThumbnail(),
+                LinkPreviewTypeArticle article => article.Photo?.GetThumbnail(),
+                LinkPreviewTypeChannelBoost channelBoost => channelBoost.Photo?.GetThumbnail(),
+                LinkPreviewTypeChat chat => chat.Photo?.GetThumbnail(),
+                LinkPreviewTypeSupergroupBoost supergroupBoost => supergroupBoost.Photo?.GetThumbnail(),
+                LinkPreviewTypeUser user => user.Photo?.GetThumbnail(),
+                LinkPreviewTypeVideoChat videoChat => videoChat.Photo?.GetThumbnail(),
+                LinkPreviewTypeWebApp webApp => webApp.Photo?.GetThumbnail(),
+                _ => null
+            };
+        }
+
+        public static bool HasThumbnail(this LinkPreview linkPreview)
+        {
+            if (linkPreview.Type is LinkPreviewTypeAlbum album)
+            {
+                return album.Media[0] switch
+                {
+                    LinkPreviewAlbumMediaPhoto albumPhoto => true,
+                    LinkPreviewAlbumMediaVideo albumVideo => albumVideo.Video.Thumbnail != null,
+                    _ => false
+                };
             }
 
-            return null;
+            return linkPreview.Type is LinkPreviewTypeAnimation { Animation.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeAudio { Audio.AlbumCoverThumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeBackground { Document.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeDocument { Document.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeEmbeddedAudioPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeEmbeddedAnimationPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeEmbeddedVideoPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeSticker { Sticker.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeStickerSet
+                || linkPreview.Type is LinkPreviewTypeVideo { Video.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeVideoNote { VideoNote.Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypePhoto
+                || linkPreview.Type is LinkPreviewTypeApp { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeArticle { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeChannelBoost { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeChat { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeSupergroupBoost { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeUser { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeVideoChat { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeWebApp { Photo: not null };
         }
 
         public static File GetFile(this MessageWithOwner message)
@@ -1011,39 +1199,35 @@ namespace Telegram.Td.Api
                 case MessageSticker sticker:
                     return sticker.Sticker.StickerValue;
                 case MessageText text:
-                    if (text.WebPage != null && text.WebPage.Animation != null)
+                    return text.LinkPreview?.Type switch
                     {
-                        return text.WebPage.Animation.AnimationValue;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Audio != null)
-                    {
-                        return text.WebPage.Audio.AudioValue;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Document != null)
-                    {
-                        return text.WebPage.Document.DocumentValue;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Sticker != null)
-                    {
-                        return text.WebPage.Sticker.StickerValue;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Video != null)
-                    {
-                        return text.WebPage.Video.VideoValue;
-                    }
-                    else if (text.WebPage != null && text.WebPage.VideoNote != null)
-                    {
-                        return text.WebPage.VideoNote.Video;
-                    }
-                    else if (text.WebPage != null && text.WebPage.VoiceNote != null)
-                    {
-                        return text.WebPage.VoiceNote.Voice;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Photo != null)
-                    {
-                        return text.WebPage.Photo.GetBig()?.Photo;
-                    }
-                    break;
+                        LinkPreviewTypeAlbum album => album.Media[0] switch
+                        {
+                            LinkPreviewAlbumMediaPhoto albumPhoto => albumPhoto.Photo.GetBig()?.Photo,
+                            LinkPreviewAlbumMediaVideo albumVideo => albumVideo.Video.VideoValue,
+                            _ => null
+                        },
+                        LinkPreviewTypeAnimation animation => animation.Animation.AnimationValue,
+                        LinkPreviewTypeAudio audio => audio.Audio.AudioValue,
+                        LinkPreviewTypeBackground background => background.Document?.DocumentValue,
+                        LinkPreviewTypeDocument document => document.Document.DocumentValue,
+                        LinkPreviewTypeEmbeddedAudioPlayer embeddedAudioPlayer => embeddedAudioPlayer.Thumbnail?.GetFile(),
+                        LinkPreviewTypeEmbeddedAnimationPlayer embeddedAnimationPlayer => embeddedAnimationPlayer.Thumbnail?.GetFile(),
+                        LinkPreviewTypeEmbeddedVideoPlayer embeddedVideoPlayer => embeddedVideoPlayer.Thumbnail?.GetFile(),
+                        LinkPreviewTypeSticker sticker => sticker.Sticker.StickerValue,
+                        LinkPreviewTypeVideo video => video.Video.VideoValue,
+                        LinkPreviewTypeVideoNote videoNote => videoNote.VideoNote.Video,
+                        LinkPreviewTypePhoto photo => photo.Photo.GetFile(),
+                        LinkPreviewTypeApp app => app.Photo.GetFile(),
+                        LinkPreviewTypeArticle article => article.Photo?.GetFile(),
+                        LinkPreviewTypeChannelBoost channelBoost => channelBoost.Photo?.GetFile(),
+                        LinkPreviewTypeChat chat => chat.Photo?.GetFile(),
+                        LinkPreviewTypeSupergroupBoost supergroupBoost => supergroupBoost.Photo?.GetFile(),
+                        LinkPreviewTypeUser user => user.Photo?.GetFile(),
+                        LinkPreviewTypeVideoChat videoChat => videoChat.Photo?.GetFile(),
+                        LinkPreviewTypeWebApp webApp => webApp.Photo?.GetFile(),
+                        _ => null
+                    };
                 case MessageVideo video:
                     return video.Video.VideoValue;
                 case MessageVideoNote videoNote:
@@ -1051,11 +1235,11 @@ namespace Telegram.Td.Api
                 case MessageVoiceNote voiceNote:
                     return voiceNote.VoiceNote.Voice;
                 case MessageInvoice invoice:
-                    return invoice.ExtendedMedia switch
+                    return invoice.PaidMedia switch
                     {
-                        MessageExtendedMediaPhoto photo => photo.Photo.GetBig()?.Photo,
-                        MessageExtendedMediaVideo video => video.Video.VideoValue,
-                        _ => invoice.Photo?.GetBig()?.Photo
+                        PaidMediaPhoto photo => photo.Photo.GetFile(),
+                        PaidMediaVideo video => video.Video.VideoValue,
+                        _ => invoice.ProductInfo.Photo?.GetFile()
                     };
             }
 
@@ -1080,19 +1264,19 @@ namespace Telegram.Td.Api
                     }
                     return false;
                 case MessageText text:
-                    if (text.WebPage?.Animation != null)
+                    if (text.LinkPreview?.Type is LinkPreviewTypeAnimation previewAnimation)
                     {
-                        return text.WebPage.Animation.AnimationValue.Local.IsDownloadingCompleted;
+                        return previewAnimation.Animation.AnimationValue.Local.IsDownloadingCompleted;
                     }
-                    else if (text.WebPage?.Sticker != null)
+                    else if (text.LinkPreview?.Type is LinkPreviewTypeSticker previewSticker)
                     {
-                        return text.WebPage.Sticker.Format is StickerFormatTgs or StickerFormatWebm && text.WebPage.Sticker.StickerValue.Local.IsDownloadingCompleted;
+                        return previewSticker.Sticker.Format is StickerFormatTgs or StickerFormatWebm && previewSticker.Sticker.StickerValue.Local.IsDownloadingCompleted;
                     }
-                    else if (text.WebPage?.VideoNote != null)
+                    else if (text.LinkPreview?.Type is LinkPreviewTypeVideoNote previewVideoNote)
                     {
-                        return text.WebPage.VideoNote.Video.Local.IsDownloadingCompleted;
+                        return previewVideoNote.VideoNote.Video.Local.IsDownloadingCompleted;
                     }
-                    else if (text.WebPage?.Video != null)
+                    else if (text.LinkPreview?.Type is LinkPreviewTypeVideo)
                     {
                         // Videos are streamed
                         return true;
@@ -1118,7 +1302,7 @@ namespace Telegram.Td.Api
                     // Videos are streamed
                     return true;
                 case MessageInvoice invoice:
-                    return invoice.ExtendedMedia is MessageExtendedMediaVideo;
+                    return invoice.PaidMedia is PaidMediaVideo;
                 default:
                     return false;
             }
@@ -1190,31 +1374,7 @@ namespace Telegram.Td.Api
                 case MessageSticker sticker:
                     return sticker.Sticker.Thumbnail;
                 case MessageText text:
-                    if (text.WebPage != null && text.WebPage.Animation != null)
-                    {
-                        return text.WebPage.Animation.Thumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Audio != null)
-                    {
-                        return text.WebPage.Audio.AlbumCoverThumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Document != null)
-                    {
-                        return text.WebPage.Document.Thumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Sticker != null)
-                    {
-                        return text.WebPage.Sticker.Thumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Video != null)
-                    {
-                        return text.WebPage.Video.Thumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.VideoNote != null)
-                    {
-                        return text.WebPage.VideoNote.Thumbnail;
-                    }
-                    break;
+                    return text.LinkPreview?.GetThumbnail();
                 case MessageVideo video:
                     return video.Video.Thumbnail;
                 case MessageVideoNote videoNote:
@@ -1239,31 +1399,7 @@ namespace Telegram.Td.Api
                 case MessageGame game:
                     return game.Game.Animation?.Minithumbnail;
                 case MessageText text:
-                    if (text.WebPage != null && text.WebPage.Animation != null)
-                    {
-                        return text.WebPage.Animation.Minithumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Audio != null)
-                    {
-                        return text.WebPage.Audio.AlbumCoverMinithumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Document != null)
-                    {
-                        return text.WebPage.Document.Minithumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Video != null)
-                    {
-                        return text.WebPage.Video.Minithumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.VideoNote != null)
-                    {
-                        return text.WebPage.VideoNote.Minithumbnail;
-                    }
-                    else if (text.WebPage != null && text.WebPage.Photo != null)
-                    {
-                        return text.WebPage.Photo.Minithumbnail;
-                    }
-                    break;
+                    return text.LinkPreview?.GetMinithumbnail();
                 case MessageVideo video:
                     return video.IsSecret && !secret ? null : video.Video.Minithumbnail;
                 case MessageVideoNote videoNote:
@@ -1304,14 +1440,9 @@ namespace Telegram.Td.Api
                     }),
                     _ => new FormattedText(animatedEmoji.Emoji, Array.Empty<TextEntity>())
                 },
-                MessageInvoice invoice => invoice.ExtendedMedia switch
-                {
-                    MessageExtendedMediaPreview preview => preview.Caption,
-                    MessageExtendedMediaPhoto photo => photo.Caption,
-                    MessageExtendedMediaVideo video => video.Caption,
-                    MessageExtendedMediaUnsupported unsupported => unsupported.Caption,
-                    _ => null,
-                },
+                MessageInvoice invoice => invoice.PaidMediaCaption,
+                MessagePaidAlbum paidAlbum => paidAlbum.Caption,
+                MessagePaidMedia paidMedia => paidMedia.Caption,
                 _ => null,
             };
         }
@@ -1376,32 +1507,24 @@ namespace Telegram.Td.Api
             return new Photo(false, chatPhoto.Minithumbnail, chatPhoto.Sizes);
         }
 
-        public static bool IsInstantGallery(this WebPage webPage)
+        public static bool HasText(this LinkPreview linkPreview)
         {
-            return webPage.InstantViewVersion != 0 &&
-                (string.Equals(webPage.SiteName, "twitter", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(webPage.SiteName, "instagram", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(webPage.Type, "telegram_album", StringComparison.OrdinalIgnoreCase));
-        }
-
-        public static bool HasText(this WebPage webPage)
-        {
-            if (!string.IsNullOrWhiteSpace(webPage.SiteName))
+            if (!string.IsNullOrWhiteSpace(linkPreview.SiteName))
             {
                 return true;
 
             }
 
-            if (!string.IsNullOrWhiteSpace(webPage.Title))
+            if (!string.IsNullOrWhiteSpace(linkPreview.Title))
             {
                 return true;
             }
-            else if (!string.IsNullOrWhiteSpace(webPage.Author))
+            else if (!string.IsNullOrEmpty(linkPreview.Author))
             {
                 return true;
             }
 
-            if (!string.IsNullOrWhiteSpace(webPage.Description?.Text))
+            if (!string.IsNullOrWhiteSpace(linkPreview.Description?.Text))
             {
                 return true;
             }
@@ -1409,59 +1532,50 @@ namespace Telegram.Td.Api
             return false;
         }
 
-        public static bool HasMedia(this WebPage webPage)
+        public static bool HasMedia(this LinkPreview linkPreview)
         {
-            if (string.Equals(webPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return webPage.Animation != null || webPage.Audio != null || webPage.Document != null || webPage.Sticker != null || webPage.Video != null || webPage.VideoNote != null || webPage.VoiceNote != null || webPage.Photo != null;
-            return webPage.Animation != null || webPage.Audio != null || webPage.Document != null || webPage.Sticker != null || webPage.Video != null || webPage.VideoNote != null || webPage.VoiceNote != null || webPage.HasPhoto();
+            return linkPreview.Type is
+                LinkPreviewTypeAlbum or
+                LinkPreviewTypeAnimation or
+                LinkPreviewTypeAudio or
+                LinkPreviewTypeBackground or
+                LinkPreviewTypeDocument or
+                LinkPreviewTypeSticker or
+                LinkPreviewTypeStickerSet or
+                LinkPreviewTypeVideo or
+                LinkPreviewTypeVideoNote or
+                LinkPreviewTypeVoiceNote || linkPreview.HasPhoto();
         }
 
-        public static bool HasPhoto(this WebPage webPage)
+        public static bool HasPhoto(this LinkPreview linkPreview)
         {
-            return webPage.Photo != null && webPage.ShowLargeMedia;
-
-            if (webPage.Photo != null && webPage.Type != null)
+            if (linkPreview.Type is LinkPreviewTypeAlbum album)
             {
-                if (string.Equals(webPage.Type, "photo", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(webPage.Type, "video", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(webPage.Type, "embed", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(webPage.Type, "gif", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(webPage.Type, "document", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(webPage.Type, "telegram_album", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-                else if (string.Equals(webPage.Type, "article", StringComparison.OrdinalIgnoreCase))
-                {
-                    var photo = webPage.Photo;
-                    var big = photo.GetBig();
-
-                    return big != null && big.Width > 256 && webPage.InstantViewVersion != 0;
-                }
+                return album.Media[0] is LinkPreviewAlbumMediaPhoto;
             }
 
-            return false;
+            return linkPreview.Type is LinkPreviewTypePhoto
+                || linkPreview.Type is LinkPreviewTypeEmbeddedAudioPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeEmbeddedAnimationPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeEmbeddedVideoPlayer { Thumbnail: not null }
+                || linkPreview.Type is LinkPreviewTypeApp { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeArticle { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeChannelBoost { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeChat { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeSupergroupBoost { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeUser { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeVideoChat { Photo: not null }
+                || linkPreview.Type is LinkPreviewTypeWebApp { Photo: not null };
         }
 
-        public static bool CanBeSmall(this WebPage webPage)
+        public static bool CanBeSmall(this LinkPreview linkPreview)
         {
-            if (webPage.Audio != null || webPage.Document != null || webPage.VoiceNote != null)
+            if (linkPreview.Type is LinkPreviewTypeAudio or LinkPreviewTypeDocument or LinkPreviewTypeVoiceNote)
             {
                 return false;
             }
 
-            return webPage.SiteName.Length > 0 || webPage.Title.Length > 0 || webPage.Author.Length > 0 || webPage.Description?.Text.Length > 0;
-
-            if (webPage.Photo != null && (webPage.SiteName.Length > 0 || webPage.Title.Length > 0 || webPage.Author.Length > 0 || webPage.Description?.Text.Length > 0))
-            {
-                return !webPage.HasMedia();
-            }
-
-            return false;
+            return linkPreview.SiteName.Length > 0 || linkPreview.Title.Length > 0 || linkPreview.Author.Length > 0 || linkPreview.Description?.Text.Length > 0;
         }
 
         public static bool IsService(this Message message)
@@ -1478,8 +1592,12 @@ namespace Telegram.Td.Api
                 case MessageDice:
                 case MessageDocument:
                 case MessageGame:
+                case MessageGiveaway:
+                case MessageGiveawayWinners:
                 case MessageInvoice:
                 case MessageLocation:
+                case MessagePaidAlbum:
+                case MessagePaidMedia:
                 case MessagePhoto:
                 case MessagePoll:
                 case MessageSticker:
@@ -1489,7 +1607,6 @@ namespace Telegram.Td.Api
                 case MessageVideo:
                 case MessageVideoNote:
                 case MessageVoiceNote:
-                case MessagePremiumGiveaway:
                     return false;
                 case MessageAsyncStory asyncStory:
                     return asyncStory.ViaMention;
@@ -1498,6 +1615,16 @@ namespace Telegram.Td.Api
                 default:
                     return true;
             }
+        }
+
+        public static bool IsPhoto(this PaidMedia media)
+        {
+            return media is PaidMediaPhoto or PaidMediaPreview { Duration: 0 };
+        }
+
+        public static bool IsVideo(this PaidMedia media)
+        {
+            return media is PaidMediaVideo or PaidMediaPreview { Duration: > 0 };
         }
 
         public static bool IsMedia(this InlineQueryResult result)
@@ -1545,70 +1672,6 @@ namespace Telegram.Td.Api
                 default:
                     return null;
             }
-        }
-
-        public static Sticker GetThumbnail(this StickerSetInfo stickerSet)
-        {
-            if (stickerSet.Thumbnail != null)
-            {
-                StickerFormat format = stickerSet.Thumbnail.Format switch
-                {
-                    ThumbnailFormatWebp => new StickerFormatWebp(),
-                    ThumbnailFormatWebm => new StickerFormatWebm(),
-                    ThumbnailFormatTgs => new StickerFormatTgs(),
-                    _ => default
-                };
-
-                StickerFullType fullType = stickerSet.NeedsRepainting
-                    ? new StickerFullTypeCustomEmoji(0, true)
-                    : new StickerFullTypeRegular();
-
-                if (stickerSet.Thumbnail.Format is ThumbnailFormatTgs)
-                {
-                    return new Sticker(stickerSet.Id, stickerSet.Id, 512, 512, "\U0001F4A9", format, fullType, stickerSet.ThumbnailOutline, stickerSet.Thumbnail, stickerSet.Thumbnail.File);
-                }
-
-                return new Sticker(stickerSet.Id, stickerSet.Id, stickerSet.Thumbnail.Width, stickerSet.Thumbnail.Height, "\U0001F4A9", format, fullType, stickerSet.ThumbnailOutline, stickerSet.Thumbnail, stickerSet.Thumbnail.File);
-            }
-
-            if (stickerSet.Covers?.Count > 0)
-            {
-                return stickerSet.Covers[0];
-            }
-
-            return null;
-        }
-
-        public static Sticker GetThumbnail(this StickerSet stickerSet)
-        {
-            if (stickerSet.Thumbnail != null)
-            {
-                StickerFormat format = stickerSet.Thumbnail.Format switch
-                {
-                    ThumbnailFormatWebp => new StickerFormatWebp(),
-                    ThumbnailFormatWebm => new StickerFormatWebm(),
-                    ThumbnailFormatTgs => new StickerFormatTgs(),
-                    _ => default
-                };
-
-                StickerFullType fullType = stickerSet.NeedsRepainting
-                    ? new StickerFullTypeCustomEmoji(0, true)
-                    : new StickerFullTypeRegular();
-
-                if (stickerSet.Thumbnail.Format is ThumbnailFormatTgs)
-                {
-                    return new Sticker(stickerSet.Id, stickerSet.Id, 512, 512, "\U0001F4A9", format, fullType, stickerSet.ThumbnailOutline, stickerSet.Thumbnail, stickerSet.Thumbnail.File);
-                }
-
-                return new Sticker(stickerSet.Id, stickerSet.Id, stickerSet.Thumbnail.Width, stickerSet.Thumbnail.Height, "\U0001F4A9", format, fullType, stickerSet.ThumbnailOutline, stickerSet.Thumbnail, stickerSet.Thumbnail.File);
-            }
-
-            if (stickerSet.Stickers?.Count > 0)
-            {
-                return stickerSet.Stickers[0];
-            }
-
-            return null;
         }
 
         public static bool IsUnread(this Chat chat)
@@ -1692,19 +1755,6 @@ namespace Telegram.Td.Api
             return 0;
         }
 
-        public static long GetOrder(this IList<ChatPosition> positions, ChatList chatList)
-        {
-            for (int i = 0; i < positions.Count; i++)
-            {
-                if (positions[i].List.AreTheSame(chatList))
-                {
-                    return positions[i].Order;
-                }
-            }
-
-            return 0;
-        }
-
         public static int ToYears(this Birthdate birthdate)
         {
             if (birthdate.Year == 0)
@@ -1726,6 +1776,88 @@ namespace Telegram.Td.Api
             }
 
             return years;
+        }
+
+        public static Sticker GetSticker(this UserGift gift)
+        {
+            if (gift.Gift is SentGiftRegular regular)
+            {
+                return regular.Gift.Sticker;
+            }
+            else if (gift.Gift is SentGiftUpgraded upgraded)
+            {
+                return upgraded.Gift.Model.Sticker;
+            }
+
+            return null;
+        }
+
+        public static MessageSender ToMessageSender(this Chat chat)
+        {
+            return chat.Type switch
+            {
+                ChatTypePrivate privata => new MessageSenderUser(privata.UserId),
+                ChatTypeSecret secret => new MessageSenderUser(secret.UserId),
+                _ => new MessageSenderChat(chat.Id)
+            };
+        }
+
+        public static string ToName(this UpgradedGift gift)
+        {
+            return string.Format("{0} #{1}", gift.Title, gift.Number);
+        }
+
+        public static bool IsFalse(this VerificationStatus status)
+        {
+            if (status == null)
+            {
+                return true;
+            }
+
+            return !status.IsFake && !status.IsScam;
+        }
+
+        public static bool AreTheSame(this ChatFolder x, ChatFolder y)
+        {
+            if (x == null || y == null)
+            {
+                return x == y;
+            }
+
+            return x.ColorId == y.ColorId
+                && x.Icon.AreTheSame(y.Icon)
+                && x.Name.AreTheSame(y.Name)
+                && x.IsShareable == y.IsShareable
+                && x.ExcludeArchived == y.ExcludeArchived
+                && x.ExcludeMuted == y.ExcludeMuted
+                && x.ExcludeRead == y.ExcludeRead
+                && x.IncludeBots == y.IncludeBots
+                && x.IncludeChannels == y.IncludeChannels
+                && x.IncludeContacts == y.IncludeContacts
+                && x.IncludeGroups == y.IncludeGroups
+                && x.IncludeNonContacts == y.IncludeNonContacts
+                && x.ExcludedChatIds.SequenceEqual(y.ExcludedChatIds)
+                && x.IncludedChatIds.SequenceEqual(y.IncludedChatIds)
+                && x.PinnedChatIds.SequenceEqual(y.PinnedChatIds);
+        }
+
+        public static bool AreTheSame(this ChatFolderName x, ChatFolderName y)
+        {
+            if (x == null || y == null)
+            {
+                return x == y;
+            }
+
+            return x.AnimateCustomEmoji == y.AnimateCustomEmoji
+                && x.Text.AreTheSame(y.Text);
+        }
+
+        public static bool AreTheSame(this ChatFolderIcon x, ChatFolderIcon y)
+        {
+            var xName = x?.Name ?? string.Empty;
+            var yName = y?.Name ?? string.Empty;
+
+            return xName == yName;
         }
 
         public static InputBusinessStartPage ToInput(this BusinessStartPage x)
@@ -1864,6 +1996,24 @@ namespace Telegram.Td.Api
             return false;
         }
 
+        public static bool AreTheSame(this AffiliateType sender, AffiliateType compare)
+        {
+            if (sender is AffiliateTypeBot bot1 && compare is AffiliateTypeBot bot2)
+            {
+                return bot1.UserId == bot2.UserId;
+            }
+            else if (sender is AffiliateTypeChannel channel1 && compare is AffiliateTypeChannel channel2)
+            {
+                return channel1.ChatId == channel2.ChatId;
+            }
+            else if (sender is AffiliateTypeCurrentUser && compare is AffiliateTypeCurrentUser)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         public static bool AreTheSame(this GroupCallParticipant sender, GroupCallParticipant compare)
         {
             if (sender.IsCurrentUser && compare.IsCurrentUser)
@@ -1950,14 +2100,14 @@ namespace Telegram.Td.Api
             return true;
         }
 
-        public static string FullName(this User user)
+        public static string FullName(this User user, bool firstName = false)
         {
             if (user == null || user.Type is UserTypeDeleted)
             {
                 return Strings.HiddenName;
             }
 
-            if (user.FirstName.Length > 0 && user.LastName.Length > 0)
+            if (user.FirstName.Length > 0 && user.LastName.Length > 0 && !firstName)
             {
                 return $"{user.FirstName} {user.LastName}";
             }
@@ -1999,6 +2149,11 @@ namespace Telegram.Td.Api
             return photo.Sizes.FirstOrDefault(x => x.Photo.Local.IsDownloadingCompleted || x.Photo.Local.CanBeDownloaded);
         }
 
+        public static File GetFile(this Photo photo)
+        {
+            return photo.GetBig()?.Photo;
+        }
+
         public static PhotoSize GetBig(this Photo photo)
         {
             //var local = photo.Sizes.LastOrDefault(x => string.Equals(x.Type, "i"));
@@ -2008,6 +2163,22 @@ namespace Telegram.Td.Api
             //}
 
             return photo.Sizes.LastOrDefault(x => x.Photo.Local.IsDownloadingCompleted || x.Photo.Local.CanBeDownloaded);
+        }
+
+        public static File GetFile(this ChatPhoto photo)
+        {
+            return photo.GetBig()?.Photo;
+        }
+
+        public static Thumbnail GetThumbnail(this ChatPhoto photo)
+        {
+            var small = photo.GetSmall();
+            if (small != null)
+            {
+                return small.ToThumbnail();
+            }
+
+            return null;
         }
 
         public static PhotoSize GetSmall(this ChatPhoto photo)
@@ -2059,27 +2230,27 @@ namespace Telegram.Td.Api
 
         public static string GetStartsAt(this MessageVideoChatScheduled messageVideoChatScheduled)
         {
-            var date = Converters.Formatter.ToLocalTime(messageVideoChatScheduled.StartDate);
-            return string.Format(Strings.formatDateAtTime, Converters.Formatter.ShortDate.Format(date), Converters.Formatter.ShortTime.Format(date));
+            return Converters.Formatter.DateAt(messageVideoChatScheduled.StartDate);
         }
 
-        public static string GetStartsAt(this GroupCall groupCall)
+        public static string GetStartsAt(this VoipGroupCall groupCall)
         {
             var date = Converters.Formatter.ToLocalTime(groupCall.ScheduledStartDate);
             if (date.Date == DateTime.Today)
             {
-                return string.Format(Strings.TodayAtFormattedWithToday, Converters.Formatter.ShortTime.Format(date));
+                return string.Format(Strings.TodayAtFormattedWithToday, Converters.Formatter.Time(date));
             }
             else if (date.Date.AddDays(1) == DateTime.Today)
             {
-                return string.Format(Strings.YesterdayAtFormatted, Converters.Formatter.ShortTime.Format(date));
+                return string.Format(Strings.YesterdayAtFormatted, Converters.Formatter.Time(date));
             }
 
-            return string.Format(Strings.formatDateAtTime, Converters.Formatter.ShortDate.Format(date), Converters.Formatter.ShortTime.Format(date));
+            return Converters.Formatter.DateAt(date);
         }
 
-        public static void Discern(this IEnumerable<ReactionType> reactions, out HashSet<string> emoji, out HashSet<long> customEmoji)
+        public static void Discern(this IEnumerable<ReactionType> reactions, out bool paid, out HashSet<string> emoji, out HashSet<long> customEmoji)
         {
+            paid = false;
             emoji = null;
             customEmoji = null;
 
@@ -2094,6 +2265,10 @@ namespace Telegram.Td.Api
                 {
                     customEmoji ??= new HashSet<long>();
                     customEmoji.Add(customEmojiItem.CustomEmojiId);
+                }
+                else if (reaction is ReactionTypePaid)
+                {
+                    paid = true;
                 }
             }
         }
@@ -2110,6 +2285,25 @@ namespace Telegram.Td.Api
                 .Any(x => x.AreTheSame(type));
         }
 
+        public static bool IsExpired(this MessageLocation location, long date)
+        {
+            if (location.LivePeriod > 0)
+            {
+                if (location.ExpiresIn == 0)
+                {
+                    return true;
+                }
+                else if (location.LivePeriod == int.MaxValue)
+                {
+                    return false;
+                }
+
+                return date + location.LivePeriod < DateTime.Now.ToTimestamp();
+            }
+
+            return false;
+        }
+
         public static string GetStartsIn(this GroupCall groupCall)
         {
             var date = Converters.Formatter.ToLocalTime(groupCall.ScheduledStartDate);
@@ -2121,7 +2315,30 @@ namespace Telegram.Td.Api
             }
             if (Math.Abs(duration.TotalDays) >= 1)
             {
-                return Locale.Declension(Strings.R.Days, (int)duration.TotalDays);
+                return Locale.Declension(Strings.R.Days, (int)Math.Round(duration.TotalSeconds / (24 * 60 * 60.0f)));
+            }
+            else if (Math.Abs(duration.TotalHours) >= 1)
+            {
+                return (duration.TotalSeconds < 0 ? "-" : "") + duration.ToString("h\\:mm\\:ss");
+            }
+            else
+            {
+                return (duration.TotalSeconds < 0 ? "-" : "") + duration.ToString("mm\\:ss");
+            }
+        }
+
+        public static string GetStartsIn(this VoipGroupCall groupCall)
+        {
+            var date = Converters.Formatter.ToLocalTime(groupCall.ScheduledStartDate);
+            var duration = date - DateTime.Now;
+
+            if (Math.Abs(duration.TotalDays) >= 7)
+            {
+                return Locale.Declension(Strings.R.Weeks, 1);
+            }
+            if (Math.Abs(duration.TotalDays) >= 1)
+            {
+                return Locale.Declension(Strings.R.Days, (int)Math.Round(duration.TotalSeconds / (24 * 60 * 60.0f)));
             }
             else if (Math.Abs(duration.TotalHours) >= 1)
             {
@@ -2150,30 +2367,14 @@ namespace Telegram.Td.Api
             }
         }
 
-        public static string GetDuration(this MessageExtendedMediaPreview preview)
+        public static string GetDuration(this PaidMediaPreview preview)
         {
-            var duration = TimeSpan.FromSeconds(preview.Duration);
-            if (duration.TotalHours >= 1)
-            {
-                return duration.ToString("h\\:mm\\:ss");
-            }
-            else
-            {
-                return duration.ToString("mm\\:ss");
-            }
+            return ToDuration(preview.Duration);
         }
 
         public static string GetDuration(this Video video)
         {
-            var duration = TimeSpan.FromSeconds(video.Duration);
-            if (duration.TotalHours >= 1)
-            {
-                return duration.ToString("h\\:mm\\:ss");
-            }
-            else
-            {
-                return duration.ToString("mm\\:ss");
-            }
+            return ToDuration(video.Duration);
         }
 
         public static string GetDuration(this StoryVideo video)
@@ -2191,44 +2392,20 @@ namespace Telegram.Td.Api
 
         public static string GetDuration(this Audio audio)
         {
-            var duration = TimeSpan.FromSeconds(audio.Duration);
-            if (duration.TotalHours >= 1)
-            {
-                return duration.ToString("h\\:mm\\:ss");
-            }
-            else
-            {
-                return duration.ToString("mm\\:ss");
-            }
+            return ToDuration(audio.Duration);
         }
 
         public static string GetDuration(this VoiceNote voiceNote)
         {
-            var duration = TimeSpan.FromSeconds(voiceNote.Duration);
-            if (duration.TotalHours >= 1)
-            {
-                return duration.ToString("h\\:mm\\:ss");
-            }
-            else
-            {
-                return duration.ToString("mm\\:ss");
-            }
+            return ToDuration(voiceNote.Duration);
         }
 
         public static string GetDuration(this VideoNote videoNote)
         {
-            var duration = TimeSpan.FromSeconds(videoNote.Duration);
-            if (duration.TotalHours >= 1)
-            {
-                return duration.ToString("h\\:mm\\:ss");
-            }
-            else
-            {
-                return duration.ToString("mm\\:ss");
-            }
+            return ToDuration(videoNote.Duration);
         }
 
-        public static string GetDuration(this int totalSeconds)
+        public static string ToDuration(this int totalSeconds)
         {
             var duration = TimeSpan.FromSeconds(totalSeconds);
             if (duration.TotalHours >= 1)
@@ -2262,7 +2439,7 @@ namespace Telegram.Td.Api
         public static int Count(this ChatPermissions permissions)
         {
             var count = 0;
-            if (permissions.CanAddWebPagePreviews)
+            if (permissions.CanAddLinkPreviews)
             {
                 count++;
             }
@@ -2330,7 +2507,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanPinMessages;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanPinMessages: true };
         }
 
         public static bool CanDeleteMessages(this Supergroup supergroup)
@@ -2340,7 +2517,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanDeleteMessages;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanDeleteMessages: true };
         }
 
         public static bool CanPinMessages(this BasicGroup basicGroup)
@@ -2350,7 +2527,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return basicGroup.Status is ChatMemberStatusCreator || basicGroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanPinMessages;
+            return basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanPinMessages: true };
         }
 
         public static bool CanDeleteMessages(this BasicGroup basicGroup)
@@ -2360,27 +2537,37 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return basicGroup.Status is ChatMemberStatusCreator || basicGroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanDeleteMessages;
+            return basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanDeleteMessages: true };
         }
 
-        public static bool CanChangeInfo(this BasicGroup basicGroup)
+        public static bool CanChangeInfo(this BasicGroup basicGroup, Chat chat)
         {
             if (basicGroup.Status == null)
             {
                 return false;
             }
 
-            return basicGroup.Status is ChatMemberStatusCreator || basicGroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanChangeInfo;
+            if (basicGroup.Status is ChatMemberStatusMember)
+            {
+                return chat.Permissions.CanChangeInfo;
+            }
+
+            return basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanChangeInfo: true };
         }
 
-        public static bool CanChangeInfo(this Supergroup supergroup)
+        public static bool CanChangeInfo(this Supergroup supergroup, Chat chat)
         {
             if (supergroup.Status == null)
             {
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanChangeInfo;
+            if (supergroup.Status is ChatMemberStatusMember)
+            {
+                return chat.Permissions.CanChangeInfo;
+            }
+
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanChangeInfo: true };
         }
 
         public static bool CanManageVideoChats(this Supergroup supergroup)
@@ -2390,7 +2577,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanManageVideoChats;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanManageVideoChats: true };
         }
 
         public static bool CanManageVideoChats(this BasicGroup basicGroup)
@@ -2400,7 +2587,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return basicGroup.Status is ChatMemberStatusCreator || basicGroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanManageVideoChats;
+            return basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanManageVideoChats: true };
         }
 
         public static bool CanPostMessages(this Supergroup supergroup)
@@ -2412,13 +2599,11 @@ namespace Telegram.Td.Api
 
             if (supergroup.IsChannel)
             {
-                return supergroup.Status is ChatMemberStatusCreator
-                    || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanPostMessages;
+                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanPostMessages: true };
             }
             else
             {
-                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator or ChatMemberStatusMember
-                    || supergroup.Status is ChatMemberStatusRestricted restricted && restricted.Permissions.CanSendBasicMessages;
+                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator or ChatMemberStatusMember or ChatMemberStatusRestricted { Permissions.CanSendBasicMessages: true };
             }
         }
 
@@ -2432,8 +2617,7 @@ namespace Telegram.Td.Api
 
             if (supergroup.IsChannel)
             {
-                return supergroup.Status is ChatMemberStatusCreator
-                    || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanPostStories;
+                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanPostStories: true };
             }
 
             return false;
@@ -2448,8 +2632,7 @@ namespace Telegram.Td.Api
 
             if (supergroup.IsChannel)
             {
-                return supergroup.Status is ChatMemberStatusCreator
-                    || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanEditStories;
+                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanEditStories: true };
             }
 
             return false;
@@ -2464,8 +2647,7 @@ namespace Telegram.Td.Api
 
             if (supergroup.IsChannel)
             {
-                return supergroup.Status is ChatMemberStatusCreator
-                    || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanDeleteStories;
+                return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanDeleteStories: true };
             }
 
             return false;
@@ -2478,7 +2660,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanRestrictMembers;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanRestrictMembers: true };
         }
 
         public static bool CanPromoteMembers(this Supergroup supergroup)
@@ -2488,7 +2670,7 @@ namespace Telegram.Td.Api
                 return false;
             }
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanPromoteMembers;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanPromoteMembers: true };
         }
 
         public static bool CanPromoteMembers(this BasicGroup basicGroup)
@@ -2518,7 +2700,7 @@ namespace Telegram.Td.Api
             //    return true;
             //}
 
-            return supergroup.Status is ChatMemberStatusCreator || supergroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanInviteUsers;
+            return supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanInviteUsers: true };
         }
 
         public static bool CanInviteUsers(this BasicGroup basicGroup)
@@ -2533,7 +2715,7 @@ namespace Telegram.Td.Api
             //    return true;
             //}
 
-            return basicGroup.Status is ChatMemberStatusCreator || basicGroup.Status is ChatMemberStatusAdministrator administrator && administrator.Rights.CanInviteUsers;
+            return basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator { Rights.CanInviteUsers: true };
         }
 
         public static bool CanPostMessages(this BasicGroup basicGroup)

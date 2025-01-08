@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,10 +12,11 @@ using Telegram.Views.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls.Messages
 {
-    public class ReactionAsTagButton : ReactionButton
+    public partial class ReactionAsTagButton : ReactionButton
     {
         private MessageTag _tag;
 
@@ -101,9 +102,9 @@ namespace Telegram.Controls.Messages
             }
         }
 
-        public void OnContextRequested()
+        public override void OnContextRequested(ContextRequestedEventArgs args)
         {
-            var chosen = _interaction;
+            var chosen = _reaction;
             if (chosen != null)
             {
                 OnClick(_message, chosen);
@@ -144,7 +145,7 @@ namespace Telegram.Controls.Messages
             if (Parent is FrameworkElement parent)
             {
                 var transform = TransformToVisual(parent);
-                var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                var point = transform.TransformPoint(new Windows.Foundation.Point());
 
                 placement = point.X < (parent.ActualWidth - (point.X + ActualWidth))
                         ? FlyoutPlacementMode.BottomEdgeAlignedLeft
@@ -160,7 +161,7 @@ namespace Telegram.Controls.Messages
 
         private void FilterByTag()
         {
-            var chosen = _interaction;
+            var chosen = _reaction;
             if (chosen == null)
             {
                 return;
@@ -171,7 +172,7 @@ namespace Telegram.Controls.Messages
 
         private async void RenameTag()
         {
-            var chosen = _interaction;
+            var chosen = _reaction;
             if (chosen == null || !_message.ClientService.TryGetSavedMessagesTag(chosen.Type, out MessageTag tag))
             {
                 return;
@@ -189,7 +190,7 @@ namespace Telegram.Controls.Messages
             popup.PrimaryButtonText = Strings.Save;
             popup.SecondaryButtonText = Strings.Cancel;
 
-            var confirm = await popup.ShowQueuedAsync();
+            var confirm = await popup.ShowQueuedAsync(XamlRoot);
             if (confirm == ContentDialogResult.Primary)
             {
                 _message.ClientService.Send(new SetSavedMessagesTagLabel(chosen.Type, popup.Text));
@@ -198,7 +199,7 @@ namespace Telegram.Controls.Messages
 
         private void RemoveTag()
         {
-            var chosen = _interaction;
+            var chosen = _reaction;
             if (chosen == null)
             {
                 return;

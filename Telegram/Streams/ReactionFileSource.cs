@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,7 @@ using Telegram.Td.Api;
 
 namespace Telegram.Streams
 {
-    public class ReactionFileSource : DelayedFileSource
+    public partial class ReactionFileSource : DelayedFileSource
     {
         private readonly IClientService _clientService;
         private readonly ReactionType _reaction;
@@ -23,6 +23,8 @@ namespace Telegram.Streams
 
             DownloadFile(null, null);
         }
+
+        public bool UseCenterAnimation { get; set; }
 
         public override long Id => GetHashCode();
 
@@ -42,7 +44,14 @@ namespace Telegram.Streams
                         var response = await _clientService.SendAsync(new GetEmojiReaction(emoji.Emoji));
                         if (response is EmojiReaction reaction)
                         {
-                            sticker = reaction.ActivateAnimation;
+                            sticker = UseCenterAnimation
+                                ? reaction.CenterAnimation
+                                : reaction.ActivateAnimation;
+
+                            if (UseCenterAnimation && reaction.AroundAnimation != null)
+                            {
+                                _clientService.DownloadFile(reaction.AroundAnimation.StickerValue.Id, 8);
+                            }
                         }
                     }
                     else if (_reaction is ReactionTypeCustomEmoji customEmoji)
@@ -53,6 +62,10 @@ namespace Telegram.Streams
                             sticker = stickers.StickersValue[0];
                         }
                     }
+                    else if (_reaction is ReactionTypePaid)
+                    {
+                        sticker = new Sticker(0, 0, 512, 512, "\u2B50", new StickerFormatTgs(), new StickerFullTypeRegular(), null, TdExtensions.GetLocalFile("Assets\\Animations\\PaidReactionCenter.tgs"));
+                    }
 
                     if (sticker != null)
                     {
@@ -60,10 +73,9 @@ namespace Telegram.Streams
                         Format = sticker.Format;
                         Width = sticker.Width;
                         Height = sticker.Height;
-                        Outline = sticker.Outline;
                         NeedsRepainting = sticker.FullType is StickerFullTypeCustomEmoji { NeedsRepainting: true };
 
-                        OnOutlineChanged();
+                        OnOutlineChanged(sticker.StickerValue);
                     }
                 }
 
@@ -91,7 +103,7 @@ namespace Telegram.Streams
 
         public override bool Equals(object obj)
         {
-            if (obj is CustomEmojiFileSource y)
+            if (obj is CustomEmojiFileSource y && !y.IsUnique && !IsUnique)
             {
                 return y.Id == Id;
             }
@@ -101,6 +113,11 @@ namespace Telegram.Streams
 
         public override int GetHashCode()
         {
+            if (IsUnique)
+            {
+                return base.GetHashCode();
+            }
+
             return _reaction switch
             {
                 ReactionTypeEmoji emoji => emoji.Emoji.GetHashCode(),

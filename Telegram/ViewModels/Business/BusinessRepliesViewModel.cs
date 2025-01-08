@@ -5,7 +5,6 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
 using Telegram.Views;
@@ -15,7 +14,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Business
 {
-    public class BusinessRepliesViewModel : ViewModelBase, IDelegable<IBusinessRepliesDelegate>, IHandle
+    public partial class BusinessRepliesViewModel : ViewModelBase, IDelegable<IBusinessRepliesDelegate>, IHandle
     {
         public IBusinessRepliesDelegate Delegate { get; set; }
 
@@ -92,7 +91,7 @@ namespace Telegram.ViewModels.Business
             {
                 if (!ClientService.CheckQuickReplyShortcutName(args.Text))
                 {
-                    ToastPopup.Show(Strings.BusinessRepliesNameBusy, new LocalFileSource("ms-appx:///Assets/Toasts/Error.tgs"));
+                    ShowToast(Strings.BusinessRepliesNameBusy, ToastPopupIcon.Error);
                     args.Cancel = true;
                 }
             };
@@ -100,7 +99,7 @@ namespace Telegram.ViewModels.Business
             var confirm = await ShowPopupAsync(popup);
             if (confirm == ContentDialogResult.Primary)
             {
-
+                NavigationService.Navigate(typeof(ChatBusinessRepliesPage), new ChatBusinessRepliesIdNavigationArgs(popup.Text));
             }
         }
 
@@ -122,7 +121,7 @@ namespace Telegram.ViewModels.Business
             {
                 if (!ClientService.CheckQuickReplyShortcutName(args.Text))
                 {
-                    ToastPopup.Show(Strings.BusinessRepliesNameBusy, new LocalFileSource("ms-appx:///Assets/Toasts/Error.tgs"));
+                    ShowToast(Strings.BusinessRepliesNameBusy, ToastPopupIcon.Error);
                     args.Cancel = true;
                 }
             };
@@ -148,7 +147,7 @@ namespace Telegram.ViewModels.Business
 
         public void Open(QuickReplyShortcut shortcut)
         {
-            NavigationService.Navigate(typeof(ChatBusinessRepliesPage), new ChatBusinessRepliesIdNavigationArgs(ClientService.Options.MyId, shortcut.Id));
+            NavigationService.Navigate(typeof(ChatBusinessRepliesPage), new ChatBusinessRepliesIdNavigationArgs(shortcut.Name));
         }
     }
 }

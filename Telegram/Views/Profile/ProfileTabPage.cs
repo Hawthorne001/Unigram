@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,13 +11,14 @@ using Telegram.Controls.Media;
 using Telegram.Navigation;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
+using Telegram.ViewModels.Profile;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 
 namespace Telegram.Views.Profile
 {
-    public class ProfileTabPage : PageEx, INavigablePage
+    public partial class ProfileTabPage : PageEx, INavigablePage
     {
         public ProfileViewModel ViewModel => DataContext as ProfileViewModel;
 
@@ -27,18 +28,27 @@ namespace Telegram.Views.Profile
 
         public void OnBackRequested(BackRequestedRoutedEventArgs args)
         {
-            if (ViewModel.SelectedItems.Count > 0)
+            if (ViewModel?.SelectedItems.Count > 0)
             {
                 ViewModel.UnselectMessages();
+                args.Handled = true;
+            }
+            else if (DataContext is ProfileStoriesTabViewModel stories && stories.SelectedItems.Count > 0)
+            {
+                stories.UnselectStories();
                 args.Handled = true;
             }
         }
 
         #region Context menu
 
-        private void Message_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+        private async void Message_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
         {
             var message = ScrollingHost.ItemFromContainer(sender) as MessageWithOwner;
+            if (message == null)
+            {
+                return;
+            }
 
             var flyout = new MenuFlyout();
 
@@ -66,10 +76,24 @@ namespace Telegram.Views.Profile
             }
             else
             {
+                var properties = await message.ClientService.SendAsync(new GetMessageProperties(message.ChatId, message.Id)) as MessageProperties;
+                if (properties == null)
+                {
+                    return;
+                }
 
                 flyout.CreateFlyoutItem(MessageView_Loaded, ViewModel.ViewMessage, message, Strings.ShowInChat, Icons.ChatEmpty);
-                flyout.CreateFlyoutItem(MessageDelete_Loaded, ViewModel.DeleteMessage, message, Strings.Delete, Icons.Delete, destructive: true);
-                flyout.CreateFlyoutItem(MessageForward_Loaded, ViewModel.ForwardMessage, message, Strings.Forward, Icons.Share);
+
+                if (MessageDelete_Loaded(message, properties))
+                {
+                    flyout.CreateFlyoutItem(ViewModel.DeleteMessage, message, Strings.Delete, Icons.Delete, destructive: true);
+                }
+
+                if (MessageForward_Loaded(message, properties))
+                {
+                    flyout.CreateFlyoutItem(ViewModel.ForwardMessage, message, Strings.Forward, Icons.Share);
+                }
+
                 flyout.CreateFlyoutItem(MessageSelect_Loaded, ViewModel.SelectMessage, message, Strings.Select, Icons.CheckmarkCircle);
                 flyout.CreateFlyoutItem(MessageSaveMedia_Loaded, ViewModel.SaveMessageMedia, message, Strings.SaveAs, Icons.SaveAs);
                 flyout.CreateFlyoutItem(MessageOpenMedia_Loaded, ViewModel.OpenMessageWith, message, Strings.OpenWith, Icons.OpenIn);
@@ -142,14 +166,14 @@ namespace Telegram.Views.Profile
             };
         }
 
-        private bool MessageDelete_Loaded(MessageWithOwner message)
+        private bool MessageDelete_Loaded(MessageWithOwner message, MessageProperties properties)
         {
-            return message.CanBeDeletedOnlyForSelf || message.CanBeDeletedForAllUsers;
+            return properties.CanBeDeletedOnlyForSelf || properties.CanBeDeletedForAllUsers;
         }
 
-        private bool MessageForward_Loaded(MessageWithOwner message)
+        private bool MessageForward_Loaded(MessageWithOwner message, MessageProperties properties)
         {
-            return message.CanBeForwarded;
+            return properties.CanBeForwarded;
         }
 
         private bool MessageSelect_Loaded(MessageWithOwner message)
@@ -174,7 +198,11 @@ namespace Telegram.Views.Profile
 
                 args.ItemContainer.Style = sender.ItemContainerStyle;
                 args.ItemContainer.ContentTemplate = sender.ItemTemplate;
-                args.ItemContainer.ContextRequested += Message_ContextRequested;
+
+                if (args.Item is MessageWithOwner)
+                {
+                    args.ItemContainer.ContextRequested += Message_ContextRequested;
+                }
             }
 
             if (sender.ItemTemplateSelector != null)

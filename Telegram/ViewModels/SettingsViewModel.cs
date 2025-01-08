@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class SettingsViewModel : ViewModelBase, IChildViewModel, IDelegable<ISettingsDelegate>, IHandle
+    public partial class SettingsViewModel : ViewModelBase, IChildViewModel, IDelegable<ISettingsDelegate>, IHandle
     {
         private readonly ISettingsSearchService _searchService;
         private readonly IStorageService _storageService;
@@ -42,51 +42,37 @@ namespace Telegram.ViewModels
 
         public IStorageService StorageService => _storageService;
 
-        public bool IsBusinessAvailable => IsPremiumAvailable;
-
-        private Chat _chat;
-        public Chat Chat
-        {
-            get => _chat;
-            set => Set(ref _chat, value);
-        }
+        public string OwnedStarCount => ClientService.OwnedStarCount.IsPositive()
+            ? ClientService.OwnedStarCount.ToValue()
+            : string.Empty;
 
         public MvxObservableCollection<SettingsSearchEntry> Results { get; private set; }
 
-        protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
+        protected override Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
         {
-            var response = await ClientService.SendAsync(new CreatePrivateChat(ClientService.Options.MyId, false));
-            if (response is Chat chat)
+            if (ClientService.TryGetUser(ClientService.Options.MyId, out User item))
             {
-                Chat = chat;
+                Delegate?.UpdateUser(null, item, false);
 
-                if (chat.Type is ChatTypePrivate privata)
+                var cache = ClientService.GetUserFull(item.Id);
+                if (cache == null)
                 {
-                    var item = ClientService.GetUser(privata.UserId);
-                    if (item == null)
-                    {
-                        return;
-                    }
-
-                    Delegate?.UpdateUser(chat, item, false);
-
-                    var cache = ClientService.GetUserFull(privata.UserId);
-                    if (cache == null)
-                    {
-                        ClientService.Send(new GetUserFullInfo(privata.UserId));
-                    }
-                    else
-                    {
-                        Delegate?.UpdateUserFullInfo(chat, item, cache, false, false);
-                    }
+                    ClientService.Send(new GetUserFullInfo(item.Id));
+                }
+                else
+                {
+                    Delegate?.UpdateUserFullInfo(null, item, cache, false, false);
                 }
             }
+
+            return Task.CompletedTask;
         }
 
         public override void Subscribe()
         {
             Aggregator.Subscribe<UpdateUser>(this, Handle)
                 .Subscribe<UpdateUserFullInfo>(Handle)
+                .Subscribe<UpdateOwnedStarCount>(Handle)
                 .Subscribe<UpdateOption>(Handle);
         }
 
@@ -99,39 +85,28 @@ namespace Telegram.ViewModels
 
         public void Handle(UpdateUser update)
         {
-            var chat = _chat;
-            if (chat == null)
+            if (update.User.Id == ClientService.Options.MyId)
             {
-                return;
-            }
-
-            if (chat.Type is ChatTypePrivate privata && privata.UserId == update.User.Id)
-            {
-                BeginOnUIThread(() => Delegate?.UpdateUser(chat, update.User, false));
-            }
-            else if (chat.Type is ChatTypeSecret secret && secret.UserId == update.User.Id)
-            {
-                BeginOnUIThread(() => Delegate?.UpdateUser(chat, update.User, true));
+                BeginOnUIThread(() => Delegate?.UpdateUser(null, update.User, false));
             }
         }
 
         public void Handle(UpdateUserFullInfo update)
         {
-            var chat = _chat;
-            if (chat == null)
+            if (update.UserId == ClientService.Options.MyId)
             {
-                return;
+                BeginOnUIThread(() => Delegate?.UpdateUserFullInfo(null, ClientService.GetUser(update.UserId), update.UserFullInfo, false, false));
             }
+        }
 
-            if (chat.Type is ChatTypePrivate privata && privata.UserId == update.UserId)
-            {
-                BeginOnUIThread(() => Delegate?.UpdateUserFullInfo(chat, ClientService.GetUser(update.UserId), update.UserFullInfo, false, false));
-            }
+        private void Handle(UpdateOwnedStarCount update)
+        {
+            BeginOnUIThread(() => RaisePropertyChanged(nameof(OwnedStarCount)));
         }
 
         public void Handle(UpdateOption update)
         {
-            if (update.Name == "is_premium_available" || update.Name == "is_premium")
+            if (update.Name == OptionsService.R.IsPremium || update.Name == OptionsService.R.IsPremiumAvailable)
             {
                 BeginOnUIThread(() => RaisePropertyChanged(nameof(IsPremiumAvailable)));
             }
@@ -143,7 +118,7 @@ namespace Telegram.ViewModels
         {
             var text = Regex.Replace(Strings.AskAQuestionInfo, "<!\\[CDATA\\[(.*?)\\]\\]>", "$1");
 
-            var confirm = await ShowPopupAsync(text, Strings.AskAQuestion, Strings.AskButton, Strings.Cancel);
+            var confirm = await ShowPopupAsync(text, Strings.AskAQuestion, Strings.AskButton, tertiary: Strings.Cancel);
             if (confirm == ContentDialogResult.Primary)
             {
                 var response = await ClientService.SendAsync(new GetSupportUser());
@@ -160,19 +135,17 @@ namespace Telegram.ViewModels
 
         public async void PremiumGifting()
         {
-            var user = await ChooseChatsPopup.PickUserAsync(ClientService, Strings.SelectContact, false);
-            if (user == null)
+            var user = await ChooseChatsPopup.PickUserAsync(ClientService, NavigationService, Strings.SelectContact, false);
+            if (user != null)
             {
-                return;
-            }
+                ClientService.TryGetUserFull(user.Id, out UserFullInfo fullInfo);
+                fullInfo ??= await ClientService.SendAsync(new GetUserFullInfo(user.Id)) as UserFullInfo;
 
-            var userFull = await ClientService.SendAsync(new GetUserFullInfo(user.Id)) as UserFullInfo;
-            if (userFull == null)
-            {
-                return;
+                if (fullInfo != null)
+                {
+                    await ShowPopupAsync(new GiftPopup(ClientService, NavigationService, user, fullInfo));
+                }
             }
-
-            await ShowPopupAsync(new GiftPopup(ClientService, NavigationService, user, userFull.PremiumGiftOptions));
         }
 
         public void Search(string query)
@@ -185,7 +158,11 @@ namespace Telegram.ViewModels
         {
             if (entry is SettingsSearchPage page && page.Page != null)
             {
-                if (page.Page == typeof(SettingsPasscodePage))
+                if (page.Page == typeof(SettingsPasswordPage))
+                {
+                    NavigationService.NavigateToPassword();
+                }
+                else if (page.Page == typeof(SettingsPasscodePage))
                 {
                     NavigationService.NavigateToPasscode();
                 }

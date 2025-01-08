@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -38,6 +38,15 @@ namespace Telegram.Controls.Stories
         public void Update(StoryViewModel story)
         {
             _viewModel = story;
+
+            if (story.ClientService.TryGetUser(story.ChatId, out User user) && user.Type is UserTypeBot)
+            {
+                Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                Visibility = Visibility.Visible;
+            }
 
             if (story.InteractionInfo != null)
             {

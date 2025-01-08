@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,10 +10,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Telegram.Controls;
@@ -24,23 +25,28 @@ using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Td;
 using Telegram.Td.Api;
+using Telegram.ViewModels.Gallery;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.AppService;
 using Windows.ApplicationModel.Calls;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Data.Json;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.Storage.FileProperties;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
+using Windows.System.Display;
 using Windows.UI;
 using Windows.UI.Core;
+using Windows.UI.Input;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Documents;
+using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
@@ -51,6 +57,26 @@ namespace Telegram.Common
 {
     public static class Extensions
     {
+        public static void Add(this ColumnDefinitionCollection columns, double pixels)
+        {
+            columns.Add(new ColumnDefinition { Width = new GridLength(pixels) });
+        }
+
+        public static void Add(this ColumnDefinitionCollection columns, double value, GridUnitType type)
+        {
+            columns.Add(new ColumnDefinition { Width = new GridLength(value, type) });
+        }
+
+        public static void Add(this RowDefinitionCollection rows, double pixels)
+        {
+            rows.Add(new RowDefinition { Height = new GridLength(pixels) });
+        }
+
+        public static void Add(this RowDefinitionCollection rows, double value, GridUnitType type)
+        {
+            rows.Add(new RowDefinition { Height = new GridLength(value, type) });
+        }
+
         public static void SetToolTip(DependencyObject element, object value, [CallerMemberName] string member = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int line = 0)
         {
             if (ApiInfo.IsStoreRelease || value == null)
@@ -75,39 +101,33 @@ namespace Telegram.Common
 
         // TODO: this is a duplicat of INavigationService.ShowPopupAsync, and it's needed by GamePage, GroupCallPage and LiveStreamPage.
         // Must be removed at some point.
-        public static Task<ContentDialogResult> ShowPopupAsync(this Page frame, int sessionId, Type sourcePopupType, object parameter = null, TaskCompletionSource<object> tsc = null)
+        public static Task<ContentDialogResult> ShowPopupAsync(this UserControl frame, int sessionId, ContentPopup popup, object parameter = null)
         {
-            var popup = (tsc != null ? Activator.CreateInstance(sourcePopupType, tsc) : Activator.CreateInstance(sourcePopupType)) as ContentPopup;
-            if (popup != null)
+            var viewModel = BootStrapper.Current.ViewModelForPage(popup, sessionId);
+            if (viewModel != null)
             {
-                var viewModel = BootStrapper.Current.ViewModelForPage(popup, sessionId);
-                if (viewModel != null)
+                viewModel.XamlRoot = frame.XamlRoot;
+
+                void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
                 {
-                    //viewModel.NavigationService = this;
-
-                    void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
-                    {
-                        popup.Opened -= OnOpened;
-                    }
-
-                    void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
-                    {
-                        viewModel.NavigatedFrom(null, false);
-                        popup.OnNavigatedFrom();
-                        popup.Closed -= OnClosed;
-                    }
-
-                    popup.DataContext = viewModel;
-
-                    _ = viewModel.NavigatedToAsync(parameter, NavigationMode.New, null);
-                    popup.OnNavigatedTo();
-                    popup.Closed += OnClosed;
+                    popup.Opened -= OnOpened;
                 }
 
-                return popup.ShowQueuedAsync();
+                void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
+                {
+                    viewModel.NavigatedFrom(null, false);
+                    popup.OnNavigatedFrom();
+                    popup.Closed -= OnClosed;
+                }
+
+                popup.DataContext = viewModel;
+
+                _ = viewModel.NavigatedToAsync(parameter, NavigationMode.New, null);
+                popup.OnNavigatedTo(parameter);
+                popup.Closed += OnClosed;
             }
 
-            return Task.FromResult(ContentDialogResult.None);
+            return popup.ShowQueuedAsync(frame.XamlRoot);
         }
 
         public static void AddCubicBezier(this PathFigure figure, Point controlPoint1, Point controlPoint2, Point endPoint)
@@ -126,6 +146,23 @@ namespace Telegram.Common
             {
                 Point = new Point(x, y),
             });
+        }
+
+        public static FormattedText AsFormattedText(this string str)
+        {
+            return new FormattedText(str, Array.Empty<TextEntity>());
+        }
+
+        public static IEnumerable<IList<T>> ToChunks<T>(this List<T> enumerable, int chunkSize)
+        {
+            int itemsReturned = 0;
+            int count = enumerable.Count;
+            while (itemsReturned < count)
+            {
+                int currentChunkSize = Math.Min(chunkSize, count - itemsReturned);
+                yield return enumerable.GetRange(itemsReturned, currentChunkSize);
+                itemsReturned += currentChunkSize;
+            }
         }
 
         public static void ForEach<T>(this ListViewBase listView, Action<SelectorItem, T> handler) where T : class
@@ -206,7 +243,13 @@ namespace Telegram.Common
                 return null;
             }
 
-            return await StorageMedia.CreateAsync(file);
+            var media = await StorageMedia.CreateAsync(file);
+            if (media != null)
+            {
+                return media;
+            }
+
+            return new StorageInvalid();
         }
 
         public static Version ToVersion(this PackageVersion version)
@@ -343,6 +386,85 @@ namespace Telegram.Common
             return false;
         }
 
+        public static int OffsetToIndex(this TextPointer pointer)
+        {
+            if (pointer.VisualParent is not RichTextBlock textBlock)
+            {
+                return -1;
+            }
+
+            var index = 0;
+
+            for (int i = 0; i < textBlock.Blocks.Count; i++)
+            {
+                var block = textBlock.Blocks[i] as Paragraph;
+
+                if (pointer.Offset == block.ElementStart.Offset)
+                {
+                    break;
+                }
+
+                // Element start
+                index++;
+
+                if (OffsetToIndex(textBlock, block.Inlines, pointer, ref index))
+                {
+                    break;
+                }
+
+                if (pointer.Offset < block.ElementEnd.Offset)
+                {
+                    if (pointer.Offset == block.ContentEnd.Offset)
+                    {
+                        if (i == textBlock.Blocks.Count - 1)
+                        {
+                            // Always close when ending on the last paragraph
+                            index++;
+                        }
+                        else
+                        {
+                            index += 1;//paragraph.Padding;
+                        }
+                    }
+
+                    break;
+                }
+
+                // Element end
+                index += 1;//paragraph.Padding;
+            }
+
+            // Adjust the offset if the selection ends on the text block itself
+            if (pointer.Offset == textBlock.ContentEnd.Offset && pointer.Parent is RichTextBlock)
+            {
+                index += 2;
+            }
+
+            return pointer.Offset - index;
+        }
+
+        public static IEnumerable<AlternativeVideo> FindAlternatives(this GalleryMedia video, params string[] codecs)
+        {
+            var playlists = video.AlternativeVideos
+                .GroupBy(x => x.Codec)
+                .ToDictionary(x => x.Key);
+
+            foreach (var codec in codecs)
+            {
+                if (playlists.TryGetValue(codec, out var playlist))
+                {
+                    return playlist;
+                }
+            }
+
+            return Enumerable.Empty<AlternativeVideo>();
+        }
+
+        public static int GetNamedInt32(this JsonObject obj, string name, int defaultValue)
+        {
+            return (int)obj.GetNamedNumber(name, defaultValue);
+        }
+
         public static bool HasExtension(this IStorageFile file, params string[] extensions)
         {
             foreach (var ext in extensions)
@@ -369,6 +491,23 @@ namespace Telegram.Common
             return false;
         }
 
+        class TaskCompletion : TaskCompletionSource<bool>
+        {
+            public void SetCompleted(object state, bool timedOut)
+            {
+                TrySetResult(true);
+            }
+        }
+
+        public static Task WaitOneAsync(this WaitHandle waitHandle)
+        {
+            var tcs = new TaskCompletion();
+            var rwh = ThreadPool.RegisterWaitForSingleObject(waitHandle, tcs.SetCompleted, null, -1, true);
+            var t = tcs.Task;
+            t.ContinueWith((antecedent) => rwh.Unregister(null));
+            return t;
+        }
+
         public static T Random<T>(this IList<T> source)
         {
             if (source.Count > 0)
@@ -392,6 +531,90 @@ namespace Telegram.Common
         public static IAsyncOperation<AppServiceResponse> SendMessageAsync(this AppServiceConnection connection, string message, object parameter = null)
         {
             return connection.SendMessageAsync(new ValueSet { { message, parameter ?? true } });
+        }
+
+        public static string ToDuration(this TimeSpan duration, bool hours = false)
+        {
+            if (duration.TotalHours >= 1 || hours)
+            {
+                return duration.ToString("h\\:mm\\:ss");
+            }
+            else
+            {
+                return duration.ToString("mm\\:ss");
+            }
+        }
+
+        public static void TryProcessDownEvent(this GestureRecognizer recognizer, PointerPoint value)
+        {
+            try
+            {
+                recognizer.ProcessDownEvent(value);
+            }
+            catch
+            {
+                recognizer.TryCompleteGesture();
+            }
+        }
+
+        public static void TryProcessMoveEvents(this GestureRecognizer recognizer, IList<PointerPoint> value)
+        {
+            try
+            {
+                recognizer.ProcessMoveEvents(value);
+            }
+            catch
+            {
+                recognizer.TryCompleteGesture();
+            }
+        }
+
+        public static void TryProcessUpEvent(this GestureRecognizer recognizer, PointerPoint value)
+        {
+            try
+            {
+                recognizer.ProcessUpEvent(value);
+            }
+            catch
+            {
+                recognizer.TryCompleteGesture();
+            }
+        }
+
+        public static void TryCompleteGesture(this GestureRecognizer recognizer)
+        {
+            try
+            {
+                if (recognizer.IsActive)
+                {
+                    recognizer.CompleteGesture();
+                }
+            }
+            catch
+            {
+                // All the remote procedure calls must be wrapped in a try-catch block
+            }
+        }
+
+        public static async Task<VoipPhoneCallResourceReservationStatus> TryReserveCallResourcesAsync(this VoipCallCoordinator coordinator)
+        {
+            var status = VoipPhoneCallResourceReservationStatus.ResourcesNotAvailable;
+            try
+            {
+                status = await coordinator.ReserveCallResourcesAsync();
+            }
+            catch (Exception ex)
+            {
+                if (ex.HResult == -2147024713)
+                {
+                    // CPU and memory resources have already been reserved for the app.
+                    // Ignore the return value from your call to ReserveCallResourcesAsync,
+                    // and proceed to handle a new VoIP call.
+                    status = VoipPhoneCallResourceReservationStatus.Success;
+                }
+            }
+
+            return status;
         }
 
         public static void TryNotifyMutedChanged(this VoipCallCoordinator coordinator, bool muted)
@@ -437,6 +660,42 @@ namespace Telegram.Common
             }
         }
 
+        public static void TryRequestActive(this DisplayRequest displayRequest)
+        {
+            try
+            {
+                displayRequest.RequestActive();
+            }
+            catch
+            {
+                // All the remote procedure calls must be wrapped in a try-catch block
+            }
+        }
+
+        public static void TryRequestRelease(this DisplayRequest displayRequest)
+        {
+            try
+            {
+                displayRequest.RequestRelease();
+            }
+            catch
+            {
+                // All the remote procedure calls must be wrapped in a try-catch block
+            }
+        }
+
+        public static void CreateInsetClip(this UIElement element)
+        {
+            var visual = ElementComposition.GetElementVisual(element);
+            visual.Clip = visual.Compositor.CreateInsetClip();
+        }
+
+        public static void CreateInsetClip(this UIElement element, float leftInset, float topInset, float rightInset, float bottomInset)
+        {
+            var visual = ElementComposition.GetElementVisual(element);
+            visual.Clip = visual.Compositor.CreateInsetClip(leftInset, topInset, rightInset, bottomInset);
+        }
+
         public static void Clear(this ITextDocument document)
         {
             using (var stream = new InMemoryRandomAccessStream())
@@ -459,17 +718,21 @@ namespace Telegram.Common
 
         public static Color ToColor(this int color, bool alpha = false)
         {
+            byte a;
             if (alpha)
             {
-                byte a = (byte)((color & 0xff000000) >> 24);
-                byte r = (byte)((color & 0x00ff0000) >> 16);
-                byte g = (byte)((color & 0x0000ff00) >> 8);
-                byte b = (byte)(color & 0x000000ff);
-
-                return Color.FromArgb(a, r, g, b);
+                a = (byte)((color & 0xff000000) >> 24);
+            }
+            else
+            {
+                a = 255;
             }
 
-            return Color.FromArgb(0xFF, (byte)((color >> 16) & 0xFF), (byte)((color >> 8) & 0xFF), (byte)(color & 0xFF));
+            byte r = (byte)((color & 0x00ff0000) >> 16);
+            byte g = (byte)((color & 0x0000ff00) >> 8);
+            byte b = (byte)(color & 0x000000ff);
+
+            return Color.FromArgb(a, r, g, b);
         }
 
         public static int ToValue(this Color color, bool alpha = false)
@@ -843,6 +1106,27 @@ namespace Telegram.Common
             return new InputThumbnail(await file.ToGeneratedAsync(conversion, arguments), width, height);
         }
 
+        public static async Task<InputThumbnail> ToVideoThumbnailAsync(this StorageVideo file, VideoConversion video = null, ConversionType conversion = ConversionType.Copy, string arguments = null)
+        {
+            double originalWidth = file.Width;
+            double originalHeight = file.Height;
+
+            if (!video.CropRectangle.IsEmpty)
+            {
+                originalWidth = video.CropRectangle.Width;
+                originalHeight = video.CropRectangle.Height;
+            }
+
+            double ratioX = 90 / originalWidth;
+            double ratioY = 90 / originalHeight;
+            double ratio = Math.Min(ratioX, ratioY);
+
+            int width = (int)(originalWidth * ratio);
+            int height = (int)(originalHeight * ratio);
+
+            return new InputThumbnail(await file.File.ToGeneratedAsync(conversion, arguments), width, height);
+        }
+
         public static IEnumerable<TSource> DistinctBy<TSource, TKey>(this IEnumerable<TSource> source, Func<TSource, TKey> keySelector)
         {
             HashSet<TKey> seenKeys = new();
@@ -905,6 +1189,26 @@ namespace Telegram.Common
             return defaultValue;
         }
 
+        public static Vector2 TransformVector2(this GeneralTransform transform, Vector2 point)
+        {
+            return transform.TransformPoint(point.ToPoint()).ToVector2();
+        }
+
+        public static Vector2 TransformVector2(this GeneralTransform transform)
+        {
+            return transform.TransformPoint(new Point()).ToVector2();
+        }
+
+        public static Vector2 TransformToVector2(this UIElement element, UIElement visual)
+        {
+            return element.TransformToVisual(visual).TransformVector2();
+        }
+
+        public static Point TransformToPoint(this UIElement element, UIElement visual)
+        {
+            return element.TransformToVisual(visual).TransformPoint(new Point());
+        }
+
         public static void BeginOnUIThread(this DependencyObject element, Action action)
         {
             try
@@ -921,14 +1225,14 @@ namespace Telegram.Common
                         {
                             action();
                         }
-                        catch (InvalidComObjectException)
+                        catch
                         {
-
+                            // Most likely Excep_InvalidComObject_NoRCW_Wrapper, so we can just ignore it
                         }
                     });
                 }
             }
-            catch (InvalidComObjectException)
+            catch
             {
                 // Most likely Excep_InvalidComObject_NoRCW_Wrapper, so we can just ignore it
             }
@@ -1241,6 +1545,19 @@ namespace Telegram.Common
             };
         }
 
+        public static SvgImageSource ToSvg(string path, int width = 0, int height = 0)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            return new SvgImageSource(ToLocal(path))
+            {
+
+            };
+        }
+
         public static Uri ToLocal(string path)
         {
             return new Uri(path);
@@ -1260,7 +1577,7 @@ namespace Telegram.Common
                 file = Path.GetFileName(path);
             }
 
-            return new Uri("file:///" + directory + "\\" + Uri.EscapeUriString(file));
+            return new Uri("file:///" + directory + "\\" + Uri.EscapeDataString(file));
         }
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,14 +10,13 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Collections;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Navigation;
-using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
 using Telegram.Views.Folders;
@@ -28,7 +27,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.ViewModels
 {
-    public class ChatListViewModel : ViewModelBase, IDelegable<IChatListDelegate>
+    public partial class ChatListViewModel : ViewModelBase, IDelegable<IChatListDelegate>
     {
         private readonly INotificationsService _notificationsService;
 
@@ -128,7 +127,7 @@ namespace Telegram.ViewModels
                 ClientService.Send(new AddChatToList(chat.Id, new ChatListArchive()));
             }
 
-            var confirm = await ToastPopup.ShowActionAsync(Strings.ChatArchived, Strings.Undo, new LocalFileSource("ms-appx:///Assets/Toasts/Archived.tgs"));
+            var confirm = await ToastPopup.ShowActionAsync(XamlRoot, Strings.ChatArchived, Strings.Undo, ToastPopupIcon.Archived);
             if (confirm == ContentDialogResult.Primary)
             {
                 ClientService.Send(new AddChatToList(chat.Id, new ChatListMain()));
@@ -151,7 +150,7 @@ namespace Telegram.ViewModels
             Delegate?.SetSelectionMode(false);
             SelectedItems.Clear();
 
-            var confirm = await ToastPopup.ShowActionAsync(Strings.ChatsArchived, Strings.Undo, new LocalFileSource("ms-appx:///Assets/Toasts/Archived.tgs"));
+            var confirm = await ToastPopup.ShowActionAsync(XamlRoot, Strings.ChatsArchived, Strings.Undo, ToastPopupIcon.Archived);
             if (confirm == ContentDialogResult.Primary)
             {
                 foreach (var undo in chats)
@@ -237,7 +236,7 @@ namespace Telegram.ViewModels
 
         public void NotifyChat(Chat chat)
         {
-            _notificationsService.SetMuteFor(chat, ClientService.Notifications.GetMutedFor(chat) > 0 ? 0 : 632053052);
+            _notificationsService.SetMuteFor(chat, ClientService.Notifications.IsMuted(chat) ? 0 : 632053052, XamlRoot);
         }
 
         #endregion
@@ -254,12 +253,12 @@ namespace Telegram.ViewModels
 
             if (value.Item2 is int update)
             {
-                _notificationsService.SetMuteFor(chat, update);
+                _notificationsService.SetMuteFor(chat, update, XamlRoot);
             }
             else
             {
-                var mutedFor = Settings.Notifications.GetMutedFor(chat);
-                var popup = new ChatMutePopup(mutedFor);
+                var muteFor = Settings.Notifications.GetMuteFor(chat);
+                var popup = new ChatMutePopup(muteFor);
 
                 var confirm = await ShowPopupAsync(popup);
                 if (confirm != ContentDialogResult.Primary)
@@ -267,9 +266,9 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                if (mutedFor != popup.Value)
+                if (muteFor != popup.Value)
                 {
-                    _notificationsService.SetMuteFor(chat, popup.Value);
+                    _notificationsService.SetMuteFor(chat, popup.Value, XamlRoot);
                 }
             }
         }
@@ -282,7 +281,7 @@ namespace Telegram.ViewModels
         public void NotifySelectedChats()
         {
             var chats = SelectedItems.ToList();
-            var muted = chats.Any(x => ClientService.Notifications.GetMutedFor(x) > 0);
+            var muted = chats.Any(x => ClientService.Notifications.IsMuted(x));
 
             foreach (var chat in chats)
             {
@@ -291,7 +290,7 @@ namespace Telegram.ViewModels
                     continue;
                 }
 
-                _notificationsService.SetMuteFor(chat, muted ? 0 : 632053052);
+                _notificationsService.SetMuteFor(chat, muted ? 0 : 632053052, XamlRoot);
             }
 
             Delegate?.SetSelectionMode(false);
@@ -327,7 +326,7 @@ namespace Telegram.ViewModels
                     title = chat.Type is ChatTypeBasicGroup ? Strings.GroupDeletedUndo : Strings.ChatDeletedUndo;
                 }
 
-                var undo = await ToastPopup.ShowCountdownAsync(title, Strings.Undo, TimeSpan.FromSeconds(5));
+                var undo = await ToastPopup.ShowCountdownAsync(XamlRoot, title, Strings.Undo, TimeSpan.FromSeconds(5));
                 if (undo == ContentDialogResult.Primary)
                 {
                     _deletedChats.Remove(chat.Id);
@@ -382,7 +381,7 @@ namespace Telegram.ViewModels
                     Items.Handle(chat.Id, 0);
                 }
 
-                var undo = await ToastPopup.ShowCountdownAsync(Strings.ChatDeletedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
+                var undo = await ToastPopup.ShowCountdownAsync(XamlRoot, Strings.ChatDeletedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
                 if (undo == ContentDialogResult.Primary)
                 {
                     foreach (var chat in chats)
@@ -431,7 +430,7 @@ namespace Telegram.ViewModels
             var confirm = await ShowPopupAsync(dialog);
             if (confirm == ContentDialogResult.Primary)
             {
-                var undo = await ToastPopup.ShowCountdownAsync(Strings.HistoryClearedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
+                var undo = await ToastPopup.ShowCountdownAsync(XamlRoot, Strings.HistoryClearedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
                 if (undo == ContentDialogResult.Primary)
                 {
                     _deletedChats.Remove(chat.Id);
@@ -455,7 +454,7 @@ namespace Telegram.ViewModels
             var confirm = await ShowPopupAsync(Strings.AreYouSureClearHistoryFewChats, Locale.Declension(Strings.R.ChatsSelected, chats.Count), Strings.ClearHistory, Strings.Cancel);
             if (confirm == ContentDialogResult.Primary)
             {
-                var undo = await ToastPopup.ShowCountdownAsync(Strings.HistoryClearedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
+                var undo = await ToastPopup.ShowCountdownAsync(XamlRoot, Strings.HistoryClearedUndo, Strings.Undo, TimeSpan.FromSeconds(5));
                 if (undo == ContentDialogResult.Primary)
                 {
                     foreach (var chat in chats)
@@ -570,25 +569,22 @@ namespace Telegram.ViewModels
 
         public void CreateFolder(Chat chat)
         {
-            NavigationService.Navigate(typeof(FolderPage), state: new NavigationState { { "included_chat_id", chat.Id } });
+            NavigationService.Navigate(typeof(FolderPage), new FolderPageCreateArgs(chat.Id));
         }
 
         #endregion
 
-        public async void SetFolder(ChatList chatList)
+        public void SetList(ChatList chatList)
         {
-            await Items.ReloadAsync(chatList);
-            //Aggregator.Unsubscribe(Items);
-            //Items = new ItemsCollection(ClientService, Aggregator, this, chatList);
-            //RaisePropertyChanged(nameof(Items));
+            _ = Items.ReloadAsync(chatList);
         }
 
-        public class ItemsCollection : ObservableCollection<Chat>, ISupportIncrementalLoading
+        public partial class ItemsCollection : ObservableCollection<Chat>, ISupportIncrementalLoading
         {
             private readonly IClientService _clientService;
             private readonly IEventAggregator _aggregator;
 
-            private readonly DisposableMutex _loadMoreLock = new();
+            private CancellationTokenSource _token = new();
             private readonly HashSet<long> _chats = new();
 
             private readonly ChatListViewModel _viewModel;
@@ -608,8 +604,6 @@ namespace Telegram.ViewModels
                 _aggregator = aggregator;
 
                 _viewModel = viewModel;
-                _viewModel.IsLoading = true;
-
                 _chatList = chatList;
 
 #if MOCKUP
@@ -619,24 +613,23 @@ namespace Telegram.ViewModels
                 _ = LoadMoreItemsAsync(0);
             }
 
-            public async Task ReloadAsync(ChatList chatList)
+            public Task ReloadAsync(ChatList chatList)
             {
-                _viewModel.IsLoading = true;
+                _token?.Cancel();
+                _token = new CancellationTokenSource();
 
-                using (await _loadMoreLock.WaitAsync())
-                {
-                    _aggregator.Unsubscribe(this);
+                _aggregator.Unsubscribe(this);
+                _hasMoreItems = false;
 
-                    _lastChatId = 0;
-                    _lastOrder = 0;
+                _lastChatId = 0;
+                _lastOrder = 0;
 
-                    _chatList = chatList;
+                _chatList = chatList;
 
-                    _chats.Clear();
-                    Clear();
-                }
+                _chats.Clear();
+                Clear();
 
-                await LoadMoreItemsAsync();
+                return LoadMoreItemsAsync();
             }
 
             public IAsyncOperation<LoadMoreItemsResult> LoadMoreItemsAsync(uint count)
@@ -646,18 +639,16 @@ namespace Telegram.ViewModels
 
             private async Task<LoadMoreItemsResult> LoadMoreItemsAsync()
             {
-                using var guard = await _loadMoreLock.WaitAsync();
+                Logger.Info(Count);
+
+                var token = _token;
                 var totalCount = 0u;
 
-                var response = await _clientService.GetChatListAsync(_chatList, Count, 20);
-                if (response is Telegram.Td.Api.Chats chats)
-                {
-                    if (_viewModel.Delegate != null)
-                    {
-                        // Exp: does this affect layout cycles?
-                        await _viewModel.Delegate.UpdateLayoutAsync();
-                    }
+                await Task.Yield();
 
+                var response = await _clientService.GetChatListAsync(_chatList, Count, 20);
+                if (response is Telegram.Td.Api.Chats chats && !token.IsCancellationRequested)
+                {
                     foreach (var chat in _clientService.GetChats(chats.ChatIds))
                     {
                         var order = chat.GetOrder(_chatList);
@@ -688,12 +679,13 @@ namespace Telegram.ViewModels
                         }
                     }
 
+                    Logger.Info(string.Format("Received {0} items, added {1}", chats.ChatIds.Count, totalCount));
+
                     IsEmpty = Count == 0;
 
-                    _hasMoreItems = chats.ChatIds.Count > 0;
+                    _hasMoreItems = chats.TotalCount >= 0;
                     Subscribe();
 
-                    _viewModel.IsLoading = false;
                     _viewModel.Delegate?.SetSelectedItems(_viewModel.SelectedItems);
                 }
 
@@ -719,7 +711,7 @@ namespace Telegram.ViewModels
             {
                 if (update.AuthorizationState is AuthorizationStateReady)
                 {
-                    _viewModel.BeginOnUIThread(async () => await ReloadAsync(_chatList));
+                    _viewModel.BeginOnUIThread(() => _ = ReloadAsync(_chatList));
                 }
             }
 
@@ -728,6 +720,12 @@ namespace Telegram.ViewModels
                 if (update.Position.List.AreTheSame(_chatList))
                 {
                     Handle(update.ChatId, update.Position.Order);
+                }
+
+                // Can't be else otherwise cell won't update while archive is open
+                if (update.Position.List is ChatListArchive)
+                {
+                    _viewModel.Delegate?.UpdateChatListArchive();
                 }
             }
 
@@ -744,7 +742,22 @@ namespace Telegram.ViewModels
             public void Handle(long chatId, IList<ChatPosition> positions, bool lastMessage = false)
             {
                 var chat = GetChat(chatId);
-                var order = positions.GetOrder(_chatList);
+                var order = 0L;
+
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    var position = positions[i];
+                    if (position.List.AreTheSame(_chatList))
+                    {
+                        order = position.Order;
+                    }
+
+                    // Can't be else otherwise cell won't update while archive is open
+                    if (position.List is ChatListArchive)
+                    {
+                        _viewModel.Delegate?.UpdateChatListArchive();
+                    }
+                }
 
                 Handle(chat, order, lastMessage);
             }
@@ -790,8 +803,11 @@ namespace Telegram.ViewModels
                         {
                             Remove(chat);
                         }
+                        else
+                        {
+                            _chats.Add(chat.Id);
+                        }
 
-                        _chats.Add(chat.Id);
                         Insert(Math.Min(Count, next), chat);
 
                         if (next == Count - 1)
@@ -902,7 +918,7 @@ namespace Telegram.ViewModels
                     }
                 }
             }
-            
+
             private void NotifyChanged()
             {
                 OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsEmpty)));
@@ -918,14 +934,17 @@ namespace Telegram.ViewModels
         Contacts,
         PublicChats,
 
+        RecentWebApps,
+        WebApps,
         ChatMembers,
         None
     }
 
     // TODO: always load User when creating by Chat
-    public class SearchResult : BindableBase
+    public partial class SearchResult : BindableBase
     {
         private readonly IClientService _clientService;
+        private readonly bool _canSendMessageToUser;
 
         public Chat Chat { get; set; }
         public User User { get; set; }
@@ -937,7 +956,7 @@ namespace Telegram.ViewModels
 
         public bool IsPublic => Type == SearchResultType.PublicChats;
 
-        public SearchResult(IClientService clientService, Chat chat, string query, SearchResultType type)
+        public SearchResult(IClientService clientService, Chat chat, string query, SearchResultType type, bool canSendMessageToUser)
         {
             _clientService = clientService;
 
@@ -946,7 +965,7 @@ namespace Telegram.ViewModels
             Type = type;
         }
 
-        public SearchResult(IClientService clientService, Chat chat)
+        public SearchResult(IClientService clientService, Chat chat, bool canSendMessageToUser)
         {
             _clientService = clientService;
 
@@ -955,7 +974,7 @@ namespace Telegram.ViewModels
             Type = SearchResultType.None;
         }
 
-        public SearchResult(IClientService clientService, User user, string query, SearchResultType type)
+        public SearchResult(IClientService clientService, User user, string query, SearchResultType type, bool canSendMessageToUser)
         {
             _clientService = clientService;
 
@@ -994,7 +1013,7 @@ namespace Telegram.ViewModels
                 userId = User?.Id;
             }
 
-            if (userId == null || _clientService == null || _restrictsNewChats.HasValue)
+            if (userId == null || !_canSendMessageToUser || _restrictsNewChats.HasValue)
             {
                 return;
             }

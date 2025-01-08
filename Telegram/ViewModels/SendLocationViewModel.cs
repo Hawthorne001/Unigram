@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,7 +16,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.ViewModels
 {
-    public class SendLocationViewModel : ViewModelBase
+    public partial class SendLocationViewModel : ViewModelBase
     {
         private readonly ILocationService _locationService;
 
@@ -55,7 +55,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class VenueCollection : ObservableCollection<Venue>, ISupportIncrementalLoading
+    public partial class VenueCollection : ObservableCollection<Venue>, ISupportIncrementalLoading
     {
         private readonly ILocationService _locationService;
         private readonly double _latitude;
@@ -96,7 +96,7 @@ namespace Telegram.ViewModels
         public bool HasMoreItems => _hasMoreItems;
     }
 
-    public class VenueDiffHandler : IDiffHandler<Venue>
+    public partial class VenueDiffHandler : IDiffHandler<Venue>
     {
         public bool CompareItems(Venue oldItem, Venue newItem)
         {

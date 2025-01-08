@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -65,7 +65,7 @@ namespace Telegram.Charts
 
         }
 
-        public bool useCrypto = false;
+        public string currency = null;
 
         public bool animateLegentTo = false;
 
@@ -903,18 +903,21 @@ namespace Telegram.Charts
             signaturePaint.A = (byte)(a.alpha * signaturePaintAlpha * transitionAlpha * additionalOutAlpha);
             int chartHeight = MeasuredHeight - chartBottom - SIGNATURE_TEXT_HEIGHT;
 
-            var format = new CanvasTextFormat { FontSize = signaturePaint.TextSize ?? 0 };
-            var layout = new CanvasTextLayout(canvas, a.valuesStr[1], format, float.PositiveInfinity, 0);
+            //var format = new CanvasTextFormat { FontSize = signaturePaint.TextSize ?? 0 };
+            //var layout = new CanvasTextLayout(canvas, a.valuesStr[1], format, float.PositiveInfinity, 0);
 
             int textOffset = 18;
             //int textOffset = (int)(4 + layout.DrawBounds.Bottom);
             //int textOffset = (int)(SIGNATURE_TEXT_HEIGHT - signaturePaintFormat.FontSize);
-            format.Dispose();
-            layout.Dispose();
+            //layout.Dispose();
+            //format.Dispose();
             for (int i = useMinHeight ? 0 : 1; i < n; i++)
             {
                 float y = MeasuredHeight - chartBottom - chartHeight * ((a.values[i] - currentMinHeight) / (currentMaxHeight - currentMinHeight));
-                canvas.DrawText(a.valuesStr[i], HORIZONTAL_PADDING, y - textOffset, signaturePaint);
+                canvas.DrawText(a.valuesStr[i], HORIZONTAL_PADDING, y - textOffset, signaturePaint, new CanvasTextFormat
+                {
+                    FontFamily = "ms-appx:///Assets/Fonts/Telegram.ttf#Telegram"
+                });
             }
         }
 
@@ -1303,7 +1306,7 @@ namespace Telegram.Charts
 
         protected virtual ChartHorizontalLinesData CreateHorizontalLinesData(int newMaxHeight, int newMinHeight)
         {
-            return new ChartHorizontalLinesData(newMaxHeight, newMinHeight, useMinHeight, useCrypto);
+            return new ChartHorizontalLinesData(newMaxHeight, newMinHeight, useMinHeight, currency);
         }
 
         protected ValueAnimator CreateAnimator(float f1, float f2, AnimatorUpdateListener l)
@@ -2209,7 +2212,7 @@ namespace Telegram.Charts
             void OnDateSelected(long date);
         }
 
-        public class SharedUiComponents
+        public partial class SharedUiComponents
         {
 
             //private Bitmap pickerRoundBitmap;

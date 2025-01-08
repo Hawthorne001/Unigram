@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -26,7 +26,7 @@ namespace Telegram.Services
     }
 
     // https://github.com/Windows-XAML/Template10/wiki/Docs-%7C-SettingsService
-    public class SettingsLegacyService : ISettingsLegacyService
+    public partial class SettingsLegacyService : ISettingsLegacyService
     {
         /// <summary>
         /// Creates an <c>ISettingsService</c> object targeting the requested (optional) <paramref name="folderName"/>

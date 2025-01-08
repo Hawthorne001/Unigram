@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,8 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Telegram.Collections;
+using Telegram.Common;
+using Telegram.Controls;
 using Telegram.Controls.Media;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
@@ -20,7 +22,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsNotificationsExceptionsViewModel : MultiViewModelBase
+    public partial class SettingsNotificationsExceptionsViewModel : MultiViewModelBase
     {
         public SettingsNotificationsExceptionsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -34,15 +36,15 @@ namespace Telegram.ViewModels.Settings
                 switch (scope)
                 {
                     case SettingsNotificationsExceptionsScope.PrivateChats:
-                        Scope = new SettingsNotificationsScope(ClientService, typeof(NotificationSettingsScopePrivateChats), Strings.NotificationsPrivateChats, Icons.Person);
+                        Scope = new SettingsNotificationsScope(ClientService, new NotificationSettingsScopePrivateChats(), Strings.NotificationsPrivateChats, Icons.Person);
                         Items = new ItemsCollection(ClientService, new NotificationSettingsScopePrivateChats());
                         break;
                     case SettingsNotificationsExceptionsScope.GroupChats:
-                        Scope = new SettingsNotificationsScope(ClientService, typeof(NotificationSettingsScopeGroupChats), Strings.NotificationsGroups, Icons.People);
+                        Scope = new SettingsNotificationsScope(ClientService, new NotificationSettingsScopeGroupChats(), Strings.NotificationsGroups, Icons.People);
                         Items = new ItemsCollection(ClientService, new NotificationSettingsScopeGroupChats());
                         break;
                     case SettingsNotificationsExceptionsScope.ChannelChats:
-                        Scope = new SettingsNotificationsScope(ClientService, typeof(NotificationSettingsScopeChannelChats), Strings.NotificationsChannels, Icons.Megaphone);
+                        Scope = new SettingsNotificationsScope(ClientService, new NotificationSettingsScopeChannelChats(), Strings.NotificationsChannels, Icons.Megaphone);
                         Items = new ItemsCollection(ClientService, new NotificationSettingsScopeChannelChats());
                         break;
                 }
@@ -65,7 +67,7 @@ namespace Telegram.ViewModels.Settings
 
         public ItemsCollection Items { get; private set; }
 
-        public class ItemsCollection : MvxObservableCollection<Chat>, ISupportIncrementalLoading
+        public partial class ItemsCollection : MvxObservableCollection<Chat>, ISupportIncrementalLoading
         {
             private readonly IClientService _clientService;
             private readonly NotificationSettingsScope _scope;
@@ -110,7 +112,7 @@ namespace Telegram.ViewModels.Settings
         {
             var tsc = new TaskCompletionSource<object>();
 
-            var confirm = await ShowPopupAsync(typeof(ChooseSoundPopup), Scope.SoundId, tsc);
+            var confirm = await ShowPopupAsync(new ChooseSoundPopup(tsc), Scope.SoundId);
             if (confirm != ContentDialogResult.Primary)
             {
                 return;
@@ -136,6 +138,47 @@ namespace Telegram.ViewModels.Settings
                 UseDefaultDisableMentionNotifications = true,
                 UseDefaultDisablePinnedMessageNotifications = true,
             }));
+        }
+
+        public void Mute()
+        {
+            Scope.Alert = false;
+            Scope.Save();
+        }
+
+        public void Unmute()
+        {
+            Scope.Alert = true;
+            Scope.Save();
+        }
+
+        public async void MuteFor(int? value)
+        {
+            if (value is int update)
+            {
+                Scope.MuteFor = update;
+                Scope.Save();
+
+                ShowToast(Strings.NotificationsUnmutedHint, ToastPopupIcon.Unmute);
+            }
+            else
+            {
+                var popup = new ChatMutePopup(Scope.MuteFor);
+
+                var confirm = await ShowPopupAsync(popup);
+                if (confirm != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+
+                if (Scope.MuteFor != popup.Value)
+                {
+                    Scope.MuteFor = popup.Value;
+                    Scope.Save();
+
+                    ShowToast(string.Format(Strings.NotificationsMutedForHint, Locale.FormatMuteFor(popup.Value)), ToastPopupIcon.MuteFor);
+                }
+            }
         }
     }
 

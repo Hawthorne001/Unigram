@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,20 +10,21 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Common;
+using Telegram.Controls;
 using Telegram.Converters;
 using Telegram.Services;
 using Telegram.Services.Factories;
 using Telegram.Td.Api;
-using Telegram.Views.Popups;
+using Telegram.Views.Supergroups.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace Telegram.ViewModels
 {
-    public class DialogEventLogViewModel : DialogViewModel
+    public partial class DialogEventLogViewModel : DialogViewModel
     {
-        public DialogEventLogViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, IVoipGroupService voipGroupService, INetworkService networkService, IStorageService storageService, ITranslateService translateService, IMessageFactory messageFactory)
-            : base(clientService, settingsService, aggregator, locationService, pushService, playbackService, voipService, voipGroupService, networkService, storageService, translateService, messageFactory)
+        public DialogEventLogViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, INetworkService networkService, IStorageService storageService, ITranslateService translateService, IMessageFactory messageFactory)
+            : base(clientService, settingsService, aggregator, locationService, pushService, playbackService, voipService, networkService, storageService, translateService, messageFactory)
         {
         }
 
@@ -31,7 +32,7 @@ namespace Telegram.ViewModels
 
         private long _minEventId = long.MaxValue;
 
-        private ChatEventLogFilters _filters = new ChatEventLogFilters(true, true, true, true, true, true, true, true, true, true, true, true, true);
+        private ChatEventLogFilters _filters = new ChatEventLogFilters(true, true, true, true, true, true, true, true, true, true, true, true, true, true);
         public ChatEventLogFilters Filters
         {
             get => _filters;
@@ -85,13 +86,13 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            var dialog = new SupergroupEventLogFiltersPopup();
+            var popup = new SupergroupEventLogFiltersPopup(ClientService, NavigationService, supergroup.Id, _filters, _userIds);
 
-            var confirm = await dialog.ShowAsync(ClientService, supergroup.Id, _filters, _userIds);
+            var confirm = await ShowPopupAsync(popup);
             if (confirm == ContentDialogResult.Primary)
             {
-                Filters = dialog.Filters;
-                UserIds = dialog.UserIds;
+                Filters = popup.Filters;
+                UserIds = popup.UserIds;
 
                 RaisePropertyChanged(nameof(Subtitle));
 
@@ -236,7 +237,7 @@ namespace Telegram.ViewModels
                 }
             }
 
-            return new Message(chatEvent.Id, sender, chatId, null, null, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, isChannel, false, false, chatEvent.Date, 0, null, null, null, null, null, 0, 0, null, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, null, null);
+            return new Message(chatEvent.Id, sender, chatId, null, null, false, false, false, false, false, isChannel, false, false, chatEvent.Date, 0, null, null, null, null, null, null, 0, 0, null, 0, 0, 0, 0, 0, string.Empty, 0, 0, false, string.Empty, null, null);
         }
 
         private MessageViewModel GetMessage(long chatId, bool isChannel, ChatEvent chatEvent, bool child = false)
@@ -277,6 +278,7 @@ namespace Telegram.ViewModels
                     case ChatEventAvailableReactionsChanged:
                     case ChatEventHasProtectedContentToggled:
                     case ChatEventSignMessagesToggled:
+                    case ChatEventShowMessageSenderToggled:
                     case ChatEventStickerSetChanged:
                     case ChatEventCustomEmojiStickerSetChanged:
                     case ChatEventInvitesToggled:
@@ -368,18 +370,18 @@ namespace Telegram.ViewModels
             if (item.Action is ChatEventDescriptionChanged descriptionChanged)
             {
                 var text = new FormattedText(descriptionChanged.NewDescription, Array.Empty<TextEntity>());
-                var webPage = string.IsNullOrEmpty(descriptionChanged.OldDescription) ? null : new WebPage { SiteName = Strings.EventLogPreviousGroupDescription, Description = new FormattedText { Text = descriptionChanged.OldDescription } };
+                var linkPreview = string.IsNullOrEmpty(descriptionChanged.OldDescription) ? null : new LinkPreview { SiteName = Strings.EventLogPreviousGroupDescription, Description = new FormattedText { Text = descriptionChanged.OldDescription } };
 
-                return new MessageText(text, webPage, null);
+                return new MessageText(text, linkPreview, null);
             }
             else if (item.Action is ChatEventUsernameChanged usernameChanged)
             {
                 var link = string.IsNullOrEmpty(usernameChanged.NewUsername) ? string.Empty : MeUrlPrefixConverter.Convert(ClientService, usernameChanged.NewUsername);
 
                 var text = new FormattedText(link, new[] { new TextEntity(0, link.Length, new TextEntityTypeUrl()) });
-                var webPage = string.IsNullOrEmpty(usernameChanged.OldUsername) ? null : new WebPage { SiteName = Strings.EventLogPreviousLink, Description = new FormattedText { Text = MeUrlPrefixConverter.Convert(ClientService, usernameChanged.OldUsername) } };
+                var linkPreview = string.IsNullOrEmpty(usernameChanged.OldUsername) ? null : new LinkPreview { SiteName = Strings.EventLogPreviousLink, Description = new FormattedText { Text = MeUrlPrefixConverter.Convert(ClientService, usernameChanged.OldUsername) } };
 
-                return new MessageText(text, webPage, null);
+                return new MessageText(text, linkPreview, null);
             }
             else if (item.Action is ChatEventPermissionsChanged permissionChanged)
             {
@@ -450,9 +452,9 @@ namespace Telegram.ViewModels
                 {
                     AppendChange(n.CanSendPolls, Strings.EventLogRestrictedSendPolls);
                 }
-                if (o.CanAddWebPagePreviews != n.CanAddWebPagePreviews)
+                if (o.CanAddLinkPreviews != n.CanAddLinkPreviews)
                 {
-                    AppendChange(n.CanAddWebPagePreviews, Strings.EventLogRestrictedSendEmbed);
+                    AppendChange(n.CanAddLinkPreviews, Strings.EventLogRestrictedSendEmbed);
                 }
                 if (o.CanChangeInfo != n.CanChangeInfo)
                 {
@@ -639,9 +641,9 @@ namespace Telegram.ViewModels
                         {
                             AppendChange(n.Permissions.CanSendPolls, Strings.EventLogRestrictedSendPolls);
                         }
-                        if (o.Permissions.CanAddWebPagePreviews != n.Permissions.CanAddWebPagePreviews)
+                        if (o.Permissions.CanAddLinkPreviews != n.Permissions.CanAddLinkPreviews)
                         {
-                            AppendChange(n.Permissions.CanAddWebPagePreviews, Strings.EventLogRestrictedSendEmbed);
+                            AppendChange(n.Permissions.CanAddLinkPreviews, Strings.EventLogRestrictedSendEmbed);
                         }
                         if (o.Permissions.CanChangeInfo != n.Permissions.CanChangeInfo)
                         {
@@ -820,7 +822,7 @@ namespace Telegram.ViewModels
             {
                 if (messageEdited.NewMessage.Content is MessageText editedText && messageEdited.OldMessage.Content is MessageText oldText)
                 {
-                    editedText.WebPage = new WebPage
+                    editedText.LinkPreview = new LinkPreview
                     {
                         SiteName = Strings.EventLogOriginalMessages,
                         Description = oldText.Text
@@ -879,6 +881,39 @@ namespace Telegram.ViewModels
             }
 
             return string.Empty;
+        }
+
+        public void BanMember(MessageSender memberId)
+        {
+            ClientService.Send(new SetChatMemberStatus(Chat.Id, memberId, new ChatMemberStatusBanned()));
+
+            if (ClientService.TryGetUser(memberId, out User user))
+            {
+                ToastPopup.Show(XamlRoot, string.Format(Strings.UserRemovedFromChatHint, user.FullName(), Chat.Title), ToastPopupIcon.Ban);
+            }
+            else if (ClientService.TryGetChat(memberId, out Chat chat))
+            {
+                ToastPopup.Show(XamlRoot, string.Format(Strings.UserRemovedFromChatHint, chat.Title, Chat.Title), ToastPopupIcon.Ban);
+            }
+        }
+
+        public void RestrictMember(MessageSender memberId)
+        {
+            ClientService.Send(new SetChatMemberStatus(Chat.Id, memberId, new ChatMemberStatusRestricted
+            {
+                IsMember = true,
+                RestrictedUntilDate = 0,
+                Permissions = new ChatPermissions(false, false, false, false, false, false, false, false, false, false, false, false, false, false)
+            }));
+
+            if (ClientService.TryGetUser(memberId, out User user))
+            {
+                ToastPopup.Show(XamlRoot, string.Format(Strings.RestrictedParticipantSending, user.FullName()), ToastPopupIcon.Ban);
+            }
+            else if (ClientService.TryGetChat(memberId, out Chat chat))
+            {
+                ToastPopup.Show(XamlRoot, string.Format(Strings.RestrictedParticipantSending, chat.Title), ToastPopupIcon.Ban);
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -34,7 +34,7 @@ namespace Telegram.Views.Settings.Password
 
         public PasswordState PasswordState { get; private set; }
 
-        private async void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        private async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
             try
             {
@@ -75,11 +75,11 @@ namespace Telegram.Views.Settings.Password
 
                     if (error.MessageEquals(ErrorType.EMAIL_INVALID))
                     {
-                        await MessagePopup.ShowAsync(target: null, Strings.EmailAddressInvalid, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                        await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.EmailAddressInvalid, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                     }
                     else if (error.MessageEquals(ErrorType.EMAIL_NOT_ALLOWED))
                     {
-                        await MessagePopup.ShowAsync(target: null, Strings.EmailNotAllowed, Strings.RestorePasswordNoEmailTitle, Strings.OK);
+                        await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.EmailNotAllowed, Strings.RestorePasswordNoEmailTitle, Strings.OK);
                     }
 
                     args.Cancel = true;
@@ -93,10 +93,6 @@ namespace Telegram.Views.Settings.Password
             }
 
             IsPrimaryButtonEnabled = true;
-        }
-
-        private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-        {
         }
 
         private void Field_TextChanged(object sender, TextChangedEventArgs e)
@@ -117,7 +113,7 @@ namespace Telegram.Views.Settings.Password
 
         private async void Skip_Click(object sender, RoutedEventArgs e)
         {
-            var confirm = await MessagePopup.ShowAsync(target: null, Strings.YourEmailSkipWarningText, Strings.YourEmailSkipWarning, Strings.YourEmailSkip, Strings.Cancel);
+            var confirm = await MessagePopup.ShowAsync(XamlRoot, target: null, Strings.YourEmailSkipWarningText, Strings.YourEmailSkipWarning, Strings.YourEmailSkip, Strings.Cancel);
             if (confirm == ContentDialogResult.Primary)
             {
                 _skip = true;

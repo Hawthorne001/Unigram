@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,7 +16,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Controls
 {
-    public class ReplyMarkupButtonClickEventArgs : EventArgs
+    public partial class ReplyMarkupButtonClickEventArgs : EventArgs
     {
         public ReplyMarkupButtonClickEventArgs(KeyboardButton button, bool oneTime)
         {
@@ -29,7 +29,7 @@ namespace Telegram.Controls
         public bool OneTime { get; }
     }
 
-    public class ReplyMarkupInlineButtonClickEventArgs : EventArgs
+    public partial class ReplyMarkupInlineButtonClickEventArgs : EventArgs
     {
         public ReplyMarkupInlineButtonClickEventArgs(InlineKeyboardButton button)
         {
@@ -39,7 +39,7 @@ namespace Telegram.Controls
         public InlineKeyboardButton Button { get; }
     }
 
-    public class ReplyMarkupPanel : Grid
+    public partial class ReplyMarkupPanel : Grid
     {
         private readonly double _keyboardHeight = 260;
 
@@ -105,7 +105,7 @@ namespace Telegram.Controls
             {
                 receipt = invoice.ReceiptMessageId != 0;
 
-                if (invoice.ExtendedMedia is not MessageExtendedMediaUnsupported and not null)
+                if (invoice.PaidMedia is not PaidMediaUnsupported and not null)
                 {
                     rows = null;
                 }
@@ -164,15 +164,20 @@ namespace Telegram.Controls
                             button.Glyph = "\uEE35";
                             break;
                         case InlineKeyboardButtonTypeBuy:
-                            button.Glyph = Icons.Payment16;
-
                             if (receipt)
                             {
                                 button.Content = Strings.PaymentReceipt;
                             }
+                            else
+                            {
+                                button.Content = item.Text.Replace("\u2B50", Icons.Premium + "\u200A");
+                            }
                             break;
                         case InlineKeyboardButtonTypeWebApp:
                             button.Glyph = Icons.Window16;
+                            break;
+                        case InlineKeyboardButtonTypeCopyText:
+                            button.Glyph = Icons.CopyFilled16;
                             break;
                     }
 
@@ -201,7 +206,7 @@ namespace Telegram.Controls
 
                 SetRow(panel, j);
 
-                RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                RowDefinitions.Add(1, GridUnitType.Star);
                 Children.Add(panel);
             }
 
@@ -222,7 +227,7 @@ namespace Telegram.Controls
             {
                 receipt = invoice.ReceiptMessageId != 0;
 
-                if (invoice.ExtendedMedia is not MessageExtendedMediaUnsupported and not null)
+                if (invoice.PaidMedia is not PaidMediaUnsupported and not null)
                 {
                     rows = null;
                 }
@@ -262,7 +267,7 @@ namespace Telegram.Controls
 
                 SetRow(panel, j);
 
-                RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, resize ? GridUnitType.Auto : GridUnitType.Star) });
+                RowDefinitions.Add(1, resize ? GridUnitType.Auto : GridUnitType.Star);
                 Children.Add(panel);
             }
 
@@ -293,7 +298,7 @@ namespace Telegram.Controls
         public event EventHandler<ReplyMarkupInlineButtonClickEventArgs> InlineButtonClick;
     }
 
-    public class ReplyMarkupRow : Panel
+    public partial class ReplyMarkupRow : Panel
     {
         protected override Size MeasureOverride(Size availableSize)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,7 +16,7 @@ using Windows.UI.Xaml.Hosting;
 
 namespace Telegram.Controls
 {
-    public class AnimatedGlyphToggleButton : ToggleButton
+    public partial class AnimatedGlyphToggleButton : ToggleButton
     {
         private FrameworkElement _label1;
         private FrameworkElement _label2;
@@ -226,7 +226,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class AnimatedGlyphToggleButtonAutomationPeer : ToggleButtonAutomationPeer
+    public partial class AnimatedGlyphToggleButtonAutomationPeer : ToggleButtonAutomationPeer
     {
         private readonly AnimatedGlyphToggleButton _owner;
 

@@ -146,7 +146,7 @@
                       ItemClick="Toolbar_ItemClick"
                       SelectionChanged="Toolbar_SelectionChanged"
                       ContainerContentChanging="Toolbar_ContainerContentChanging"
-                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      ScrollViewer.HorizontalScrollBarVisibility="Hidden"
                       ScrollViewer.HorizontalScrollMode="Auto"
                       ScrollViewer.IsHorizontalScrollChainingEnabled="False"
                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
@@ -199,8 +199,7 @@
                         <selectors:StickerSetTemplateSelector.GroupTemplate>
                             <DataTemplate>
                                 <Border>
-                                    <controls:ProfilePicture IsEnabled="False"
-                                                             Width="24"
+                                    <controls:ProfilePicture Width="24"
                                                              Height="24" />
                                 </Border>
                             </DataTemplate>

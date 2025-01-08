@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Chats
 {
-    public class ChatStatisticsViewModel : ViewModelBase
+    public partial class ChatStatisticsViewModel : ViewModelBase
     {
         public ChatStatisticsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -251,7 +251,7 @@ namespace Telegram.ViewModels.Chats
         }
     }
 
-    public class ChatItemInteractionCounters
+    public partial class ChatItemInteractionCounters
     {
         public int ForwardCount { get; }
         public int ViewCount { get; }
@@ -266,7 +266,7 @@ namespace Telegram.ViewModels.Chats
 
     }
 
-    public class MessageInteractionCounters : ChatItemInteractionCounters
+    public partial class MessageInteractionCounters : ChatItemInteractionCounters
     {
         public Message Message { get; }
 
@@ -277,7 +277,7 @@ namespace Telegram.ViewModels.Chats
         }
     }
 
-    public class StoryInteractionCounters : ChatItemInteractionCounters
+    public partial class StoryInteractionCounters : ChatItemInteractionCounters
     {
         public Story Story { get; }
 
@@ -288,7 +288,7 @@ namespace Telegram.ViewModels.Chats
         }
     }
 
-    public class ChartViewData
+    public partial class ChartViewData
     {
 
         public bool isError;
@@ -363,7 +363,7 @@ namespace Telegram.ViewModels.Chats
             {
                 return new DoubleLinearChartData(jsonObject);
             }
-            else if (graphType is 2 or 7)
+            else if (graphType is 2 or 7 or 8)
             {
                 return new StackBarChartData(jsonObject);
             }

@@ -1,11 +1,12 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using System.Threading.Tasks;
+using Telegram.Controls;
 using Telegram.Controls.Cells;
 using Telegram.Controls.Media;
 using Telegram.Controls.Messages;
@@ -31,7 +32,7 @@ namespace Telegram.Views.Supergroups
             Title = Strings.ChannelColorTitle2;
         }
 
-        protected override async void OnNavigatedTo(NavigationEventArgs e)
+        protected override void OnNavigatedTo(NavigationEventArgs e)
         {
             ProfileView.Initialize(ViewModel.ClientService, new MessageSenderChat(ViewModel.Chat.Id));
 
@@ -77,24 +78,29 @@ namespace Telegram.Views.Supergroups
 
                 if (ViewModel.ClientService.TryGetSupergroupFull(ViewModel.Chat, out SupergroupFullInfo fullInfo))
                 {
-                    if (fullInfo.CustomEmojiStickerSetId != 0)
-                    {
-                        var response = await ViewModel.ClientService.SendAsync(new GetStickerSet(fullInfo.CustomEmojiStickerSetId));
-                        if (response is StickerSet set)
-                        {
-                            var thumbnail = set.GetThumbnail();
-                            if (thumbnail != null)
-                            {
-                                AnimatedPack.Source = new DelayedFileSource(ViewModel.ClientService, thumbnail);
-                            }
-                            else
-                            {
-                                AnimatedPack.Source = null;
-                            }
-                        }
-                    }
+                    LoadStickerSet(fullInfo.CustomEmojiStickerSetId, EmojiPackAnimated);
+                    LoadStickerSet(fullInfo.StickerSetId, StickerPackAnimated);
+
+                    StickerPackRoot.Visibility = fullInfo.CanSetStickerSet
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
                 }
             }
+        }
+
+        private async void LoadStickerSet(long stickerSetId, AnimatedImage target)
+        {
+            if (stickerSetId != 0)
+            {
+                var response = await ViewModel.ClientService.SendAsync(new GetStickerSet(stickerSetId));
+                if (response is StickerSet set)
+                {
+                    target.Source = DelayedFileSource.FromStickerSet(ViewModel.ClientService, set);
+                    return;
+                }
+            }
+
+            target.Source = null;
         }
 
         private void EmojiStatus_Click(object sender, RoutedEventArgs e)
@@ -105,11 +111,16 @@ namespace Telegram.Views.Supergroups
 
         private void Flyout_EmojiSelected(object sender, EmojiSelectedEventArgs e)
         {
-            ViewModel.SelectedEmojiStatus = new EmojiStatus(e.CustomEmojiId, 0);
-
-            if (e.CustomEmojiId != 0)
+            if (e.Type is not ReactionTypeCustomEmoji customEmoji)
             {
-                AnimatedStatus.Source = new CustomEmojiFileSource(ViewModel.ClientService, e.CustomEmojiId);
+                return;
+            }
+
+            ViewModel.SelectedEmojiStatus = new EmojiStatus(customEmoji.CustomEmojiId, 0);
+
+            if (customEmoji.CustomEmojiId != 0)
+            {
+                AnimatedStatus.Source = new CustomEmojiFileSource(ViewModel.ClientService, customEmoji.CustomEmojiId);
                 EmojiStatus.Badge = string.Empty;
             }
             else
@@ -132,22 +143,28 @@ namespace Telegram.Views.Supergroups
             var tsc = new TaskCompletionSource<object>();
             var args = new SupergroupEditStickerSetArgs(ViewModel.Chat.Id, new StickerTypeCustomEmoji());
 
-            var confirm = await ViewModel.NavigationService.ShowPopupAsync(typeof(SupergroupEditStickerSetPopup), args, tsc);
+            var confirm = await ViewModel.NavigationService.ShowPopupAsync(new SupergroupEditStickerSetPopup(tsc), args);
             var set = await tsc.Task as StickerSetInfo;
 
             if (confirm == ContentDialogResult.Primary)
             {
                 ViewModel.SelectedCustomEmojiStickerSet = set?.Id ?? 0;
+                EmojiPackAnimated.Source = DelayedFileSource.FromStickerSetInfo(ViewModel.ClientService, set);
+            }
+        }
 
-                var thumbnail = set?.GetThumbnail();
-                if (thumbnail != null)
-                {
-                    AnimatedPack.Source = new DelayedFileSource(ViewModel.ClientService, thumbnail);
-                }
-                else
-                {
-                    AnimatedPack.Source = null;
-                }
+        private async void StickerPack_Click(object sender, RoutedEventArgs e)
+        {
+            var tsc = new TaskCompletionSource<object>();
+            var args = new SupergroupEditStickerSetArgs(ViewModel.Chat.Id, new StickerTypeRegular());
+
+            var confirm = await ViewModel.NavigationService.ShowPopupAsync(new SupergroupEditStickerSetPopup(tsc), args);
+            var set = await tsc.Task as StickerSetInfo;
+
+            if (confirm == ContentDialogResult.Primary)
+            {
+                ViewModel.SelectedStickerSet = set?.Id ?? 0;
+                StickerPackAnimated.Source = DelayedFileSource.FromStickerSetInfo(ViewModel.ClientService, set);
             }
         }
 

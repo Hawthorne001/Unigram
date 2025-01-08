@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -14,7 +14,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings.Privacy
 {
-    public class SettingsPrivacyShowPhotoViewModel : SettingsPrivacyViewModelBase, IDelegable<IUserDelegate>, IHandle
+    public partial class SettingsPrivacyShowPhotoViewModel : SettingsPrivacyViewModelBase, IDelegable<IUserDelegate>, IHandle
     {
         public IUserDelegate Delegate { get; set; }
 
@@ -55,7 +55,7 @@ namespace Telegram.ViewModels.Settings.Privacy
 
         public async void SetPhoto()
         {
-            await _profilePhotoService.SetPhotoAsync(null, true);
+            await _profilePhotoService.SetPhotoAsync(NavigationService, null, true);
         }
 
         public async void CreatePhoto()
@@ -65,7 +65,7 @@ namespace Telegram.ViewModels.Settings.Privacy
 
         public async void RemovePhoto()
         {
-            var confirm = await ShowPopupAsync(Strings.RemovePhotoForRestDescription, Strings.RemovePhotoForRestDescription, Strings.Remove, Strings.Cancel, true);
+            var confirm = await ShowPopupAsync(Strings.RemovePhotoForRestDescription, Strings.RemovePhotoForRestDescription, Strings.Remove, Strings.Cancel, destructive: true);
             if (confirm == ContentDialogResult.Primary)
             {
                 if (ClientService.TryGetUserFull(ClientService.Options.MyId, out UserFullInfo userFull))

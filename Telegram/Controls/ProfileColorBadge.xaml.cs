@@ -1,10 +1,9 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
-using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
 using Telegram.Navigation;
 using Telegram.Services;
@@ -66,13 +65,13 @@ namespace Telegram.Controls
 
                 ProfilePrimary.Visibility = Visibility.Visible;
 
-                var device = CanvasDevice.GetSharedDevice();
+                var device = ElementComposition.GetSharedDevice();
                 var ellipse1 = CanvasGeometry.CreateRectangle(device, 0, 0, 24, 24);
                 var ellipse2 = CanvasGeometry.CreateEllipse(device, 28, 12, 12, 12);
                 var group = CanvasGeometry.CreateGroup(device, new[] { ellipse1, ellipse2 }, CanvasFilledRegionDetermination.Alternate);
 
                 var visual = ElementComposition.GetElementVisual(NamePrimary);
-                visual.Clip = Window.Current.Compositor.CreateGeometricClip(Window.Current.Compositor.CreatePathGeometry(new CompositionPath(group)));
+                visual.Clip = BootStrapper.Current.Compositor.CreateGeometricClip(BootStrapper.Current.Compositor.CreatePathGeometry(new CompositionPath(group)));
             }
             else
             {

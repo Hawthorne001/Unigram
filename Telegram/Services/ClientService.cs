@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -36,6 +36,7 @@ namespace Telegram.Services
 
         Task<BaseObject> CheckChatInviteLinkAsync(string inviteLink);
 
+        Task<File> GetFileAsync(int fileId);
         Task<StorageFile> GetFileAsync(File file, bool completed = true);
         Task<StorageFile> GetPermanentFileAsync(File file);
 
@@ -46,10 +47,14 @@ namespace Telegram.Services
         void CancelDownloadFile(File file, bool onlyIfPending = false);
         bool IsDownloadFileCanceled(int fileId);
 
+        Task<bool> HasPrivacySettingsRuleAsync<T>(UserPrivacySetting setting) where T : UserPrivacySettingRule;
+
         Task<Chats> GetChatListAsync(ChatList chatList, int offset, int limit);
         Task<Chats> GetStoryListAsync(StoryList storyList, int offset, int limit);
 
         Task<IList<SavedMessagesTopic>> GetSavedMessagesChatsAsync(int offset, int limit);
+
+        Task<BaseObject> GetStarTransactionsAsync(MessageSender ownerId, string subscriptionId, StarTransactionDirection direction, string offset, int limit);
 
         Sticker NextGreetingSticker();
 
@@ -61,8 +66,11 @@ namespace Telegram.Services
         bool IsPremium { get; }
         bool IsPremiumAvailable { get; }
 
+        StarAmount OwnedStarCount { get; }
+
         UnconfirmedSession UnconfirmedSession { get; }
 
+        MessageSender MyId { get; }
         IOptionsService Options { get; }
         JsonValueObject Config { get; }
 
@@ -84,12 +92,16 @@ namespace Telegram.Services
         IList<AttachmentMenuBot> GetBotsForChat(long chatId);
         IList<AttachmentMenuBot> GetBotsForMenu(out long hash);
 
+        UpdateAvailableMessageEffects AvailableMessageEffects { get; }
+
         IList<string> ActiveReactions { get; }
 
         IList<string> AnimationSearchEmojis { get; }
         string AnimationSearchProvider { get; }
 
         UpdateSpeechRecognitionTrial SpeechRecognitionTrial { get; }
+
+        IList<CloseBirthdayUser> CloseBirthdayUsers { get; }
 
         Background GetDefaultBackground(bool darkTheme);
         Background DefaultBackground { get; }
@@ -102,12 +114,15 @@ namespace Telegram.Services
         string GetTitle(long chatId, bool tiny = false);
         string GetTitle(SavedMessagesTopic topic);
         string GetTitle(MessageOrigin origin, MessageImportInfo import);
+        string GetTitle(MessageSender sender);
 
         IList<ChatFolderInfo> GetChatFolders(Chat chat);
 
         bool TryGetCachedReaction(string emoji, out EmojiReaction value);
         Task<IDictionary<string, EmojiReaction>> GetAllReactionsAsync();
         Task<IDictionary<string, EmojiReaction>> GetReactionsAsync(IEnumerable<string> reactions);
+
+        Task<IDictionary<MessageId, MessageProperties>> GetMessagePropertiesAsync(IEnumerable<MessageId> messageIds);
 
         Chat GetChat(long id);
         IEnumerable<Chat> GetChats(IEnumerable<long> ids);
@@ -123,11 +138,13 @@ namespace Telegram.Services
         IList<QuickReplyShortcut> GetQuickReplyShortcuts();
         bool CheckQuickReplyShortcutName(string name);
 
+        Task<IList<MessageEffect>> GetMessageEffectsAsync(IEnumerable<long> effectIds);
+        MessageEffect LoadMessageEffect(long effectId, bool preload);
+
         bool IsSavedMessages(MessageSender sender);
         bool IsSavedMessages(User user);
         bool IsSavedMessages(Chat chat);
 
-        bool IsRepliesChat(Chat chat);
         bool IsForum(Chat chat);
 
         bool IsChatAccessible(Chat chat);
@@ -143,6 +160,7 @@ namespace Telegram.Services
 
         bool TryGetChat(long chatId, out Chat chat);
         bool TryGetChat(MessageSender sender, out Chat value);
+        bool TryGetChat(AffiliateType type, out Chat value);
 
         bool TryGetChatFromUser(long userId, out long value);
         bool TryGetChatFromUser(long userId, out Chat value);
@@ -161,6 +179,7 @@ namespace Telegram.Services
         bool TryGetUser(long id, out User value);
         bool TryGetUser(Chat chat, out User value);
         bool TryGetUser(MessageSender sender, out User value);
+        bool TryGetUser(AffiliateType type, out User value);
 
         UserFullInfo GetUserFull(long id);
         UserFullInfo GetUserFull(Chat chat);
@@ -168,6 +187,8 @@ namespace Telegram.Services
         bool TryGetUserFull(Chat chat, out UserFullInfo value);
 
         IList<User> GetUsers(IEnumerable<long> ids);
+
+        ChatPermissions GetPermissions(Chat chat, out bool restricted);
 
         BasicGroup GetBasicGroup(long id);
         BasicGroup GetBasicGroup(Chat chat);
@@ -198,17 +219,20 @@ namespace Telegram.Services
         int GetMembersCount(long chatId);
         int GetMembersCount(Chat chat);
 
+        Task<BotVerification> GetBotVerificationAsync(Chat chat);
+
         bool IsAnimationSaved(int id);
         bool IsStickerRecent(int id);
         bool IsStickerFavorite(int id);
         bool IsStickerSetInstalled(long id);
 
+        ICollection<ChatListUnreadCount> UnreadCounts { get; }
         ChatListUnreadCount GetUnreadCount(ChatList chatList);
 
         UpdateStoryStealthMode StealthMode { get; }
 
         ChatTheme GetChatTheme(string themeName);
-        IList<ChatTheme> GetChatThemes();
+        IList<ChatTheme> ChatThemes { get; }
 
         bool IsDiceEmoji(string text, out string dice);
 
@@ -240,6 +264,8 @@ namespace Telegram.Services
         private readonly IOptionsService _options;
         private readonly ILocaleService _locale;
         private readonly IEventAggregator _aggregator;
+
+        private readonly ConcurrentDictionary<long, MessageEffect> _effects = new();
 
         private readonly Action<BaseObject> _processFilesDelegate;
 
@@ -285,8 +311,11 @@ namespace Telegram.Services
 
         private IList<ChatFolderInfo> _chatFolders = Array.Empty<ChatFolderInfo>();
         private Dictionary<int, ChatFolderInfo> _chatFolders2 = new();
+        private readonly object _chatFoldersLock = new();
         private int _mainChatListPosition = 0;
         private bool _areTagsEnabled;
+
+        private UpdateAvailableMessageEffects _availableMessageEffects;
 
         private IList<string> _activeReactions = Array.Empty<string>();
         private Dictionary<string, EmojiReaction> _cachedReactions = new();
@@ -301,33 +330,15 @@ namespace Telegram.Services
 
         private UpdateStoryStealthMode _storyStealthMode = new();
 
+        private UpdateContactCloseBirthdays _contactCloseBirthdays;
+
         private readonly Dictionary<ReactionType, MessageTag> _savedMessagesTags = new(new ReactionTypeEqualityComparer());
-
-        private class ReactionTypeEqualityComparer : IEqualityComparer<ReactionType>
-        {
-            public bool Equals(ReactionType x, ReactionType y)
-            {
-                return x.AreTheSame(y);
-            }
-
-            public int GetHashCode(ReactionType obj)
-            {
-                if (obj is ReactionTypeEmoji emoji)
-                {
-                    return emoji.Emoji.GetHashCode();
-                }
-                else if (obj is ReactionTypeCustomEmoji customEmoji)
-                {
-                    return customEmoji.CustomEmojiId.GetHashCode();
-                }
-
-                return obj.GetHashCode();
-            }
-        }
 
         private TaskCompletionSource<bool> _authorizationStateTask = new();
         private AuthorizationState _authorizationState;
         private ConnectionState _connectionState;
+
+        private StarAmount _ownedStarCount;
 
         private JsonValueObject _config;
 
@@ -650,7 +661,10 @@ namespace Telegram.Services
 
         public bool TryGetTimeZone(string timeZoneId, out TimeZone timeZone)
         {
-            return _timezones.TryGetValue(timeZoneId, out timeZone);
+            lock (_timezones)
+            {
+                return _timezones.TryGetValue(timeZoneId, out timeZone);
+            }
         }
 
         private void UpdateGreetingStickers()
@@ -709,6 +723,8 @@ namespace Telegram.Services
         private bool _waitGreetingSticker;
 
         private readonly Dictionary<string, TimeZone> _timezones = new();
+
+        public UpdateAvailableMessageEffects AvailableMessageEffects => _availableMessageEffects;
 
         public IList<string> ActiveReactions => _activeReactions;
 
@@ -867,7 +883,7 @@ namespace Telegram.Services
 
         public Task<BaseObject> SendAsync(Function function)
         {
-            return _client.SendAsync(function, ProcessFiles);
+            return _client.SendAsync(function, _processFilesDelegate);
         }
 
 
@@ -943,6 +959,96 @@ namespace Telegram.Services
         }
 
 
+        public async Task<BaseObject> GetStarTransactionsAsync(MessageSender ownerId, string subscriptionId, StarTransactionDirection direction, string offset, int limit)
+        {
+            var response = await SendAsync(new GetStarTransactions(ownerId, subscriptionId, direction, offset, limit));
+            if (response is StarTransactions transactions)
+            {
+                if (ownerId == null || ownerId.IsUser(Options.MyId))
+                {
+                    _ownedStarCount = transactions.StarAmount;
+                    _aggregator.Publish(new UpdateOwnedStarCount(transactions.StarAmount));
+                }
+            }
+
+            return response;
+        }
+
+
+        public async Task<bool> HasPrivacySettingsRuleAsync<T>(UserPrivacySetting setting) where T : UserPrivacySettingRule
+        {
+            var response = await SendAsync(new GetUserPrivacySettingRules(setting));
+            if (response is UserPrivacySettingRules rules)
+            {
+                foreach (var rule in rules.Rules)
+                {
+                    if (typeof(T) == rule.GetType())
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public async Task<IList<MessageEffect>> GetMessageEffectsAsync(IEnumerable<long> effectIds)
+        {
+            IList<MessageEffect> result = null;
+
+            foreach (var id in effectIds)
+            {
+                if (_effects.TryGetValue(id, out MessageEffect effect))
+                {
+                    result ??= new List<MessageEffect>();
+                    result.Add(effect);
+                }
+                else
+                {
+                    var response = await SendAsync(new GetMessageEffect(id));
+                    if (response is MessageEffect item)
+                    {
+                        _effects[id] = item;
+
+                        result ??= new List<MessageEffect>();
+                        result.Add(item);
+                    }
+                }
+            }
+
+            return result ?? Array.Empty<MessageEffect>();
+        }
+
+        public MessageEffect LoadMessageEffect(long effectId, bool preload)
+        {
+            if (_effects.TryGetValue(effectId, out var effect))
+            {
+                return effect;
+            }
+
+            Send(new GetMessageEffect(effectId), result =>
+            {
+                if (result is MessageEffect effect)
+                {
+                    if (preload)
+                    {
+                        if (effect.Type is MessageEffectTypeEmojiReaction emojiReaction)
+                        {
+                            DownloadFile(emojiReaction.EffectAnimation.StickerValue.Id, 16);
+                        }
+                        else if (effect.Type is MessageEffectTypePremiumSticker premiumSticker && premiumSticker.Sticker.FullType is StickerFullTypeRegular regular)
+                        {
+                            DownloadFile(regular.PremiumAnimation.Id, 16);
+                        }
+                    }
+
+                    _effects[effectId] = effect;
+                    _aggregator.Publish(new UpdateMessageEffect(effect));
+                }
+            });
+            return null;
+        }
+
 
         public int SessionId => _session;
 
@@ -951,6 +1057,8 @@ namespace Telegram.Services
         #region Cache
 
         public UpdateStoryStealthMode StealthMode => _storyStealthMode;
+
+        public ICollection<ChatListUnreadCount> UnreadCounts => _unreadCounts.Values;
 
         public ChatListUnreadCount GetUnreadCount(ChatList chatList)
         {
@@ -1023,6 +1131,22 @@ namespace Telegram.Services
         public bool IsPremium => _options.IsPremium;
 
         public bool IsPremiumAvailable => _options.IsPremium || _options.IsPremiumAvailable;
+
+        public StarAmount OwnedStarCount
+        {
+            get
+            {
+                if (_ownedStarCount == null)
+                {
+                    Send(new GetStarTransactions(MyId, string.Empty, null, string.Empty, 1));
+                    return new StarAmount(0, 0);
+                }
+
+                return _ownedStarCount;
+            }
+        }
+
+        public MessageSender MyId => new MessageSenderUser(_options.MyId);
 
         public IOptionsService Options => _options;
 
@@ -1116,6 +1240,8 @@ namespace Telegram.Services
 
         public UpdateSpeechRecognitionTrial SpeechRecognitionTrial => _speechRecognitionTrial ??= new();
 
+        public IList<CloseBirthdayUser> CloseBirthdayUsers => _contactCloseBirthdays?.CloseBirthdayUsers ?? Array.Empty<CloseBirthdayUser>();
+
         public IList<string> AnimationSearchEmojis => _animationSearchParameters?.Emojis ?? Array.Empty<string>();
 
         public string AnimationSearchProvider => _animationSearchParameters?.Provider;
@@ -1163,6 +1289,10 @@ namespace Telegram.Services
                 else if (chat.Id == _options.RepliesBotChatId)
                 {
                     return Strings.RepliesTitle;
+                }
+                else if (chat.Id == _options.VerificationCodesBotChatId)
+                {
+                    return Strings.VerifyCodesNotifications;
                 }
                 else if (tiny)
                 {
@@ -1217,32 +1347,49 @@ namespace Telegram.Services
             return null;
         }
 
+        public string GetTitle(MessageSender sender)
+        {
+            if (TryGetUser(sender, out User user))
+            {
+                return user.FullName();
+            }
+            else if (TryGetChat(sender, out Chat chat))
+            {
+                return chat.Title;
+            }
+
+            return string.Empty;
+        }
+
         public IList<ChatFolderInfo> GetChatFolders(Chat chat)
         {
             // TODO: can this be improved?
             List<ChatFolderInfo> result = null;
 
-            lock (chat)
+            lock (_chatFoldersLock)
             {
-                foreach (var chatList in chat.ChatLists)
+                lock (chat)
                 {
-                    if (chatList is not ChatListFolder folder)
+                    foreach (var chatList in chat.ChatLists)
                     {
-                        continue;
-                    }
+                        if (chatList is not ChatListFolder folder)
+                        {
+                            continue;
+                        }
 
-                    if (_chatFolders2.TryGetValue(folder.ChatFolderId, out ChatFolderInfo info) && info.ColorId >= 0 && info.ColorId <= 6)
-                    {
-                        result ??= new List<ChatFolderInfo>();
-                        result.Add(info);
+                        if (_chatFolders2.TryGetValue(folder.ChatFolderId, out ChatFolderInfo info) && info.ColorId >= 0 && info.ColorId <= 6)
+                        {
+                            result ??= new List<ChatFolderInfo>();
+                            result.Add(info);
+                        }
                     }
                 }
-            }
 
-            if (result != null)
-            {
-                result.Sort((x, y) => _chatFolders.IndexOf(x) - _chatFolders.IndexOf(y));
-                return result;
+                if (result != null)
+                {
+                    result.Sort((x, y) => _chatFolders.IndexOf(x) - _chatFolders.IndexOf(y));
+                    return result;
+                }
             }
 
             return Array.Empty<ChatFolderInfo>();
@@ -1299,6 +1446,22 @@ namespace Telegram.Services
             }
 
             return result;
+        }
+
+        public async Task<IDictionary<MessageId, MessageProperties>> GetMessagePropertiesAsync(IEnumerable<MessageId> messageIds)
+        {
+            var map = new Dictionary<MessageId, MessageProperties>();
+
+            foreach (var messageId in messageIds)
+            {
+                var properties = await SendAsync(new GetMessageProperties(messageId.ChatId, messageId.Id)) as MessageProperties;
+                if (properties != null)
+                {
+                    map[messageId] = properties;
+                }
+            }
+
+            return map;
         }
 
         public Chat GetChat(long id)
@@ -1410,11 +1573,6 @@ namespace Telegram.Services
             return false;
         }
 
-        public bool IsRepliesChat(Chat chat)
-        {
-            return chat.Id == _options.RepliesBotChatId;
-        }
-
         public bool IsForum(Chat chat)
         {
             if (TryGetSupergroup(chat, out Supergroup supergroup))
@@ -1510,6 +1668,17 @@ namespace Telegram.Services
             if (sender is MessageSenderChat senderChat)
             {
                 return TryGetChat(senderChat.ChatId, out value);
+            }
+
+            value = null;
+            return false;
+        }
+
+        public bool TryGetChat(AffiliateType type, out Chat value)
+        {
+            if (type is AffiliateTypeChannel typeChannel)
+            {
+                return TryGetChat(typeChannel.ChatId, out value);
             }
 
             value = null;
@@ -1671,6 +1840,21 @@ namespace Telegram.Services
             return false;
         }
 
+        public bool TryGetUser(AffiliateType type, out User value)
+        {
+            if (type is AffiliateTypeBot typeBot)
+            {
+                return TryGetUser(typeBot.UserId, out value);
+            }
+            else if (type is AffiliateTypeCurrentUser)
+            {
+                return TryGetUser(Options.MyId, out value);
+            }
+
+            value = null;
+            return false;
+        }
+
         public bool TryGetUser(Chat chat, out User value)
         {
             if (chat?.Type is ChatTypePrivate privata)
@@ -1730,6 +1914,38 @@ namespace Telegram.Services
 
             value = null;
             return false;
+        }
+
+        public ChatPermissions GetPermissions(Chat chat, out bool restrict)
+        {
+            restrict = false;
+
+            if (TryGetSupergroup(chat, out var supergroup))
+            {
+                if (supergroup.Status is ChatMemberStatusRestricted restricted)
+                {
+                    restrict = true;
+                    return restricted.Permissions;
+                }
+                else if (supergroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator)
+                {
+                    return new ChatPermissions(true, true, true, true, true, true, true, true, true, true, true, true, true, true);
+                }
+            }
+            else if (TryGetBasicGroup(chat, out var basicGroup))
+            {
+                if (basicGroup.Status is ChatMemberStatusRestricted restricted)
+                {
+                    restrict = true;
+                    return restricted.Permissions;
+                }
+                else if (basicGroup.Status is ChatMemberStatusCreator or ChatMemberStatusAdministrator)
+                {
+                    return new ChatPermissions(true, true, true, true, true, true, true, true, true, true, true, true, true, true);
+                }
+            }
+
+            return chat?.Permissions;
         }
 
 
@@ -1956,6 +2172,32 @@ namespace Telegram.Services
             return 0;
         }
 
+        public async Task<BotVerification> GetBotVerificationAsync(Chat chat)
+        {
+            if (chat.Type is ChatTypePrivate privata)
+            {
+                if (TryGetUserFull(chat, out UserFullInfo fullInfo))
+                {
+                    return fullInfo.BotVerification;
+                }
+
+                var response = await SendAsync(new GetUserFullInfo(privata.UserId)) as UserFullInfo;
+                return response?.BotVerification;
+            }
+            else if (chat.Type is ChatTypeSupergroup supergroup)
+            {
+                if (TryGetSupergroupFull(supergroup.SupergroupId, out SupergroupFullInfo fullInfo))
+                {
+                    return fullInfo.BotVerification;
+                }
+
+                var response = await SendAsync(new GetSupergroupFullInfo(supergroup.SupergroupId)) as SupergroupFullInfo;
+                return response?.BotVerification;
+            }
+
+            return null;
+        }
+
 
 
         public bool IsStickerRecent(int id)
@@ -2005,19 +2247,10 @@ namespace Telegram.Services
                 return null;
             }
 
-            var themes = GetChatThemes();
-            if (themes != null)
-            {
-                return themes.FirstOrDefault(x => string.Equals(x.Name, themeName));
-            }
-
-            return null;
+            return ChatThemes.FirstOrDefault(x => string.Equals(x.Name, themeName));
         }
 
-        public IList<ChatTheme> GetChatThemes()
-        {
-            return _chatThemes?.ChatThemes ?? Array.Empty<ChatTheme>();
-        }
+        public IList<ChatTheme> ChatThemes => _chatThemes?.ChatThemes ?? Array.Empty<ChatTheme>();
 
         public bool IsDiceEmoji(string text, out string dice)
         {
@@ -2206,19 +2439,25 @@ namespace Telegram.Services
             {
                 if (_chats.TryGetValue(updateChatAddedToList.ChatId, out Chat value))
                 {
-                    value.ChatLists.Add(updateChatAddedToList.ChatList);
+                    lock (value)
+                    {
+                        value.ChatLists.Add(updateChatAddedToList.ChatList);
+                    }
                 }
             }
             else if (update is UpdateChatRemovedFromList updateChatRemovedFromList)
             {
                 if (_chats.TryGetValue(updateChatRemovedFromList.ChatId, out Chat value))
                 {
-                    foreach (var chatList in value.ChatLists)
+                    lock (value)
                     {
-                        if (chatList.AreTheSame(updateChatRemovedFromList.ChatList))
+                        foreach (var chatList in value.ChatLists)
                         {
-                            value.ChatLists.Remove(chatList);
-                            break;
+                            if (chatList.AreTheSame(updateChatRemovedFromList.ChatList))
+                            {
+                                value.ChatLists.Remove(chatList);
+                                break;
+                            }
                         }
                     }
                 }
@@ -2353,8 +2592,12 @@ namespace Telegram.Services
             }
             else if (update is UpdateChatFolders updateChatFolders)
             {
-                _chatFolders = updateChatFolders.ChatFolders.ToList();
-                _chatFolders2 = updateChatFolders.ChatFolders.ToDictionary(x => x.Id);
+                lock (_chatFoldersLock)
+                {
+                    _chatFolders = updateChatFolders.ChatFolders.ToList();
+                    _chatFolders2 = updateChatFolders.ChatFolders.ToDictionary(x => x.Id);
+                }
+
                 _mainChatListPosition = updateChatFolders.MainChatListPosition;
                 _areTagsEnabled = updateChatFolders.AreTagsEnabled;
             }
@@ -2499,6 +2742,13 @@ namespace Telegram.Services
                     value.ViewAsTopics = updateChatViewAsTopics.ViewAsTopics;
                 }
             }
+            else if (update is UpdateChatBusinessBotManageBar updateChatBusinessBotManageBar)
+            {
+                if (_chats.TryGetValue(updateChatBusinessBotManageBar.ChatId, out Chat value))
+                {
+                    value.BusinessBotManageBar = updateChatBusinessBotManageBar.BusinessBotManageBar;
+                }
+            }
             else if (update is UpdateConnectionState updateConnectionState)
             {
                 _connectionState = updateConnectionState.State;
@@ -2560,11 +2810,11 @@ namespace Telegram.Services
             {
                 _options.Update(updateOption.Name, updateOption.Value);
 
-                if (updateOption.Name == "my_id" && updateOption.Value is OptionValueInteger myId)
+                if (updateOption.Name == OptionsService.R.MyId && updateOption.Value is OptionValueInteger myId)
                 {
                     _settings.UserId = myId.Value;
                 }
-                else if (updateOption.Name == "is_premium" || updateOption.Name == "is_premium_available")
+                else if (updateOption.Name == OptionsService.R.IsPremium || updateOption.Name == OptionsService.R.IsPremiumAvailable)
                 {
                     _aggregator.Publish(new UpdatePremiumState(IsPremium, IsPremiumAvailable));
                 }
@@ -2757,6 +3007,18 @@ namespace Telegram.Services
             {
                 _quickReplyShortcutIds = updateQuickReplyShortcuts.ShortcutIds.ToList();
             }
+            else if (update is UpdateContactCloseBirthdays updateContactCloseBirthdays)
+            {
+                _contactCloseBirthdays = updateContactCloseBirthdays;
+            }
+            else if (update is UpdateAvailableMessageEffects updateAvailableMessageEffects)
+            {
+                _availableMessageEffects = updateAvailableMessageEffects;
+            }
+            else if (update is UpdateOwnedStarCount updateOwnedStarCount)
+            {
+                _ownedStarCount = updateOwnedStarCount.StarAmount;
+            }
 
             _aggregator.Publish(update);
         }
@@ -2765,14 +3027,14 @@ namespace Telegram.Services
         private IList<int> _quickReplyShortcutIds;
     }
 
-    public class QuickReplyShortcutInfo
+    public partial class QuickReplyShortcutInfo
     {
         public QuickReplyShortcut Shortcut { get; set; }
 
         public IList<QuickReplyMessage> Messages { get; set; }
     }
 
-    public class ChatListUnreadCount
+    public partial class ChatListUnreadCount
     {
         public ChatList ChatList { get; set; }
 
@@ -2780,7 +3042,7 @@ namespace Telegram.Services
         public UpdateUnreadMessageCount UnreadMessageCount { get; set; }
     }
 
-    public class MessageSenderEqualityComparer : IEqualityComparer<MessageSender>
+    public partial class MessageSenderEqualityComparer : IEqualityComparer<MessageSender>
     {
         public bool Equals(MessageSender x, MessageSender y)
         {

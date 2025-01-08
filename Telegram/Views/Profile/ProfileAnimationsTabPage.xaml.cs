@@ -1,12 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Telegram.Common;
 using Telegram.Controls;
-using Telegram.Controls.Gallery;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Telegram.ViewModels.Chats;
@@ -57,14 +56,13 @@ namespace Telegram.Views.Profile
             }
         }
 
-        private async void Photo_Click(object sender, RoutedEventArgs e)
+        private void Photo_Click(object sender, RoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             var message = element.Tag as MessageWithOwner;
 
             var viewModel = new ChatGalleryViewModel(ViewModel.ClientService, ViewModel.StorageService, ViewModel.Aggregator, message.ChatId, ViewModel.ThreadId, ViewModel.SavedMessagesTopicId, message, true);
-            viewModel.NavigationService = ViewModel.NavigationService;
-            await GalleryWindow.ShowAsync(viewModel, () => element);
+            ViewModel.NavigationService.ShowGallery(viewModel, element);
         }
     }
 }

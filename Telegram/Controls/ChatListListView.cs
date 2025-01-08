@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,11 +10,13 @@ using System.Numerics;
 using Telegram.Common;
 using Telegram.Composition;
 using Telegram.Controls.Cells;
+using Telegram.Navigation;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Composition.Interactions;
+using Windows.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
@@ -25,7 +27,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class ChatListSwipedEventArgs : EventArgs
+    public partial class ChatListSwipedEventArgs : EventArgs
     {
         public CarouselDirection Direction { get; }
 
@@ -35,7 +37,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class ChatListListView : TopNavView
+    public partial class ChatListListView : TopNavView
     {
         public ChatListViewModel ViewModel => DataContext as ChatListViewModel;
 
@@ -183,7 +185,7 @@ namespace Telegram.Controls
                 }
             }
 
-            if (_changingView || direction == CarouselDirection.None || !IsConnected || !PowerSavingPolicy.AreSmoothTransitionsEnabled)
+            if (_changingView || _tracker == null || direction == CarouselDirection.None || !IsConnected || !PowerSavingPolicy.AreSmoothTransitionsEnabled)
             {
                 Continue(true);
                 return;
@@ -192,7 +194,9 @@ namespace Telegram.Controls
             _changingView = true;
 
             var child = VisualTreeHelper.GetChild(ScrollViewer, 0) as UIElement;
-            var visual = Window.Current.Compositor.CreateRedirectBrush(child, Vector2.Zero, child.ActualSize, true);
+            var childSize = child.ActualSize.X > 0 && child.ActualSize.Y > 0 ? child.ActualSize : new Vector2(1, 1);
+
+            var visual = BootStrapper.Current.Compositor.CreateRedirectBrush(child, Vector2.Zero, childSize, true);
 
             await VisualUtilities.WaitForCompositionRenderedAsync();
 
@@ -442,17 +446,40 @@ namespace Telegram.Controls
         #endregion
     }
 
-    public class ChatListListViewItem : TopNavViewItem
+    public partial class ChatListListViewItem : TopNavViewItem
     {
-        private readonly ChatListListView _list;
+        private readonly ChatListListView _owner;
 
         private readonly bool _multi;
         private bool _selected;
 
-        public ChatListListViewItem()
+        public ChatListListViewItem(ChatListListView list)
         {
-            _multi = true;
             DefaultStyleKey = typeof(ChatListListViewItem);
+
+            _multi = true;
+            _owner = list;
+
+            _recognizer = new GestureRecognizer();
+            _recognizer.GestureSettings = GestureSettings.HoldWithMouse;
+
+            AddHandler(PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
+            AddHandler(PointerMovedEvent, new PointerEventHandler(OnPointerMoved), true);
+            AddHandler(PointerCanceledEvent, new PointerEventHandler(OnPointerCanceled), true);
+            AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPointerReleased), true);
+
+            Connected += OnLoaded;
+            Disconnected += OnUnloaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            _recognizer.Holding += OnHolding;
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            _recognizer.Holding -= OnHolding;
         }
 
         public bool IsSingle => !_multi;
@@ -467,7 +494,7 @@ namespace Telegram.Controls
             if (ContentTemplateRoot is IMultipleElement test)
             {
                 _selected = selected;
-                test.UpdateState(selected, true, _list.SelectionMode == ListViewSelectionMode.Multiple);
+                test.UpdateState(selected, true, _owner.SelectionMode == ListViewSelectionMode.Multiple);
             }
         }
 
@@ -484,25 +511,49 @@ namespace Telegram.Controls
             return new ChatListListViewItemAutomationPeer(this);
         }
 
-        public ChatListListViewItem(ChatListListView list)
-        {
-            DefaultStyleKey = typeof(ChatListListViewItem);
-
-            _multi = true;
-            _list = list;
-            //RegisterPropertyChangedCallback(IsSelectedProperty, OnSelectedChanged);
-        }
-
         private void OnSelectedChanged(DependencyObject sender, DependencyProperty dp)
         {
             if (ContentTemplateRoot is ChatCell content)
             {
-                content?.UpdateViewState(_list.ItemFromContainer(this) as Chat, _list._viewState == MasterDetailState.Compact, false);
+                content?.UpdateViewState(_owner.ItemFromContainer(this) as Chat, _owner._viewState == MasterDetailState.Compact, false);
             }
+        }
+
+        private readonly GestureRecognizer _recognizer;
+
+        private void OnHolding(GestureRecognizer sender, HoldingEventArgs args)
+        {
+            Logger.Info(args.HoldingState);
+
+            if (args.HoldingState == HoldingState.Started && args.Position.X is >= 8 and <= 56 && args.Position.Y is >= 8 and <= 56 && ContentTemplateRoot is ChatCell cell)
+            {
+                ReleasePointerCaptures();
+                cell.ShowPreview(args);
+            }
+        }
+
+        private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _recognizer.TryProcessDownEvent(e.GetCurrentPoint(this));
+        }
+
+        private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            _recognizer.TryProcessMoveEvents(e.GetIntermediatePoints(this));
+        }
+
+        private void OnPointerCanceled(object sender, PointerRoutedEventArgs e)
+        {
+            _recognizer.TryCompleteGesture();
+        }
+
+        private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            _recognizer.TryProcessUpEvent(e.GetCurrentPoint(this));
         }
     }
 
-    public class ChatListVisualStateManager : VisualStateManager
+    public partial class ChatListVisualStateManager : VisualStateManager
     {
         private bool _multi;
 
@@ -533,7 +584,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class ChatListListViewItemAutomationPeer : ListViewItemAutomationPeer
+    public partial class ChatListListViewItemAutomationPeer : ListViewItemAutomationPeer
     {
         private readonly ChatListListViewItem _owner;
 

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -14,7 +14,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.Collections
 {
-    public class MediaCollection : ObservableCollection<MessageWithOwner>, ISupportIncrementalLoading
+    public partial class MediaCollection : ObservableCollection<MessageWithOwner>, ISupportIncrementalLoading
     {
         private readonly IClientService _clientService;
         private readonly SearchMessagesFilter _filter;
@@ -25,6 +25,8 @@ namespace Telegram.Collections
 
         private long _lastMaxId;
         private bool _hasMore = true;
+
+        public SearchMessagesFilter Filter => _filter;
 
         public MediaCollection(IClientService clientService, long chatId, long threadId, long savedMessagesTopicId, SearchMessagesFilter filter, string query = null)
         {

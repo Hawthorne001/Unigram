@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Authorization
 {
-    public class AuthorizationCodeViewModel : ViewModelBase
+    public partial class AuthorizationCodeViewModel : ViewModelBase
     {
         private bool _confirmedGoBack;
 
@@ -101,7 +101,7 @@ namespace Telegram.ViewModels.Authorization
             {
                 if (_codeInfo.Type is AuthenticationCodeTypeFragment fragment)
                 {
-                    MessageHelper.OpenUrl(ClientService, NavigationService, fragment.Url, false);
+                    MessageHelper.OpenUrl(ClientService, NavigationService, fragment.Url);
                 }
                 else
                 {
@@ -175,7 +175,7 @@ namespace Telegram.ViewModels.Authorization
 
             IsLoading = true;
 
-            var function = new ResendAuthenticationCode();
+            var function = new ResendAuthenticationCode(new ResendCodeReasonUserRequest());
 
             var response = await ClientService.SendAsync(function);
             if (response is Error error)

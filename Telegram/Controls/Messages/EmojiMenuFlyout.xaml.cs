@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,6 +11,7 @@ using Telegram.Controls.Drawers;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
+using Telegram.ViewModels.Delegates;
 using Telegram.ViewModels.Drawers;
 using Telegram.ViewModels.Stories;
 using Telegram.Views.Popups;
@@ -18,6 +19,7 @@ using Windows.Foundation;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
@@ -26,13 +28,13 @@ using Point = Windows.Foundation.Point;
 
 namespace Telegram.Controls.Messages
 {
-    public class EmojiSelectedEventArgs : EventArgs
+    public partial class EmojiSelectedEventArgs : EventArgs
     {
-        public long CustomEmojiId { get; }
+        public ReactionType Type { get; }
 
-        public EmojiSelectedEventArgs(long customEmojiId)
+        public EmojiSelectedEventArgs(ReactionType type)
         {
-            CustomEmojiId = customEmojiId;
+            Type = type;
         }
     }
 
@@ -51,7 +53,7 @@ namespace Telegram.Controls.Messages
         private readonly EmojiDrawerMode _mode;
 
         private readonly MessageViewModel _message;
-        private readonly MessageBubble _bubble;
+        private readonly IReactionsDelegate _bubble;
 
         private readonly StoryViewModel _story;
         private readonly FrameworkElement _reserved;
@@ -62,12 +64,12 @@ namespace Telegram.Controls.Messages
 
         public event EventHandler Opened;
 
-        public static EmojiMenuFlyout ShowAt(FrameworkElement element, MessageViewModel message, MessageBubble bubble, AvailableReactions reactions, EmojiDrawerViewModel viewModel)
+        public static EmojiMenuFlyout ShowAt(FrameworkElement element, MessageViewModel message, IReactionsDelegate bubble, AvailableReactions reactions, EmojiDrawerViewModel viewModel)
         {
             return new EmojiMenuFlyout(element, message, bubble, reactions, viewModel);
         }
 
-        private EmojiMenuFlyout(FrameworkElement element, MessageViewModel message, MessageBubble bubble, AvailableReactions reactions, EmojiDrawerViewModel viewModel)
+        private EmojiMenuFlyout(FrameworkElement element, MessageViewModel message, IReactionsDelegate bubble, AvailableReactions reactions, EmojiDrawerViewModel viewModel)
         {
             InitializeComponent();
 
@@ -77,16 +79,26 @@ namespace Telegram.Controls.Messages
             _bubble = bubble;
 
             _popup = new Popup();
+            _popup.Closed += OnClosed;
 
             Initialize(message.ClientService, element, EmojiFlyoutAlignment.Center, viewModel);
         }
 
-        public static EmojiMenuFlyout ShowAt(IClientService clientService, EmojiDrawerMode mode, FrameworkElement element, EmojiFlyoutAlignment alignment)
+        private void OnClosed(object sender, object e)
         {
-            return new EmojiMenuFlyout(clientService, mode, element, alignment);
+            if (_bubble is FrameworkElement element && AutomationPeer.ListenerExists(AutomationEvents.LiveRegionChanged))
+            {
+                var selector = element.GetParent<SelectorItem>();
+                selector?.Focus(FocusState.Keyboard);
+            }
         }
 
-        private EmojiMenuFlyout(IClientService clientService, EmojiDrawerMode mode, FrameworkElement element, EmojiFlyoutAlignment alignment)
+        public static EmojiMenuFlyout ShowAt(IClientService clientService, EmojiDrawerMode mode, FrameworkElement element, EmojiFlyoutAlignment alignment, EmojiDrawerViewModel viewModel = null)
+        {
+            return new EmojiMenuFlyout(clientService, mode, element, alignment, viewModel);
+        }
+
+        private EmojiMenuFlyout(IClientService clientService, EmojiDrawerMode mode, FrameworkElement element, EmojiFlyoutAlignment alignment, EmojiDrawerViewModel viewModel = null)
         {
             InitializeComponent();
 
@@ -95,7 +107,7 @@ namespace Telegram.Controls.Messages
 
             _popup = new Popup();
 
-            Initialize(clientService, element, alignment);
+            Initialize(clientService, element, alignment, viewModel);
         }
 
         public static EmojiMenuFlyout ShowAt(FrameworkElement element, StoryViewModel story, FrameworkElement reserved, AvailableReactions reactions, EmojiDrawerViewModel viewModel)
@@ -292,6 +304,7 @@ namespace Telegram.Controls.Messages
             _popup.ShouldConstrainToRootBounds = false;
             _popup.RequestedTheme = element.ActualTheme;
             _popup.IsLightDismissEnabled = true;
+            _popup.XamlRoot = element.XamlRoot;
             _popup.IsOpen = true;
             //_popup.Opacity = 0.5;
             //_popup.Scale = new Vector3(28f / 32f);
@@ -517,10 +530,7 @@ namespace Telegram.Controls.Messages
             {
                 _popup.IsOpen = false;
 
-                if (sticker.FullType is StickerFullTypeCustomEmoji customEmoji2)
-                {
-                    EmojiSelected?.Invoke(this, new EmojiSelectedEventArgs(customEmoji2.CustomEmojiId));
-                }
+                EmojiSelected?.Invoke(this, new EmojiSelectedEventArgs(sticker.ToReactionType()));
 
                 if (_story != null)
                 {
@@ -553,7 +563,7 @@ namespace Telegram.Controls.Messages
         {
             var popup = new ChooseStatusDurationPopup();
 
-            var confirm = await popup.ShowQueuedAsync();
+            var confirm = await popup.ShowQueuedAsync(XamlRoot);
             if (confirm == ContentDialogResult.Primary && _mode == EmojiDrawerMode.EmojiStatus && sticker.FullType is StickerFullTypeCustomEmoji customEmoji)
             {
                 _clientService.Send(new SetEmojiStatus(new EmojiStatus(customEmoji.CustomEmojiId, popup.Value)));
@@ -597,6 +607,5 @@ namespace Telegram.Controls.Messages
                 }
             }
         }
-
     }
 }

@@ -1,19 +1,20 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Telegram.Common;
 using Telegram.Controls;
-using Telegram.Controls.Gallery;
+using Telegram.Controls.Messages.Content;
 using Telegram.Controls.Stories;
 using Telegram.Converters;
+using Telegram.Navigation.Services;
 using Telegram.Services.Updates;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Chats;
 using Telegram.ViewModels.Gallery;
@@ -70,53 +71,80 @@ namespace Telegram.ViewModels
 
         public async void OpenReply(MessageViewModel message)
         {
-            if (message.ReplyToState != MessageReplyToState.Deleted)
+            if (message.ReplyToState == MessageReplyToState.Deleted || message.ReplyTo is not MessageReplyToMessage replyToMessage)
             {
-                if (message.ReplyTo is MessageReplyToMessage replyToMessage)
+                return;
+            }
+
+            if (replyToMessage.ChatId != message.ChatId && ClientService.TryGetChat(replyToMessage.ChatId, out Chat replyToChat))
+            {
+                if (ClientService.TryGetSupergroup(replyToChat, out Supergroup supergroup))
                 {
-                    if (replyToMessage.ChatId != message.ChatId && ClientService.TryGetChat(replyToMessage.ChatId, out Chat replyToChat))
+                    if (supergroup.Status is ChatMemberStatusLeft && !supergroup.IsPublic() && !ClientService.IsChatAccessible(replyToChat))
                     {
-                        if (ClientService.TryGetSupergroup(replyToChat, out Supergroup supergroup))
+                        if (supergroup.IsChannel)
                         {
-                            if (supergroup.Status is ChatMemberStatusLeft && !supergroup.IsPublic() && !ClientService.IsChatAccessible(replyToChat))
-                            {
-                                if (supergroup.IsChannel)
-                                {
-                                    ToastPopup.Show(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
-                                        ? Strings.QuotePrivateChannel
-                                        : Strings.ReplyPrivateChannel, new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
-                                }
-                                else
-                                {
-                                    ToastPopup.Show(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
-                                        ? Strings.QuotePrivateGroup
-                                        : Strings.ReplyPrivateGroup, new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
-                                }
-
-                                return;
-                            }
+                            ShowToast(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
+                                ? Strings.QuotePrivateChannel
+                                : Strings.ReplyPrivateChannel, ToastPopupIcon.Info);
                         }
-                        else if (replyToMessage.MessageId == 0)
+                        else
                         {
-                            ToastPopup.Show(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
-                                        ? Strings.QuotePrivate
-                                        : Strings.ReplyPrivate, new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
-                            return;
+                            ShowToast(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
+                                ? Strings.QuotePrivateGroup
+                                : Strings.ReplyPrivateGroup, ToastPopupIcon.Info);
                         }
 
-                        NavigationService.NavigateToChat(replyToChat, replyToMessage.MessageId);
-                    }
-                    else if (replyToMessage.Origin != null && replyToMessage.MessageId == 0)
-                    {
-                        ToastPopup.Show(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
-                                        ? Strings.QuotePrivate
-                                        : Strings.ReplyPrivate, new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
-                    }
-                    else if (replyToMessage.ChatId == message.ChatId || replyToMessage.ChatId == 0)
-                    {
-                        await LoadMessageSliceAsync(message.Id, replyToMessage.MessageId, highlight: replyToMessage.Quote);
+                        return;
                     }
                 }
+                else if (replyToMessage.MessageId == 0)
+                {
+                    ShowToast(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
+                        ? Strings.QuotePrivate
+                        : Strings.ReplyPrivate, ToastPopupIcon.Info);
+                    return;
+                }
+
+                long chatId = replyToChat.Id;
+                long messageId = replyToMessage.MessageId;
+
+                long threadId = 0;
+
+                if (message.ChatId == ClientService.Options.RepliesBotChatId)
+                {
+                    // TODO: 172 is this correct?
+                    if (message.ForwardInfo?.Origin is MessageOriginUser or MessageOriginChat && message.ForwardInfo?.Source != null)
+                    {
+                        chatId = message.ForwardInfo.Source.ChatId;
+                        threadId = message.ForwardInfo.Source.MessageId;
+                    }
+                    else if (message.ForwardInfo?.Origin is MessageOriginChannel fromChannel)
+                    {
+                        chatId = fromChannel.ChatId;
+                        threadId = fromChannel.MessageId;
+                    }
+
+                    await ClientService.SendAsync(new GetMessage(chatId, threadId));
+
+                    var response = await ClientService.SendAsync(new GetMessageThread(chatId, threadId));
+                    if (response is not MessageThreadInfo)
+                    {
+                        return;
+                    }
+                }
+
+                NavigationService.NavigateToChat(chatId, messageId, thread: threadId, state: new NavigationState { { "highlight", replyToMessage.Quote } });
+            }
+            else if (replyToMessage.Origin != null && replyToMessage.MessageId == 0)
+            {
+                ShowToast(replyToMessage.Quote != null && replyToMessage.Quote.IsManual
+                    ? Strings.QuotePrivate
+                    : Strings.ReplyPrivate, ToastPopupIcon.Info);
+            }
+            else if (replyToMessage.ChatId == message.ChatId || replyToMessage.ChatId == 0)
+            {
+                await LoadMessageSliceAsync(message.Id, replyToMessage.MessageId, highlight: replyToMessage.Quote);
             }
         }
 
@@ -145,8 +173,10 @@ namespace Telegram.ViewModels
                     messageId = threadId;
                 }
 
-                var original = await ClientService.SendAsync(new GetMessage(chatId, threadId)) as Message;
-                if (original == null || !original.CanGetMessageThread)
+                await ClientService.SendAsync(new GetMessage(chatId, threadId));
+
+                var properties = await ClientService.SendAsync(new GetMessageProperties(chatId, threadId)) as MessageProperties;
+                if (properties == null || !properties.CanGetMessageThread)
                 {
                     NavigationService.NavigateToChat(chatId, threadId);
                     return;
@@ -160,17 +190,48 @@ namespace Telegram.ViewModels
             }
         }
 
+        public bool IsAdministrator(MessageSender memberId) => _messageDelegate.IsAdministrator(memberId);
 
-
-        public void OpenWebPage(WebPage webPage)
+        public void OpenWebPage(MessageViewModel message)
         {
-            if (webPage.InstantViewVersion != 0)
+            if (message.Content is not MessageText text)
             {
-                NavigationService.NavigateToInstant(webPage.Url);
+                return;
             }
-            else
+
+            if (text.LinkPreview?.InstantViewVersion != 0)
             {
-                MessageHelper.OpenUrl(ClientService, NavigationService, webPage.Url, !webPage.SkipConfirmation, new OpenUrlSourceChat(_chat.Id));
+                var url = text.LinkPreview.Url;
+
+                foreach (var entity in text.Text.Entities)
+                {
+                    string compare;
+
+                    if (entity.Type is TextEntityTypeUrl)
+                    {
+                        compare = text.Text.Text.Substring(entity.Offset, entity.Length);
+                    }
+                    else if (entity.Type is TextEntityTypeTextUrl textUrl)
+                    {
+                        compare = textUrl.Url;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    if (MessageHelper.AreTheSame(url, compare, out _))
+                    {
+                        url = compare;
+                        break;
+                    }
+                }
+
+                NavigationService.NavigateToInstant(url);
+            }
+            else if (text.LinkPreview != null)
+            {
+                MessageHelper.OpenUrl(ClientService, NavigationService, text.LinkPreview.Url, !text.LinkPreview.SkipConfirmation, new OpenUrlSourceChat(message.ChatId, message.SenderId));
             }
         }
 
@@ -178,7 +239,7 @@ namespace Telegram.ViewModels
         {
             if (sticker.SetId != 0)
             {
-                await StickersPopup.ShowAsync(sticker.SetId, Sticker_Click);
+                await StickersPopup.ShowAsync(NavigationService, sticker.SetId);
             }
         }
 
@@ -201,13 +262,9 @@ namespace Telegram.ViewModels
                 ChatActionManager.SetTyping(new ChatActionStartPlayingGame());
 
                 var viaBot = message.GetViaBotUser();
-                if (viaBot != null && viaBot.HasActiveUsername(out string username))
+                if (viaBot != null)
                 {
-                    NavigationService.Navigate(typeof(GamePage), new GameConfiguration(message, answer.Url, game.Game.Title, username));
-                }
-                else
-                {
-                    NavigationService.Navigate(typeof(GamePage), new GameConfiguration(message, answer.Url, game.Game.Title, string.Empty));
+                    NavigationService.NavigateToWebApp(viaBot, answer.Url, game.Game.Title, message.ChatId, message.Id);
                 }
             }
         }
@@ -236,7 +293,15 @@ namespace Telegram.ViewModels
                 }
                 else
                 {
-                    Delegate?.UpdateBubbleWithMessageId(message.Id, bubble => VisualUtilities.ShakeView(bubble));
+                    Delegate?.UpdateBubbleWithMessageId(message.Id, bubble =>
+                    {
+                        if (bubble.MediaTemplateRoot is PollContent pollContent)
+                        {
+                            pollContent.ShowExplanation();
+                        }
+
+                        VisualUtilities.ShakeView(bubble);
+                    });
                 }
             }
         }
@@ -263,7 +328,7 @@ namespace Telegram.ViewModels
             var user = ClientService.GetUser(viaBotUserId);
             if (user != null && user.HasActiveUsername(out string username))
             {
-                SetText($"@{username} ");
+                SetText($"@{username} ", focus: true);
                 ResolveInlineBot(username);
             }
         }
@@ -299,12 +364,12 @@ namespace Telegram.ViewModels
 
         public void OpenHashtag(string hashtag)
         {
-            Search = new ChatSearchViewModel(ClientService, Settings, Aggregator, this, hashtag);
+            Search = new ChatSearchViewModel(ClientService, NavigationService, Settings, Aggregator, this, hashtag);
         }
 
-        public void OpenUrl(string url, bool untrust)
+        public void OpenUrl(string url, bool untrust, OpenUrlSource source = null)
         {
-            _messageDelegate.OpenUrl(url, untrust);
+            _messageDelegate.OpenUrl(url, untrust, source);
         }
 
         public async void OpenMedia(MessageViewModel message, FrameworkElement target, int timestamp = 0)
@@ -358,19 +423,19 @@ namespace Telegram.ViewModels
 
                 var window = new StoriesWindow();
                 window.Update(viewModel, activeStories, StoryOpenOrigin.Card, origin, GetOrigin);
-                _ = window.ShowAsync();
+                _ = window.ShowAsync(XamlRoot);
             }
             else
             {
                 GalleryViewModelBase viewModel = null;
 
-                var webPage = message.Content is MessageText text ? text.WebPage : null;
-                if (webPage != null && webPage.IsInstantGallery())
+                var linkPreview = message.Content is MessageText text ? text.LinkPreview : null;
+                if (linkPreview != null && linkPreview.Type is LinkPreviewTypeAlbum album)
                 {
-                    viewModel = await InstantGalleryViewModel.CreateAsync(ClientService, StorageService, Aggregator, message, webPage);
+                    viewModel = InstantGalleryViewModel.Create(ClientService, StorageService, Aggregator, message, album);
                 }
 
-                if (viewModel == null && (message.Content is MessageAnimation || webPage?.Animation != null))
+                if (viewModel == null && (message.Content is MessageAnimation || linkPreview?.Type is LinkPreviewTypeAnimation))
                 {
                     Delegate?.PlayMessage(message, target);
                 }
@@ -391,7 +456,7 @@ namespace Telegram.ViewModels
 
                         if (IsSingle(message.Content))
                         {
-                            viewModel = new SingleGalleryViewModel(ClientService, _storageService, Aggregator, new GalleryMessage(ClientService, message));
+                            viewModel = new StandaloneGalleryViewModel(ClientService, _storageService, Aggregator, new GalleryMessage(ClientService, message));
                         }
                         else
                         {
@@ -399,11 +464,47 @@ namespace Telegram.ViewModels
                         }
                     }
 
-                    viewModel.NavigationService = NavigationService;
-                    await GalleryWindow.ShowAsync(viewModel, target != null ? () => target : null, timestamp);
+                    NavigationService.ShowGallery(viewModel, target, timestamp);
                 }
 
-                TextField?.Focus(FocusState.Programmatic);
+                //TextField?.Focus(FocusState.Programmatic);
+            }
+        }
+
+        public void OpenPaidMedia(MessageViewModel message, PaidMedia media, FrameworkElement target, int timestamp = 0)
+        {
+            if (message.Content is MessagePaidAlbum album)
+            {
+                GalleryMedia item = null;
+                GalleryMedia Filter(PaidMedia x)
+                {
+                    GalleryMedia result = null;
+                    if (x is PaidMediaPhoto photo)
+                    {
+                        result = new GalleryPhoto(ClientService, photo.Photo, null, true);
+                    }
+                    else if (x is PaidMediaVideo video)
+                    {
+                        result = new GalleryVideo(ClientService, video.Video, null, true);
+                    }
+
+                    if (x == media)
+                    {
+                        item = result;
+                    }
+
+                    return result;
+                }
+
+                var items = album.Media
+                    .Select(Filter)
+                    .Where(x => x is not null)
+                    .ToList();
+
+                var viewModel = new StandaloneGalleryViewModel(ClientService, StorageService, Aggregator, items, item);
+                NavigationService.ShowGallery(viewModel, target, timestamp);
+
+                //TextField?.Focus(FocusState.Programmatic);
             }
         }
 
@@ -480,7 +581,7 @@ namespace Telegram.ViewModels
                 var text = builder.ToString();
                 var markdown = Extensions.ReplacePremiumLink(text, new PremiumFeatureVoiceRecognition());
 
-                ToastPopup.Show(markdown, new LocalFileSource("ms-appx:///Assets/Toasts/Transcribe.tgs"));
+                ToastPopup.Show(XamlRoot, markdown, ToastPopupIcon.Transcribe);
             }
         }
 
@@ -526,15 +627,10 @@ namespace Telegram.ViewModels
                 message.SelectionChanged();
             }
 
-            RaisePropertyChanged(nameof(CanForwardSelectedMessages));
-            RaisePropertyChanged(nameof(CanDeleteSelectedMessages));
-            RaisePropertyChanged(nameof(CanCopySelectedMessage));
-            RaisePropertyChanged(nameof(CanReportSelectedMessages));
-
-            RaisePropertyChanged(nameof(SelectedCount));
+            UpdateSelectionState();
         }
 
-        public void Unselect(MessageViewModel message)
+        public void Unselect(MessageViewModel message, bool updateSelection = false)
         {
             if (message.MediaAlbumId != 0)
             {
@@ -561,12 +657,34 @@ namespace Telegram.ViewModels
                 message.SelectionChanged();
             }
 
-            RaisePropertyChanged(nameof(CanForwardSelectedMessages));
-            RaisePropertyChanged(nameof(CanDeleteSelectedMessages));
+            if (updateSelection && SelectedItems.Count < 1 && IsReportingMessages == null)
+            {
+                IsSelectionEnabled = false;
+            }
+
+            UpdateSelectionState();
+        }
+
+        private async void UpdateSelectionState()
+        {
             RaisePropertyChanged(nameof(CanCopySelectedMessage));
             RaisePropertyChanged(nameof(CanReportSelectedMessages));
 
             RaisePropertyChanged(nameof(SelectedCount));
+
+            if (_type is DialogType.BusinessReplies)
+            {
+                CanDeleteSelectedMessages = true;
+                CanForwardSelectedMessages = false;
+            }
+            else
+            {
+                var selectedItems = SelectedItems.Values.ToList();
+                var properties = await ClientService.GetMessagePropertiesAsync(selectedItems.Select(x => new MessageId(x)));
+
+                CanDeleteSelectedMessages = properties.Count > 0 && properties.Values.All(x => x.CanBeDeletedForAllUsers || x.CanBeDeletedOnlyForSelf);
+                CanForwardSelectedMessages = properties.Count > 0 && properties.Values.All(x => x.CanBeForwarded);
+            }
         }
     }
 }

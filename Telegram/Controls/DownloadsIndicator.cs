@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Telegram.Assets.Icons;
 using Telegram.Common;
+using Telegram.Navigation;
 using Windows.UI;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
@@ -15,7 +16,7 @@ using Windows.UI.Xaml.Hosting;
 
 namespace Telegram.Controls
 {
-    public class DownloadsIndicator : Control
+    public partial class DownloadsIndicator : Control
     {
         private readonly IAnimatedVisualSource2 _visualSource;
         private readonly IAnimatedVisual _visual;
@@ -33,11 +34,13 @@ namespace Telegram.Controls
 
         private State _state;
 
+        private ProgressBarRing ProgressBar;
+
         public DownloadsIndicator()
         {
             DefaultStyleKey = typeof(DownloadsIndicator);
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var source = new Downloading();
 
             var visual = source.TryCreateAnimatedVisual(compositor, out _);
@@ -72,6 +75,8 @@ namespace Telegram.Controls
 
         protected override void OnApplyTemplate()
         {
+            ProgressBar = GetTemplateChild(nameof(ProgressBar)) as ProgressBarRing;
+
             var target = GetTemplateChild("Target") as FrameworkElement;
             if (target != null)
             {
@@ -115,7 +120,7 @@ namespace Telegram.Controls
 
                 var batch = PrepareBatch();
 
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
                 var linearEasing = compositor.CreateLinearEasingFunction();
 
                 _animation.Duration = _visual.Duration / (_state == State.IndeterminateToCompleted ? 3 : 2);
@@ -132,22 +137,20 @@ namespace Telegram.Controls
 
         #region Progress
 
+        private double _progress;
         public double Progress
         {
-            get { return (double)GetValue(ProgressProperty); }
-            set { SetValue(ProgressProperty, value); }
+            get => _progress;
+            set => OnProgressChanged(_progress, _progress = value);
         }
 
-        public static readonly DependencyProperty ProgressProperty =
-            DependencyProperty.Register("Progress", typeof(double), typeof(DownloadsIndicator), new PropertyMetadata(0d, OnProgressChanged));
-
-        private static void OnProgressChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private void OnProgressChanged(double oldValue, double newValue)
         {
-            ((DownloadsIndicator)d).OnProgressChanged((double)e.NewValue, (double)e.OldValue);
-        }
+            if (ProgressBar != null)
+            {
+                ProgressBar.Value = newValue;
+            }
 
-        private void OnProgressChanged(double newValue, double oldValue)
-        {
             if (newValue == 0 && _state != State.Normal)
             {
                 _state = State.Normal;

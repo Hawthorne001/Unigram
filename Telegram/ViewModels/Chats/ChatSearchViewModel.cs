@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,6 +12,7 @@ using Telegram.Collections;
 using Telegram.Common;
 using Telegram.Controls.Media;
 using Telegram.Navigation;
+using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.Views.Popups;
@@ -19,16 +20,18 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.ViewModels.Chats
 {
-    public class ChatSearchViewModel : ViewModelBase, IDisposable
+    public partial class ChatSearchViewModel : ViewModelBase, IDisposable
     {
         private readonly DialogViewModel _dialog;
         private readonly DisposableMutex _loadMoreLock;
 
-        public ChatSearchViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, DialogViewModel viewModel, string query)
+        public ChatSearchViewModel(IClientService clientService, INavigationService navigationService, ISettingsService settingsService, IEventAggregator aggregator, DialogViewModel viewModel, string query)
             : base(clientService, settingsService, aggregator)
         {
             _dialog = viewModel;
             _loadMoreLock = new DisposableMutex();
+
+            NavigationService = navigationService;
 
             NextCommand = new RelayCommand(NextExecute, NextCanExecute);
             PreviousCommand = new RelayCommand(PreviousExecute, PreviousCanExecute);
@@ -39,13 +42,7 @@ namespace Telegram.ViewModels.Chats
             }
         }
 
-        public DialogViewModel Dialog
-        {
-            get
-            {
-                return _dialog;
-            }
-        }
+        public DialogViewModel Dialog => _dialog;
 
         private ICollection _autocomplete;
         public ICollection Autocomplete
@@ -375,7 +372,7 @@ namespace Telegram.ViewModels.Chats
         }
     }
 
-    public class ChatSearchMediaFilter
+    public partial class ChatSearchMediaFilter
     {
         public SearchMessagesFilter Filter { get; private set; }
         public string Glyph { get; private set; }

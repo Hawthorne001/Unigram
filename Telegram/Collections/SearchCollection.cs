@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -17,18 +17,18 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.Collections
 {
-    public class SearchCollection<T, TSource> : DiffObservableCollection<T>, ISupportIncrementalLoading where TSource : IEnumerable<T>
+    public partial class SearchCollection<T, TSource> : DiffObservableCollection<T>, ISupportIncrementalLoading where TSource : IEnumerable<T>
     {
         private readonly Func<object, string, TSource> _factory;
-        private readonly object _sender;
+        private object _sender;
 
-        private readonly DisposableMutex _mutex = new();
-        private CancellationTokenSource _token;
+        private CancellationTokenSource _cancellation;
 
         private TSource _source;
         private ISupportIncrementalLoading _incrementalSource;
 
         private bool _initialized;
+        private bool _loading;
 
         public SearchCollection(Func<object, string, TSource> factory, IDiffHandler<T> handler)
             : this(factory, null, handler)
@@ -47,7 +47,13 @@ namespace Telegram.Collections
         public string Query
         {
             get => _query;
-            set => _query.Set(value);
+            set
+            {
+                _cancellation?.Cancel();
+                _cancellation = new();
+
+                _query.Set(value, _cancellation.Token);
+            }
         }
 
         public TSource Source => _source;
@@ -55,52 +61,61 @@ namespace Telegram.Collections
         public void Reload()
         {
             Update(_factory(_sender ?? this, _query.Value));
-            OnPropertyChanged(new PropertyChangedEventArgs(nameof(Query)));
+        }
+
+        public void UpdateSender(object sender)
+        {
+            Update(_factory((_sender = sender) ?? this, _query.Value));
         }
 
         public void UpdateQuery(string value)
         {
-            _query.Value = value;
-
-            Update(_factory(_sender ?? this, value));
-            OnPropertyChanged(new PropertyChangedEventArgs(nameof(Query)));
+            Update(_factory(_sender ?? this, _query.Value = value));
         }
 
-        public async void Update(TSource source)
+        public CancellationTokenSource Cancel()
         {
-            _token?.Cancel();
+            _cancellation?.Cancel();
+            _cancellation = new();
+            return _cancellation;
+        }
 
+        public void Update(TSource source)
+        {
+            UpdateImpl(source, false);
+        }
+
+        private async void UpdateImpl(TSource source, bool reentrancy)
+        {
             if (source is ISupportIncrementalLoading incremental && incremental.HasMoreItems)
             {
-                var token = new CancellationTokenSource();
-
-                _token = token;
-
                 _source = source;
                 _incrementalSource = incremental;
 
                 if (_initialized)
                 {
-                    using (await _mutex.WaitAsync())
+                    _loading = true;
+
+                    var token = Cancel();
+
+                    await incremental.LoadMoreItemsAsync(0);
+                    var diff = await Task.Run(() => DiffUtil.CalculateDiff(this, source, DefaultDiffHandler, DefaultOptions));
+
+                    if (token.IsCancellationRequested)
                     {
-                        await incremental.LoadMoreItemsAsync(0);
+                        _loading = false;
+                        return;
+                    }
 
-                        // 100% redundant
-                        if (token.IsCancellationRequested)
-                        {
-                            return;
-                        }
+                    ReplaceDiff(diff);
+                    UpdateEmpty();
 
-                        var diff = await Task.Run(() => DiffUtil.CalculateDiff(this, source, DefaultDiffHandler, DefaultOptions));
-                        ReplaceDiff(diff);
-                        UpdateEmpty();
+                    _loading = false;
 
-                        if (Count < 1 && incremental.HasMoreItems)
-                        {
-                            // This is 100% illegal and will cause a lot
-                            // but really a lot of problems for sure.
-                            Add(default);
-                        }
+                    // I'm not sure in what conditions this can happen, but it happens
+                    if (Count < 1 && incremental.HasMoreItems && !reentrancy)
+                    {
+                        UpdateImpl(source, true);
                     }
                 }
             }
@@ -110,29 +125,37 @@ namespace Telegram.Collections
         {
             return AsyncInfo.Run(async _ =>
             {
-                using (await _mutex.WaitAsync())
+                if (_loading)
                 {
-                    _initialized = true;
-                    _token?.Cancel();
+                    return new LoadMoreItemsResult
+                    {
+                        Count = 0
+                    };
+                }
 
-                    var token = _token = new CancellationTokenSource();
-                    var result = await _incrementalSource?.LoadMoreItemsAsync(count);
+                _loading = true;
 
-                    // 100% redundant
+                var token = Cancel();
+                var result = await _incrementalSource?.LoadMoreItemsAsync(count);
+
+                if (result.Count > 0 && !token.IsCancellationRequested)
+                {
+                    var diff = await Task.Run(() => DiffUtil.CalculateDiff(this, _source, DefaultDiffHandler, DefaultOptions));
+
                     if (token.IsCancellationRequested)
                     {
+                        _loading = false;
                         return result;
                     }
 
-                    if (result.Count > 0)
-                    {
-                        var diff = await Task.Run(() => DiffUtil.CalculateDiff(this, _source, DefaultDiffHandler, DefaultOptions));
-                        ReplaceDiff(diff);
-                        UpdateEmpty();
-                    }
-
-                    return result;
+                    ReplaceDiff(diff);
+                    UpdateEmpty();
                 }
+
+                _initialized = true;
+                _loading = false;
+
+                return result;
             });
         }
 

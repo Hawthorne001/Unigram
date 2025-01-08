@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,6 +11,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Numerics;
 using Telegram.Common;
+using Telegram.Navigation;
 using Telegram.Td.Api;
 using Windows.Foundation;
 using Windows.UI.Composition;
@@ -23,12 +24,12 @@ namespace Telegram.Controls
 {
     public delegate void RecentUserHeadChangedHandler(ProfilePicture sender, MessageSender messageSender);
 
-    public class RecentUserHeadChangedEventArgs : EventArgs
+    public partial class RecentUserHeadChangedEventArgs : EventArgs
     {
 
     }
 
-    public class RecentUserHeads : Control
+    public partial class RecentUserHeads : Control
     {
         private readonly RecentUserCollection _items = new RecentUserCollection();
         private readonly HashSet<UIElement> _toBeRemoved = new HashSet<UIElement>();
@@ -240,7 +241,7 @@ namespace Telegram.Controls
 
             _layoutRoot.Children.Move((uint)oldIndex, (uint)newIndex);
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
             var start = Math.Min(oldIndex, newIndex);
@@ -257,7 +258,6 @@ namespace Telegram.Controls
         private UIElement CreateContainer(object item)
         {
             var picture = new ProfilePicture();
-            picture.IsEnabled = false;
             picture.Width = _itemSize;
             picture.Height = _itemSize;
 
@@ -300,7 +300,7 @@ namespace Telegram.Controls
 
         private CompositionScopedBatch CreateScopedBatch()
         {
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 foreach (var element in _toBeRemoved)
@@ -323,13 +323,13 @@ namespace Telegram.Controls
             visual.Offset = new Vector3(index * (_itemSize + 4 - _itemOverlap), 0, 0);
             visual.CenterPoint = new Vector3((_itemSize + 4) / 2);
 
-            var addingScale = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var addingScale = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             addingScale.InsertKeyFrame(0.0f, new Vector3(0));
             addingScale.InsertKeyFrame(0.9f, new Vector3(1.1f, 1.1f, 1));
             addingScale.InsertKeyFrame(1.0f, new Vector3(1));
             //addingScale.Duration = TimeSpan.FromSeconds(1);
 
-            var addingOpacity = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var addingOpacity = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             addingOpacity.InsertKeyFrame(0.0f, 0);
             addingOpacity.InsertKeyFrame(1.0f, 1);
             //addingOpacity.Duration = TimeSpan.FromSeconds(1);
@@ -345,12 +345,12 @@ namespace Telegram.Controls
             var child = ElementComposition.GetElementVisual(container);
             child.CenterPoint = new Vector3((_itemSize + 4) / 2);
 
-            var removingScale = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var removingScale = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             removingScale.InsertKeyFrame(0.0f, new Vector3(1));
             removingScale.InsertKeyFrame(1.0f, new Vector3(0));
             //removingScale.Duration = TimeSpan.FromSeconds(1);
 
-            var removingOpacity = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var removingOpacity = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             removingOpacity.InsertKeyFrame(0.0f, 1);
             removingOpacity.InsertKeyFrame(1.0f, 0);
             //removingOpacity.Duration = TimeSpan.FromSeconds(1);
@@ -364,7 +364,7 @@ namespace Telegram.Controls
             Canvas.SetZIndex(container, -newIndex);
 
             var child = ElementComposition.GetElementVisual(container);
-            var offset = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var offset = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
 
             if (oldIndex >= 0)
             {
@@ -389,7 +389,7 @@ namespace Telegram.Controls
                 var count = Math.Min(_maxCount, Math.Max(1, _items.Count));
                 var diff = maxWidth - (count * (float)(_itemSize + 4) - ((count - 1) * _itemOverlap));
 
-                var offset = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+                var offset = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
                 offset.InsertKeyFrame(1, new Vector3(diff / 2, 0, 0));
                 //offset.Duration = TimeSpan.FromSeconds(1);
 
@@ -406,7 +406,7 @@ namespace Telegram.Controls
                 var count = Math.Min(_maxCount, Math.Max(1, _items.Count));
                 var diff = maxWidth - (count * (float)(_itemSize + 4) - ((count - 1) * _itemOverlap));
 
-                var offset = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+                var offset = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
                 offset.InsertKeyFrame(0, new Vector3(-diff, 0, 0));
                 offset.InsertKeyFrame(1, new Vector3());
                 //offset.Duration = TimeSpan.FromSeconds(10);
@@ -433,7 +433,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class RecentUserCollection : ObservableCollection<MessageSender>
+    public partial class RecentUserCollection : ObservableCollection<MessageSender>
     {
         public RecentUserCollection()
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -16,7 +16,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsBlockedChatsViewModel : ViewModelBase, IIncrementalCollectionOwner
+    public partial class SettingsBlockedChatsViewModel : ViewModelBase, IIncrementalCollectionOwner
     {
         public SettingsBlockedChatsViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -28,7 +28,7 @@ namespace Telegram.ViewModels.Settings
 
         public async void Block()
         {
-            var selected = await ChooseChatsPopup.PickChatAsync(Strings.BlockUser, ChooseChatsOptions.Users);
+            var selected = await ChooseChatsPopup.PickChatAsync(NavigationService, Strings.BlockUser, ChooseChatsOptions.Users);
             if (selected == null)
             {
                 return;

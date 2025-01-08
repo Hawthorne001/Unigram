@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,10 +18,10 @@ namespace Telegram.Views.Payments
 
         public SavedCredentials Credentials { get; private set; }
 
-        public PaymentCredentialsPopup(PaymentForm paymentForm)
+        public PaymentCredentialsPopup(int sessionId, PaymentFormTypeRegular paymentForm)
         {
             InitializeComponent();
-            DataContext = TypeResolver.Current.Resolve<PaymentCredentialsViewModel>();
+            DataContext = TypeResolver.Current.Resolve<PaymentCredentialsViewModel>(sessionId);
 
             Title = Strings.PaymentCardInfo;
 
@@ -38,10 +38,10 @@ namespace Telegram.Views.Payments
             }
         }
 
-        public PaymentCredentialsPopup(PaymentForm paymentForm, PaymentOption paymentOption)
+        public PaymentCredentialsPopup(int sessionId, PaymentFormTypeRegular paymentForm, PaymentOption paymentOption)
         {
             InitializeComponent();
-            DataContext = TypeResolver.Current.Resolve<PaymentCredentialsViewModel>();
+            DataContext = TypeResolver.Current.Resolve<PaymentCredentialsViewModel>(sessionId);
 
             Title = Strings.PaymentCardInfo;
 

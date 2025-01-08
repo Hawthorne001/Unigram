@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,14 +9,51 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Telegram.Navigation;
+using Windows.UI;
+using Windows.UI.Composition;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Common
 {
-    public class VisualUtilities
+    public partial class VisualUtilities
     {
+        public static SpriteVisual DropShadow(UIElement element, float radius = 20, float opacity = 0.25f, UIElement target = null)
+        {
+            var compositor = BootStrapper.Current.Compositor;
+
+            var shadow = compositor.CreateDropShadow();
+            shadow.BlurRadius = radius;
+            shadow.Opacity = opacity;
+            shadow.Color = Colors.Black;
+
+            var visual = compositor.CreateSpriteVisual();
+            visual.Shadow = shadow;
+            visual.Size = new Vector2(0, 0);
+            visual.Offset = new Vector3(0, 0, 0);
+            visual.RelativeSizeAdjustment = Vector2.One;
+
+            switch (element)
+            {
+                case Image image:
+                    shadow.Mask = image.GetAlphaMask();
+                    break;
+                case Shape shape:
+                    shadow.Mask = shape.GetAlphaMask();
+                    break;
+                case TextBlock textBlock:
+                    shadow.Mask = textBlock.GetAlphaMask();
+                    break;
+            }
+
+            ElementCompositionPreview.SetElementChildVisual(target ?? element, visual);
+            return visual;
+        }
+
         public static void ShakeView(FrameworkElement view, float x = 2)
         {
             // We use first child inside the control (usually a Grid)
@@ -75,7 +112,9 @@ namespace Telegram.Common
 
             sender.Visibility = Visibility.Visible;
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(Windows.UI.Composition.CompositionBatchTypes.Animation);
+            var compositor = visual.Compositor;
+
+            var batch = compositor.CreateScopedBatch(Windows.UI.Composition.CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 visual.Opacity = newValue ? 1 : 0;
@@ -84,14 +123,14 @@ namespace Telegram.Common
                 sender.Visibility = newValue ? Visibility.Visible : Visibility.Collapsed;
             };
 
-            var anim1 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var anim1 = compositor.CreateScalarKeyFrameAnimation();
             anim1.InsertKeyFrame(0, newValue ? 0 : 1);
             anim1.InsertKeyFrame(1, newValue ? 1 : 0);
             visual.StartAnimation("Opacity", anim1);
 
             if (scale)
             {
-                var anim2 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+                var anim2 = compositor.CreateVector3KeyFrameAnimation();
                 anim2.InsertKeyFrame(0, new Vector3(newValue ? 0 : 1));
                 anim2.InsertKeyFrame(1, new Vector3(newValue ? 1 : 0));
                 visual.StartAnimation("Scale", anim2);
@@ -133,7 +172,7 @@ namespace Telegram.Common
             var weak = new WeakReference(callback);
             void handler(object sender, object e)
             {
-                CompositionTarget.Rendering -= handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendering -= handler;
 
                 if (weak.Target is Action callback)
                 {
@@ -143,7 +182,7 @@ namespace Telegram.Common
 
             try
             {
-                CompositionTarget.Rendering += handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendering += handler;
             }
             catch
             {
@@ -156,13 +195,13 @@ namespace Telegram.Common
             var tsc = new TaskCompletionSource<bool>();
             void handler(object sender, object e)
             {
-                CompositionTarget.Rendering -= handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendering -= handler;
                 tsc.SetResult(true);
             }
 
             try
             {
-                CompositionTarget.Rendering += handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendering += handler;
             }
             catch
             {
@@ -179,7 +218,7 @@ namespace Telegram.Common
             var weak = new WeakReference(callback);
             void handler(object sender, object e)
             {
-                CompositionTarget.Rendered -= handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendered -= handler;
 
                 if (weak.Target is Action callback)
                 {
@@ -189,7 +228,7 @@ namespace Telegram.Common
 
             try
             {
-                CompositionTarget.Rendered += handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendered += handler;
             }
             catch
             {
@@ -202,13 +241,13 @@ namespace Telegram.Common
             var tsc = new TaskCompletionSource<bool>();
             void handler(object sender, object e)
             {
-                CompositionTarget.Rendered -= handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendered -= handler;
                 tsc.SetResult(true);
             }
 
             try
             {
-                CompositionTarget.Rendered += handler;
+                Windows.UI.Xaml.Media.CompositionTarget.Rendered += handler;
             }
             catch
             {

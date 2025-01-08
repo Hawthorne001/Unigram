@@ -7,6 +7,8 @@ namespace Telegram.Native.Calls
     {
         VoipDescriptor();
 
+        String Version;
+        String CustomParameters;
         Double InitializationTimeout;
         Double ReceiveTimeout;
         Windows.Foundation.Collections.IVector<byte> PersistentState;

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,7 +7,6 @@
 using System.Linq;
 using Telegram.Collections;
 using Telegram.Common;
-using Telegram.Controls;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Gallery;
@@ -15,7 +14,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.ViewModels.Chats
 {
-    public class ChatPhotosViewModel : GalleryViewModelBase
+    public partial class ChatPhotosViewModel : GalleryViewModelBase
     {
         private readonly DisposableMutex _loadMoreLock = new DisposableMutex();
         private readonly Chat _chat;
@@ -221,14 +220,14 @@ namespace Telegram.ViewModels.Chats
             }
 
             ClientService.Send(new SetChatPhoto(_chat.Id, new InputChatPhotoPrevious(item.Id)));
-            ToastPopup.Show(_chat.Type is ChatTypeSupergroup supergroup && supergroup.IsChannel
+            ShowToast(_chat.Type is ChatTypeSupergroup supergroup && supergroup.IsChannel
                 ? item.IsVideo ? Strings.MainChannelProfileVideoSetHint : Strings.MainChannelProfilePhotoSetHint
                 : item.IsVideo ? Strings.MainGroupProfileVideoSetHint : Strings.MainGroupProfilePhotoSetHint);
         }
 
     }
 
-    //public class GalleryChatPhotoItem : GalleryItem
+    //public partial class GalleryChatPhotoItem : GalleryItem
     //{
     //    private readonly TLChatPhoto _photo;
     //    private readonly ITLDialogWith _from;

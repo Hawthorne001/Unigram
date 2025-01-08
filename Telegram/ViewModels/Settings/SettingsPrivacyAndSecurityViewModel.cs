@@ -1,12 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Controls;
@@ -28,9 +27,8 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsPrivacyAndSecurityViewModel : MultiViewModelBase, IHandle
+    public partial class SettingsPrivacyAndSecurityViewModel : MultiViewModelBase, IHandle
     {
-        private readonly IContactsService _contactsService;
         private readonly IPasscodeService _passcodeService;
 
         private readonly SettingsPrivacyShowForwardedViewModel _showForwardedRules;
@@ -39,14 +37,14 @@ namespace Telegram.ViewModels.Settings
         private readonly SettingsPrivacyShowStatusViewModel _showStatusRules;
         private readonly SettingsPrivacyShowBioViewModel _showBioRules;
         private readonly SettingsPrivacyShowBirthdateViewModel _showBirthdateRules;
+        private readonly SettingsPrivacyAutosaveGiftsViewModel _autosaveGiftsRules;
         private readonly SettingsPrivacyAllowCallsViewModel _allowCallsRules;
         private readonly SettingsPrivacyAllowChatInvitesViewModel _allowChatInvitesRules;
         private readonly SettingsPrivacyAllowPrivateVoiceAndVideoNoteMessagesViewModel _allowPrivateVoiceAndVideoNoteMessages;
 
-        public SettingsPrivacyAndSecurityViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, IContactsService contactsService, IPasscodeService passcodeService)
+        public SettingsPrivacyAndSecurityViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, IPasscodeService passcodeService)
             : base(clientService, settingsService, aggregator)
         {
-            _contactsService = contactsService;
             _passcodeService = passcodeService;
 
             _showForwardedRules = TypeResolver.Current.Resolve<SettingsPrivacyShowForwardedViewModel>(SessionId);
@@ -55,6 +53,7 @@ namespace Telegram.ViewModels.Settings
             _showStatusRules = TypeResolver.Current.Resolve<SettingsPrivacyShowStatusViewModel>(SessionId);
             _showBioRules = TypeResolver.Current.Resolve<SettingsPrivacyShowBioViewModel>(SessionId);
             _showBirthdateRules = TypeResolver.Current.Resolve<SettingsPrivacyShowBirthdateViewModel>(SessionId);
+            _autosaveGiftsRules = TypeResolver.Current.Resolve<SettingsPrivacyAutosaveGiftsViewModel>(SessionId);
             _allowCallsRules = TypeResolver.Current.Resolve<SettingsPrivacyAllowCallsViewModel>(SessionId);
             _allowChatInvitesRules = TypeResolver.Current.Resolve<SettingsPrivacyAllowChatInvitesViewModel>(SessionId);
             _allowPrivateVoiceAndVideoNoteMessages = TypeResolver.Current.Resolve<SettingsPrivacyAllowPrivateVoiceAndVideoNoteMessagesViewModel>(SessionId);
@@ -65,6 +64,7 @@ namespace Telegram.ViewModels.Settings
             Children.Add(_showStatusRules);
             Children.Add(_showBioRules);
             Children.Add(_showBirthdateRules);
+            Children.Add(_autosaveGiftsRules);
             Children.Add(_allowCallsRules);
             Children.Add(_allowChatInvitesRules);
             Children.Add(_allowPrivateVoiceAndVideoNoteMessages);
@@ -165,6 +165,7 @@ namespace Telegram.ViewModels.Settings
         public SettingsPrivacyShowStatusViewModel ShowStatusRules => _showStatusRules;
         public SettingsPrivacyShowBioViewModel ShowBioRules => _showBioRules;
         public SettingsPrivacyShowBirthdateViewModel ShowBirthdateRules => _showBirthdateRules;
+        public SettingsPrivacyAutosaveGiftsViewModel AutosaveGiftsRules => _autosaveGiftsRules;
         public SettingsPrivacyAllowCallsViewModel AllowCallsRules => _allowCallsRules;
         public SettingsPrivacyAllowChatInvitesViewModel AllowChatInvitesRules => _allowChatInvitesRules;
         public SettingsPrivacyAllowPrivateVoiceAndVideoNoteMessagesViewModel AllowPrivateVoiceAndVideoNoteMessages => _allowPrivateVoiceAndVideoNoteMessages;
@@ -195,7 +196,9 @@ namespace Telegram.ViewModels.Settings
             30,
             90,
             180,
-            365
+            365,
+            548,
+            730
         };
 
         public List<SettingsOptionItem<int>> AccountTtlOptions { get; } = new()
@@ -203,7 +206,9 @@ namespace Telegram.ViewModels.Settings
             new SettingsOptionItem<int>(30, Locale.Declension(Strings.R.Months, 1)),
             new SettingsOptionItem<int>(90, Locale.Declension(Strings.R.Months, 3)),
             new SettingsOptionItem<int>(180, Locale.Declension(Strings.R.Months, 6)),
-            new SettingsOptionItem<int>(365, Locale.Declension(Strings.R.Years, 1))
+            new SettingsOptionItem<int>(365, Locale.Declension(Strings.R.Months, 12)),
+            new SettingsOptionItem<int>(548, Locale.Declension(Strings.R.Months, 18)),
+            new SettingsOptionItem<int>(730, Locale.Declension(Strings.R.Months, 24))
         };
 
         private int _blockedUsers;
@@ -239,16 +244,6 @@ namespace Telegram.ViewModels.Settings
         {
             get => _defaultTtl;
             set => Set(ref _defaultTtl, value);
-        }
-
-        public bool IsContactsSyncEnabled
-        {
-            get => Settings.IsContactsSyncEnabled;
-            set
-            {
-                Settings.IsContactsSyncEnabled = value;
-                RaisePropertyChanged();
-            }
         }
 
         public bool IsContactsSuggestEnabled
@@ -294,11 +289,11 @@ namespace Telegram.ViewModels.Settings
 
         public void Handle(UpdateOption update)
         {
-            if (update.Name.Equals("disable_top_chats"))
+            if (update.Name == OptionsService.R.DisableTopChats)
             {
                 BeginOnUIThread(() => RaisePropertyChanged(nameof(IsContactsSuggestEnabled)));
             }
-            else if (update.Name.Equals("ignore_sensitive_content_restrictions"))
+            else if (update.Name == OptionsService.R.IgnoreSensitiveContentRestrictions)
             {
                 BeginOnUIThread(() => RaisePropertyChanged(nameof(IgnoreSensitiveContentRestrictions)));
             }
@@ -400,48 +395,6 @@ namespace Telegram.ViewModels.Settings
             ShowPopupAsync(new SettingsArchivePopup(ClientService));
         }
 
-        public async void ClearDrafts()
-        {
-            var confirm = await ShowPopupAsync(Strings.AreYouSureClearDrafts, Strings.AppName, Strings.OK, Strings.Cancel);
-            if (confirm != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            var clear = await ClientService.SendAsync(new ClearAllDraftMessages(true));
-            if (clear is Error)
-            {
-                // TODO
-            }
-        }
-
-        public async void ClearContacts()
-        {
-            var confirm = await ShowPopupAsync(Strings.SyncContactsDeleteInfo, Strings.Contacts, Strings.OK, Strings.Cancel);
-            if (confirm != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            IsContactsSyncEnabled = false;
-
-            var clear = await ClientService.SendAsync(new ClearImportedContacts());
-            if (clear is Error)
-            {
-                // TODO
-            }
-
-            var contacts = await ClientService.SendAsync(new GetContacts());
-            if (contacts is Telegram.Td.Api.Users users)
-            {
-                var delete = await ClientService.SendAsync(new RemoveContacts(users.UserIds));
-                if (delete is Error)
-                {
-                    // TODO
-                }
-            }
-        }
-
         public async void ClearPayments()
         {
             var dialog = new ContentPopup();
@@ -521,6 +474,11 @@ namespace Telegram.ViewModels.Settings
             NavigationService.Navigate(typeof(SettingsPrivacyShowBirthdatePage));
         }
 
+        public void OpenGifts()
+        {
+            NavigationService.Navigate(typeof(SettingsPrivacyAutosaveGiftsPage));
+        }
+
         public void OpenForwards()
         {
             NavigationService.Navigate(typeof(SettingsPrivacyShowForwardedPage));
@@ -544,29 +502,6 @@ namespace Telegram.ViewModels.Settings
         public void OpenMessages()
         {
             NavigationService.Navigate(typeof(SettingsPrivacyNewChatPage));
-        }
-
-        public override async void RaisePropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            base.RaisePropertyChanged(propertyName);
-
-            if (propertyName.Equals(nameof(IsContactsSyncEnabled)))
-            {
-                if (IsContactsSyncEnabled)
-                {
-                    ClientService.Send(new GetContacts(), async result =>
-                    {
-                        if (result is Telegram.Td.Api.Users users)
-                        {
-                            await _contactsService.SyncAsync(users);
-                        }
-                    });
-                }
-                else
-                {
-                    await _contactsService.RemoveAsync();
-                }
-            }
         }
     }
 }

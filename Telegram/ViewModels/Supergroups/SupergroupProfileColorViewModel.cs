@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,6 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Settings;
 using Telegram.Views.Chats.Popups;
@@ -35,7 +34,7 @@ namespace Telegram.ViewModels.Supergroups
         DisableSponsoredMessages
     }
 
-    public class SupergroupProfileColorViewModel : ViewModelBase
+    public partial class SupergroupProfileColorViewModel : ViewModelBase
     {
         private ChatBoostStatus _status;
         private ChatBoostFeatures _features;
@@ -45,7 +44,7 @@ namespace Telegram.ViewModels.Supergroups
             : base(clientService, settingsService, aggregator)
         {
             var defaultTheme = new ChatThemeViewModel(ClientService, "\u274C", null, null, true);
-            var themes = ClientService.GetChatThemes().Select(x => new ChatThemeViewModel(ClientService, x, true));
+            var themes = ClientService.ChatThemes.Select(x => new ChatThemeViewModel(ClientService, x, true));
 
             ChatThemes = new ObservableCollection<ChatThemeViewModel>(new[] { defaultTheme }.Union(themes));
         }
@@ -291,6 +290,13 @@ namespace Telegram.ViewModels.Supergroups
             }
         }
 
+        private long _selectedStickerSet;
+        public long SelectedStickerSet
+        {
+            get => _selectedStickerSet;
+            set => Set(ref _selectedStickerSet, value);
+        }
+
         public int RequiredLevel => UpdateRequiredLevel(out _);
 
         private int UpdateRequiredLevel(out ChatBoostFeature feature)
@@ -386,9 +392,17 @@ namespace Telegram.ViewModels.Supergroups
             }
 
             var response = await ClientService.SendAsync(new GetChatBoostStatus(chat.Id));
-            if (response is not ChatBoostStatus status)
+            if (response is not ChatBoostStatus status || !ClientService.TryGetSupergroupFull(chat, out SupergroupFullInfo fullInfo))
             {
                 return;
+            }
+
+            var changed = false;
+
+            if (SelectedStickerSet != fullInfo.StickerSetId && fullInfo.CanSetStickerSet)
+            {
+                changed = true;
+                ClientService.Send(new SetSupergroupStickerSet(chat.Id, SelectedStickerSet));
             }
 
             var required = UpdateRequiredLevel(out var feature);
@@ -397,8 +411,6 @@ namespace Telegram.ViewModels.Supergroups
                 await ShowPopupAsync(new ChatBoostFeaturesPopup(ClientService, NavigationService, chat, status, null, _features, feature, required));
                 return;
             }
-
-            var changed = false;
 
             var accentColorId = SelectedAccentColor?.Id ?? -1;
             var profileAccentColorId = SelectedProfileAccentColor?.Id ?? -1;
@@ -421,13 +433,10 @@ namespace Telegram.ViewModels.Supergroups
                 ClientService.Send(new SetChatEmojiStatus(chat.Id, SelectedEmojiStatus));
             }
 
-            if (ClientService.TryGetSupergroupFull(chat, out SupergroupFullInfo fullInfo))
+            if (SelectedCustomEmojiStickerSet != fullInfo.CustomEmojiStickerSetId)
             {
-                if (SelectedCustomEmojiStickerSet != fullInfo.CustomEmojiStickerSetId)
-                {
-                    changed = true;
-                    ClientService.Send(new SetSupergroupCustomEmojiStickerSet(chat.Id, SelectedCustomEmojiStickerSet));
-                }
+                changed = true;
+                ClientService.Send(new SetSupergroupCustomEmojiStickerSet(chat.Id, SelectedCustomEmojiStickerSet));
             }
 
             var prevChatTheme = chat.Background?.Background.Type is BackgroundTypeChatTheme typeChatTheme
@@ -446,7 +455,7 @@ namespace Telegram.ViewModels.Supergroups
 
             if (changed)
             {
-                ToastPopup.Show(Strings.ChannelAppearanceUpdated, new LocalFileSource("ms-appx:///Assets/Toasts/Success.tgs"));
+                ShowToast(Strings.ChannelAppearanceUpdated, ToastPopupIcon.Success);
             }
 
             _confirmed = true;

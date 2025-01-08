@@ -9,19 +9,22 @@ using Telegram.Controls.Messages;
 using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Services.Keyboard;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Stories;
 using Telegram.Views.Stories.Popups;
 using Windows.Foundation;
+using Windows.UI;
+using Windows.UI.Text;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 using DispatcherQueue = Windows.System.DispatcherQueue;
 using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Telegram.Controls.Stories
 {
@@ -70,10 +73,10 @@ namespace Telegram.Controls.Stories
             }
         }
 
-        protected override void MaskTitleAndStatusBar()
+        protected override void MaskTitleAndStatusBar(WindowContext window)
         {
-            base.MaskTitleAndStatusBar();
-            Window.Current.SetTitleBar(TitleBar);
+            base.MaskTitleAndStatusBar(window);
+            window.SetTitleBar(TitleBar);
         }
 
         protected override void OnPointerWheelChanged(PointerRoutedEventArgs e)
@@ -724,7 +727,7 @@ namespace Telegram.Controls.Stories
             {
                 ActiveCard.Suspend(StoryPauseSource.Popup);
 
-                var confirm = await ViewModel.ShowPopupAsync(typeof(StoryInteractionsPopup), story, requestedTheme: ElementTheme.Dark);
+                var confirm = await ViewModel.ShowPopupAsync(new StoryInteractionsPopup(), story, requestedTheme: ElementTheme.Dark);
                 if (await ContinuePopupAsync(confirm == ContentDialogResult.Primary, new PremiumStoryFeaturePermanentViewsHistory()))
                 {
                     ActiveCard.Resume(StoryPauseSource.Popup);
@@ -780,16 +783,14 @@ namespace Telegram.Controls.Stories
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            WindowContext.Current.Activated += OnActivated;
-            WindowContext.Current.InputListener.KeyDown += OnAcceleratorKeyActivated;
+            _viewModel.NavigationService.Window.Activated += OnActivated;
 
             StoriesWindow_Loaded(sender, e);
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            WindowContext.Current.Activated -= OnActivated;
-            WindowContext.Current.InputListener.KeyDown -= OnAcceleratorKeyActivated;
+            _viewModel.NavigationService.Window.Activated -= OnActivated;
 
             _viewModel?.Aggregator.Unsubscribe(this);
             _stealthTimer.Stop();
@@ -807,23 +808,27 @@ namespace Telegram.Controls.Stories
             }
         }
 
-        private void OnAcceleratorKeyActivated(Window sender, InputKeyDownEventArgs args)
+        private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
         {
-            var keyCode = (int)args.VirtualKey;
-
-            if (args.VirtualKey is VirtualKey.Left or VirtualKey.GamepadLeftShoulder or VirtualKey.PageUp)
-            {
-                Move(Direction.Backward, force: args.VirtualKey is VirtualKey.PageUp);
-                args.Handled = true;
-            }
-            else if (args.VirtualKey is VirtualKey.Right or VirtualKey.GamepadRightShoulder or VirtualKey.PageDown)
-            {
-                Move(Direction.Forward, force: args.VirtualKey is VirtualKey.PageDown);
-                args.Handled = true;
-            }
-            else if (args.VirtualKey is VirtualKey.Space && args.OnlyKey)
+            if (args.Key is VirtualKey.Space /*&& args.Modifiers == VirtualKeyModifiers.None*/)
             {
                 ActiveCard.Toggle();
+                args.Handled = true;
+            }
+        }
+
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
+        {
+            var keyCode = (int)args.Key;
+
+            if (args.Key is VirtualKey.Left or VirtualKey.GamepadLeftShoulder or VirtualKey.PageUp && args.Modifiers == VirtualKeyModifiers.None)
+            {
+                Move(Direction.Backward, force: args.Key is VirtualKey.PageUp);
+                args.Handled = true;
+            }
+            else if (args.Key is VirtualKey.Right or VirtualKey.GamepadRightShoulder or VirtualKey.PageDown && args.Modifiers == VirtualKeyModifiers.None)
+            {
+                Move(Direction.Forward, force: args.Key is VirtualKey.PageDown);
                 args.Handled = true;
             }
             //else if (args.VirtualKey is VirtualKey.C && args.OnlyControl)
@@ -932,9 +937,9 @@ namespace Telegram.Controls.Stories
             var muted = ViewModel.Settings.Notifications.GetMuteStories(activeStories.Chat);
             var archived = activeStories.List is StoryListArchive;
 
-            if (story.CanToggleIsPinned)
+            if (story.CanToggleIsPostedToChatPage)
             {
-                flyout.CreateFlyoutItem(ViewModel.ToggleStory, story, story.IsPinned ? Strings.ArchiveStory : Strings.SaveToProfile, story.IsPinned ? Icons.StoriesPinnedOff : Icons.StoriesPinned);
+                flyout.CreateFlyoutItem(ViewModel.ArchiveStory, story, story.IsPostedToChatPage ? Strings.ArchiveStory : Strings.SaveToProfile, story.IsPostedToChatPage ? Icons.StoriesPinnedOff : Icons.StoriesPinned);
             }
 
             if (story.Chat.Type is ChatTypePrivate && !activeStories.IsMyStory)
@@ -1030,7 +1035,7 @@ namespace Telegram.Controls.Stories
                 var text = Strings.StealthModeOn + Environment.NewLine + Strings.StealthModeOnHint;
                 var entity = new TextEntity(0, Strings.StealthModeOn.Length, new TextEntityTypeBold());
 
-                ToastPopup.Show(new FormattedText(text, new[] { entity }));
+                ToastPopup.Show(XamlRoot, new FormattedText(text, new[] { entity }));
             }
             else if (story.ClientService.IsPremium)
             {
@@ -1081,23 +1086,71 @@ namespace Telegram.Controls.Stories
             ActiveCard.Resume(StoryPauseSource.Flyout);
         }
 
-        public TeachingTip ShowTeachingTip(FrameworkElement target, string text, TeachingTipPlacementMode placement = TeachingTipPlacementMode.TopRight)
+        public TeachingTip ShowToast(FrameworkElement target, string text, TeachingTipPlacementMode placement = TeachingTipPlacementMode.TopRight)
         {
-            return ShowTeachingTip(target, text, null, placement);
+            return ShowToast(target, text, ToastPopupIcon.None, placement);
         }
 
-        public TeachingTip ShowTeachingTip(FrameworkElement target, string text, AnimatedImageSource icon, TeachingTipPlacementMode placement = TeachingTipPlacementMode.TopRight)
+        public TeachingTip ShowToast(FrameworkElement target, string text, ToastPopupIcon icon, TeachingTipPlacementMode placement = TeachingTipPlacementMode.TopRight)
         {
-            var tip = ToastPopup.Show(target, text, icon, placement, ElementTheme.Dark);
-            tip.Closing += TeachingTip_Closing;
-            ActiveCard.Suspend(StoryPauseSource.TeachingTip);
-            return tip;
+            var toast = ToastPopup.Show(target, text, icon, placement, ElementTheme.Dark);
+            toast.Closing += Toast_Closing;
+            ActiveCard.Suspend(StoryPauseSource.Toast);
+            return toast;
         }
 
-        private void TeachingTip_Closing(TeachingTip sender, TeachingTipClosingEventArgs args)
+        public Task<ContentDialogResult> ShowActionAsync(FrameworkElement target, object text, TeachingTipPlacementMode placement, ElementTheme requestedTheme = ElementTheme.Dark)
         {
-            sender.Closing -= TeachingTip_Closing;
-            ActiveCard.Resume(StoryPauseSource.TeachingTip);
+            var toast = ToastPopup.ShowImpl(XamlRoot, target, null, null, placement, requestedTheme);
+            if (toast.Content is Grid content)
+            {
+                var tsc = new TaskCompletionSource<ContentDialogResult>();
+                var undo = new Button()
+                {
+                    Content = text,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Colors.White),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Style = BootStrapper.Current.Resources["AccentTextButtonStyle"] as Style,
+                    Margin = new Thickness(-12, -12, -12, -12),
+                    Padding = new Thickness(12, 7, 12, 8),
+                    MinHeight = 40
+                };
+
+                void handler(object sender, RoutedEventArgs e)
+                {
+                    Logger.Info("closed");
+
+                    tsc.TrySetResult(ContentDialogResult.Primary);
+                    undo.Click -= handler;
+
+                    toast.IsOpen = false;
+                }
+
+                void closed(TeachingTip sender, TeachingTipClosedEventArgs e)
+                {
+                    tsc.TrySetResult(ContentDialogResult.None);
+                    sender.Closed -= closed;
+                }
+
+                undo.Click += handler;
+                toast.Closed += closed;
+
+                toast.Content = undo;
+
+                toast.Closing += Toast_Closing;
+                ActiveCard.Suspend(StoryPauseSource.Toast);
+
+                return tsc.Task;
+            }
+
+            return Task.FromResult(ContentDialogResult.None);
+        }
+
+        private void Toast_Closing(TeachingTip sender, TeachingTipClosingEventArgs args)
+        {
+            sender.Closing -= Toast_Closing;
+            ActiveCard.Resume(StoryPauseSource.Toast);
         }
 
         private void ButtonStickers_Opening(object sender, EventArgs e)
@@ -1166,7 +1219,7 @@ namespace Telegram.Controls.Stories
         Stickers = 1 << 10,
         Record = 1 << 1,
         Text = 1 << 2,
-        TeachingTip = 1 << 3,
+        Toast = 1 << 3,
         Flyout = 1 << 4,
         Popup = 1 << 5,
         Interaction = 1 << 6,

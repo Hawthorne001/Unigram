@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class WallpaperContent : Control, IContent
+    public sealed partial class WallpaperContent : Control, IContent
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -53,7 +53,7 @@ namespace Telegram.Controls.Messages.Content
 
             _message = message;
 
-            if (message.Content is MessageText text && Uri.TryCreate(text.WebPage?.Url, UriKind.Absolute, out Uri result))
+            if (message.Content is MessageText text && Uri.TryCreate(text.LinkPreview?.Url, UriKind.Absolute, out Uri result))
             {
                 var document = GetContent(message);
                 var backgroundType = TdBackground.FromUri(result);
@@ -71,9 +71,9 @@ namespace Telegram.Controls.Messages.Content
 
         public bool IsValid(MessageContent content, bool primary)
         {
-            if (content is MessageText text && text.WebPage != null && !primary)
+            if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return string.Equals(text.WebPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase);
+                return text.LinkPreview.Type is LinkPreviewTypeBackground;
             }
 
             return false;
@@ -87,9 +87,9 @@ namespace Telegram.Controls.Messages.Content
             }
 
             var content = message.Content;
-            if (content is MessageText text && text.WebPage != null)
+            if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeBackground previewBackground)
             {
-                return text.WebPage.Document;
+                return previewBackground.Document;
             }
 
             return null;

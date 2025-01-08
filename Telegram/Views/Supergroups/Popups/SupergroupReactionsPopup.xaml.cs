@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,6 @@ using System.Linq;
 using System.Text;
 using Telegram.Common;
 using Telegram.Controls;
-using Telegram.Streams;
 using Telegram.Td;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Drawers;
@@ -57,7 +56,7 @@ namespace Telegram.Views.Supergroups.Popups
             e.Handled = true;
         }
 
-        public override void OnNavigatedTo()
+        public override void OnNavigatedTo(object parameter)
         {
             EmojiPanel.DataContext = EmojiDrawerViewModel.Create(ViewModel.SessionId, EmojiDrawerMode.Reactions);
             CaptionInput.CustomEmoji = CustomEmoji;
@@ -177,6 +176,11 @@ namespace Telegram.Views.Supergroups.Popups
             };
         }
 
+        private string ConvertMaximumCount(int count)
+        {
+            return Locale.Declension(Strings.R.MaximumReactionsValue, count);
+        }
+
         #endregion
 
         private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -192,7 +196,7 @@ namespace Telegram.Views.Supergroups.Popups
                 .ToList();
 
             // We don't want to unfocus the text are when the context menu gets opened
-            EmojiPanel.ViewModel.UpdateReactions(new AvailableReactions(reactions, empty, empty, ViewModel.AllowCustomEmoji, false, null));
+            _ = EmojiPanel.ViewModel.UpdateReactions(new AvailableReactions(reactions, empty, empty, ViewModel.AllowCustomEmoji, false, null));
             EmojiFlyout.ShowAt(CaptionInput, new FlyoutShowOptions { ShowMode = FlyoutShowMode.Transient });
         }
 
@@ -222,10 +226,11 @@ namespace Telegram.Views.Supergroups.Popups
                     var count = ViewModel.Items.Count(x => x is ReactionTypeCustomEmoji);
                     if (count >= ViewModel.BoostLevel)
                     {
-                        ToastPopup.Show(Locale.Declension(Strings.R.ReactionReachLvlForReactionShort, count + 1, count + 1), new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
+                        ToastPopup.Show(XamlRoot, Locale.Declension(Strings.R.ReactionReachLvlForReactionShort, count + 1, count + 1), ToastPopupIcon.Info);
                     }
 
                     CaptionInput.InsertEmoji(sticker);
+                    CaptionInput_TextChanged(null, null);
                 }
                 else
                 {

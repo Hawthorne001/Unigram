@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Hosting;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class DiceContent : HyperlinkButton, IContentWithFile, IPlayerView
+    public sealed partial class DiceContent : HyperlinkButton, IContentWithFile, IPlayerView
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -153,8 +153,8 @@ namespace Telegram.Controls.Messages.Content
 
         private void UpdateThumbnail(MessageViewModel message, Sticker sticker)
         {
-            _thumbnailShimmer = CompositionPathParser.ParseThumbnail(sticker, out ShapeVisual visual);
-            ElementCompositionPreview.SetElementChildVisual(Player, visual);
+            //_thumbnailShimmer = CompositionPathParser.ParseThumbnail(sticker, out ShapeVisual visual);
+            //ElementCompositionPreview.SetElementChildVisual(Player, visual);
         }
 
         private void Player_FirstFrameRendered(object sender, EventArgs e)

@@ -5,7 +5,8 @@
                        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                        xmlns:controls="using:Telegram.Controls"
                        mc:Ignorable="d"
-                       Padding="0">
+                       Padding="0"
+                       IsDismissButtonVisible="True">
 
     <Grid>
         <ScrollViewer x:Name="ScrollingHost"
@@ -22,13 +23,12 @@
                                             AutoPlay="True"
                                             FrameSize="120,120"
                                             DecodeFrameType="Logical"
+                                            LoopCount="1"
                                             Width="120"
                                             Height="120"
                                             Margin="0,24,0,8" />
                     <TextBlock Text="[Boosts via Gifts]"
-                               FontSize="20"
-                               FontFamily="XamlAutoFontFamily"
-                               FontWeight="SemiBold"
+                               Style="{StaticResource PopupTextBlockStyle}"
                                TextAlignment="Center"
                                VerticalAlignment="Top"
                                Grid.Row="1" />
@@ -163,11 +163,5 @@
                                   Margin="0"
                                   Height="32" />
         </Grid>
-
-        <controls:GlyphButton Click="{x:Bind Close}"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Top"
-                              Glyph="&#xE711;"
-                              CornerRadius="20" />
     </Grid>
 </controls:ContentPopup>

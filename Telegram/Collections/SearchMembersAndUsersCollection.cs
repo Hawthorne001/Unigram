@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.Collections
 {
-    public class SearchMembersAndUsersCollection : ObservableCollection<KeyedList<string, object>>, ISupportIncrementalLoading
+    public partial class SearchMembersAndUsersCollection : ObservableCollection<KeyedList<string, object>>, ISupportIncrementalLoading
     {
         private readonly IClientService _clientService;
         private readonly long _chatId;
@@ -62,7 +62,7 @@ namespace Telegram.Collections
                             if (_clientService.TryGetUser(member.MemberId, out User user))
                             {
                                 _users.Add(user.Id);
-                                _chat.Add(new SearchResult(null, user, _query, SearchResultType.ChatMembers));
+                                _chat.Add(new SearchResult(_clientService, user, _query, SearchResultType.ChatMembers, false));
                             }
                         }
                     }
@@ -83,7 +83,7 @@ namespace Telegram.Collections
                             if (user != null)
                             {
                                 _users.Add(id);
-                                _local.Add(new SearchResult(_canSendMessageToUser ? _clientService : null, user, _query, SearchResultType.Contacts));
+                                _local.Add(new SearchResult(_clientService, user, _query, SearchResultType.Contacts, _canSendMessageToUser));
                             }
                         }
                     }
@@ -104,7 +104,7 @@ namespace Telegram.Collections
                                 }
 
                                 _users.Add(privata.UserId);
-                                _local.Add(new SearchResult(_canSendMessageToUser ? _clientService : null, chat, _query, SearchResultType.ChatsOnServer));
+                                _local.Add(new SearchResult(_clientService, chat, _query, SearchResultType.ChatsOnServer, _canSendMessageToUser));
                             }
                         }
                     }
@@ -124,7 +124,7 @@ namespace Telegram.Collections
                                     continue;
                                 }
 
-                                _remote.Add(new SearchResult(_canSendMessageToUser ? _clientService : null, chat, _query, SearchResultType.PublicChats));
+                                _remote.Add(new SearchResult(_clientService, chat, _query, SearchResultType.PublicChats, _canSendMessageToUser));
                             }
                         }
                     }

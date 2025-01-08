@@ -1,10 +1,14 @@
 ﻿using Microsoft.AppCenter;
 using Microsoft.AppCenter.Analytics;
 using Microsoft.AppCenter.Crashes;
+using Microsoft.AppCenter.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using System.Security;
 using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Controls;
@@ -60,7 +64,12 @@ namespace Telegram
      * 
      */
 
-    public class WatchDog
+    public partial class Properties : Dictionary<string, object>
+    {
+
+    }
+
+    public partial class WatchDog
     {
         private static readonly bool _disabled = Constants.DEBUG;
 
@@ -69,6 +78,8 @@ namespace Telegram
 
         private static string _lastSessionErrorReportId;
         private static bool _lastSessionTerminatedUnexpectedly;
+
+        private static DateTime _launchTime;
 
         static WatchDog()
         {
@@ -83,37 +94,14 @@ namespace Telegram
             NativeUtils.SetFatalErrorCallback(FatalErrorCallback);
             Client.SetLogMessageCallback(0, FatalErrorCallback);
 
-            BootStrapper.Current.UnhandledException += (s, args) =>
-            {
-                if (args.Exception is LayoutCycleException)
-                {
-                    Logger.Info("LayoutCycleException");
-                    Analytics.TrackEvent("LayoutCycleException");
-                    SettingsService.Current.Diagnostics.LastCrashWasLayoutCycle = true;
-                }
-                else if (args.Exception is NotSupportedException)
-                {
-                    var popups = VisualTreeHelper.GetOpenPopups(Window.Current);
-
-                    foreach (var popup in popups)
-                    {
-                        if (popup.Child is ToolTip tooltip)
-                        {
-                            tooltip.IsOpen = false;
-                            tooltip.IsOpen = true;
-                            tooltip.IsOpen = false;
-                        }
-                    }
-                }
-
-                args.Handled = args.Exception is not LayoutCycleException;
-            };
+            BootStrapper.Current.UnhandledException += OnUnhandledException;
 
             if (_disabled)
             {
                 return;
             }
 
+            _launchTime = DateTime.UtcNow;
             Read();
 
             TaskScheduler.UnobservedTaskException += (s, args) =>
@@ -122,17 +110,12 @@ namespace Telegram
                 args.SetObserved();
             };
 
-            Crashes.UnhandledErrorDetected = () =>
-            {
-                try
-                {
-                    return ToException(NativeUtils.GetFatalError(false));
-                }
-                catch
-                {
-                    return null;
-                }
-            };
+            //Crashes.UnhandledExceptionOccurring += (s, args) =>
+            //{
+            //    args.Frames = NativeUtils.GetStowedException()
+            //        .Select(x => new NativeStackFrame(x.NativeIP, x.NativeImageBase))
+            //        .ToList();
+            //};
 
             Crashes.CreatingErrorReport += (s, args) =>
             {
@@ -143,7 +126,14 @@ namespace Telegram
             {
                 if (File.Exists(GetErrorReportPath(args.Report.Id)))
                 {
-                    File.Delete(GetErrorReportPath(args.Report.Id));
+                    try
+                    {
+                        File.Delete(GetErrorReportPath(args.Report.Id));
+                    }
+                    catch
+                    {
+                        // Somehow AppCenter messes up and the file might still be open
+                    }
                 }
             };
 
@@ -169,18 +159,69 @@ namespace Telegram
                 new Dictionary<string, string>
                 {
                     { "DeviceFamily", AnalyticsInfo.VersionInfo.DeviceFamily },
-                    { "Architecture", Package.Current.Id.Architecture.ToString() }
+                    { "Architecture", Package.Current.Id.Architecture.ToString() },
+                    { "Processor", OSArchitecture().ToString() }
                 });
         }
 
-        public static void TrackEvent(string name)
+        [HandleProcessCorruptedStateExceptions, SecurityCritical]
+        private static void OnUnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs args)
+        {
+            args.Handled = args.Exception is not LayoutCycleException;
+
+            if (args.Exception is NotSupportedException)
+            {
+                var popups = VisualTreeHelper.GetOpenPopups(Window.Current);
+
+                foreach (var popup in popups)
+                {
+                    if (popup.Child is ToolTip tooltip)
+                    {
+                        tooltip.IsOpen = false;
+                        tooltip.IsOpen = true;
+                        tooltip.IsOpen = false;
+                    }
+                }
+
+                return;
+            }
+            else if (args.Exception is COMException { ErrorCode: -2147467259 })
+            {
+                return;
+            }
+
+            if (SettingsService.Current.Diagnostics.ShowMemoryUsage && Window.Current != null)
+            {
+                _ = MessagePopup.ShowAsync(Window.Current.Content.XamlRoot, args.Exception.ToString(), "Unhandled exception", "OK");
+            }
+        }
+
+        public static Architecture OSArchitecture()
+        {
+            var handle = new IntPtr(-1);
+            var wow64 = IsWow64Process2(handle, out var _, out var nativeMachine);
+
+            if (wow64)
+            {
+                return nativeMachine == 0xaa64
+                    ? Architecture.Arm64
+                    : Architecture.X64;
+            }
+
+            return Architecture.X86;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool IsWow64Process2(IntPtr process, out ushort processMachine, out ushort nativeMachine);
+
+        public static void TrackEvent(string name, Properties properties = null)
         {
             if (_disabled)
             {
                 return;
             }
 
-            Analytics.TrackEvent(name);
+            Analytics.TrackEvent(name, properties?.ToDictionary(x => x.Key, y => y.Value.ToString()));
         }
 
         private static void Read()
@@ -200,29 +241,14 @@ namespace Telegram
             }
         }
 
-        class StackFrame : NativeStackFrame
-        {
-            private FatalErrorFrame _frame;
-
-            public StackFrame(FatalErrorFrame frame)
-            {
-                _frame = frame;
-            }
-
-            public override IntPtr GetNativeIP()
-            {
-                return (IntPtr)_frame.NativeIP;
-            }
-
-            public override IntPtr GetNativeImageBase()
-            {
-                return (IntPtr)_frame.NativeImageBase;
-            }
-        }
-
         public static void FatalErrorCallback(FatalError error)
         {
-            Crashes.TrackCrash(ToException(error));
+            var exception = ToException(error);
+            var frames = error.Frames
+                .Select(x => new NativeStackFrame(x.NativeIP, x.NativeImageBase))
+                .ToList();
+
+            Crashes.TrackCrash(exception, frames);
         }
 
         private static Exception ToException(FatalError error)
@@ -234,10 +260,10 @@ namespace Telegram
 
             if (error.StackTrace.Contains("libvlc.dll") || error.StackTrace.Contains("libvlccore.dll"))
             {
-                return new VLCException(error.Message, error.StackTrace, error.Frames.Select(x => new StackFrame(x)));
+                return new VLCException(error.Message + Environment.NewLine + error.StackTrace, error.StackTrace);
             }
 
-            return new NativeException(error.Message, error.StackTrace, error.Frames.Select(x => new StackFrame(x)));
+            return new NativeException(error.Message + Environment.NewLine + error.StackTrace, error.StackTrace);
         }
 
         private static void FatalErrorCallback(int verbosityLevel, string message)
@@ -273,28 +299,65 @@ namespace Telegram
             File.WriteAllText(GetErrorReportPath(reportId), report);
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private class MEMORYSTATUSEX
+        {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+            public MEMORYSTATUSEX()
+            {
+                dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>();
+            }
+        }
+
+        [DllImport("kernelbase.dll", ExactSpelling = true, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
+
+        public static void MemoryStatus()
+        {
+            var status = new MEMORYSTATUSEX();
+            GlobalMemoryStatusEx(status);
+
+            var memoryUsage = FileSizeConverter.Convert((long)MemoryManager.AppMemoryUsage);
+            var memoryUsageAvailable = FileSizeConverter.Convert((long)status.ullAvailPhys);
+            var memoryUsageTotal = FileSizeConverter.Convert((long)status.ullTotalPhys);
+
+            Logger.Debug(string.Format("Usage: {0}, available: {1}, total: {2}", memoryUsage, memoryUsageAvailable, memoryUsageTotal));
+        }
+
         public static string BuildReport(Exception exception)
         {
             var version = VersionLabel.GetVersion();
             var language = LocaleService.Current.Id;
 
-            var next = DateTime.Now.ToTimestamp();
-            var prev = SettingsService.Current.Diagnostics.LastUpdateTime;
+            var next = DateTime.UtcNow - _launchTime;
+            var diff = next.ToDuration();
 
             var count = SettingsService.Current.Diagnostics.UpdateCount;
 
+            var status = new MEMORYSTATUSEX();
+            GlobalMemoryStatusEx(status);
+
             var memoryUsage = FileSizeConverter.Convert((long)MemoryManager.AppMemoryUsage);
-            var memoryUsageLimit = FileSizeConverter.Convert((long)MemoryManager.AppMemoryUsageLimit);
+            var memoryUsageAvailable = FileSizeConverter.Convert((long)status.ullAvailPhys);
+            var memoryUsageTotal = FileSizeConverter.Convert((long)status.ullTotalPhys);
 
             var info =
                 $"Current version: {version}\n" +
                 $"Current language: {language}\n" +
+                $"Current duration: {diff}\n" +
                 $"Memory usage: {memoryUsage}\n" +
-                $"Memory usage level: {MemoryManager.AppMemoryUsageLevel}\n" +
-                $"Memory usage limit: {memoryUsageLimit}\n" +
-                $"Time since last update: {next - prev}s\n" +
-                $"Update count: {count}\n" +
-                $"Tabs on the left: {SettingsService.Current.IsLeftTabsEnabled}\n";
+                $"Memory available: {memoryUsageAvailable}\n" +
+                $"Memory total: {memoryUsageTotal}\n" +
+                $"Update count: {count}\n";
 
             if (WindowContext.Current != null)
             {
@@ -312,6 +375,8 @@ namespace Telegram
                     $"Window size: {size.Width}x{size.Height}\n" +
                     $"Column width: {ratio} ({width})\n";
             }
+
+            info += $"Active call(s): {WindowContext.All.Count(x => x.IsCallInProgress)}\n";
 
             info += $"HRESULT: 0x{exception.HResult:X4}\n" + "\n";
             info += Environment.StackTrace + "\n\n";
@@ -335,10 +400,18 @@ namespace Telegram
         }
     }
 
-    public class VLCException : NativeException
+    public partial class VLCException : Exception
     {
-        public VLCException(string message, string stackTrace, IEnumerable<NativeStackFrame> frames)
-            : base(message, stackTrace, frames)
+        public VLCException(string message, string stackTrace)
+            : base(message + "\n" + stackTrace)
+        {
+        }
+    }
+
+    public partial class NativeException : Exception
+    {
+        public NativeException(string message, string stackTrace)
+            : base(message + "\n" + stackTrace)
         {
         }
     }

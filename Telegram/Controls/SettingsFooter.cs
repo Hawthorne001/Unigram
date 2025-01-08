@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,7 @@ using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Controls
 {
-    public class SettingsFooter : Control
+    public partial class SettingsFooter : Control
     {
         public SettingsFooter()
         {
@@ -71,7 +71,7 @@ namespace Telegram.Controls
         }
     }
 
-    public class SettingsFooterAutomationPeer : FrameworkElementAutomationPeer
+    public partial class SettingsFooterAutomationPeer : FrameworkElementAutomationPeer
     {
         private readonly SettingsFooter _owner;
 

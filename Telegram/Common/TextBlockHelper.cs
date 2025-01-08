@@ -1,17 +1,16 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System.Text.RegularExpressions;
 using Telegram.Controls;
-using Telegram.Navigation.Services;
+using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Td;
 using Telegram.Td.Api;
 using Telegram.Views;
-using Telegram.Views.Host;
 using Windows.UI.Text;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -154,29 +153,6 @@ namespace Telegram.Common
             {
                 sender.Inlines.Add(text.Substring(previous));
             }
-
-            //var previous = 0;
-            //var index = markdown.IndexOf("**");
-            //var next = index > -1 ? markdown.IndexOf("**", index + 2) : -1;
-
-            //while (index > -1 && next > -1)
-            //{
-            //    if (index - previous > 0)
-            //    {
-            //        sender.Inlines.Add(new Run { Text = markdown.Substring(previous, index - previous) });
-            //    }
-
-            //    sender.Inlines.Add(new Run { Text = markdown.Substring(index + 2, next - index - 2), FontWeight = FontWeights.SemiBold });
-
-            //    previous = next + 2;
-            //    index = markdown.IndexOf("**", next + 2);
-            //    next = index > -1 ? markdown.IndexOf("**", index + 2) : -1;
-            //}
-
-            //if (markdown.Length - previous > 0)
-            //{
-            //    sender.Inlines.Add(new Run { Text = markdown.Substring(previous, markdown.Length - previous) });
-            //}
         }
 
         #endregion
@@ -198,17 +174,22 @@ namespace Telegram.Common
 
         private static void OnFormattedTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var sender = d as TextBlock;
             var markdown = e.NewValue as FormattedText;
-
-            var span = new Span();
-            sender.Inlines.Clear();
-            sender.Inlines.Add(span);
-
             if (markdown == null)
             {
                 return;
             }
+
+            var span = d as Span;
+
+            if (d is TextBlock textBlock)
+            {
+                span = new Span();
+                textBlock.Inlines.Clear();
+                textBlock.Inlines.Add(span);
+            }
+
+            markdown = markdown.ReplaceSpoilers(false);
 
             var entities = markdown.Entities;
             var text = markdown.Text;
@@ -246,6 +227,24 @@ namespace Telegram.Common
                         span.Inlines.Add(hyperlink);
                         local = hyperlink;
                     }
+                    else if (entity.Type is TextEntityTypeUrl url)
+                    {
+                        var data = text.Substring(entity.Offset, entity.Length);
+                        var hyperlink = new Hyperlink();
+                        hyperlink.Click += (s, args) => Hyperlink_Click(s, entity.Type, data);
+                        hyperlink.UnderlineStyle = UnderlineStyle.None;
+                        span.Inlines.Add(hyperlink);
+                        local = hyperlink;
+                    }
+                    else if (entity.Type is TextEntityTypeMention mention)
+                    {
+                        var data = text.Substring(entity.Offset + 1, entity.Length - 1);
+                        var hyperlink = new Hyperlink();
+                        hyperlink.Click += (s, args) => Hyperlink_Click(s, entity.Type, data);
+                        hyperlink.UnderlineStyle = UnderlineStyle.None;
+                        span.Inlines.Add(hyperlink);
+                        local = hyperlink;
+                    }
 
                     var run = new Run { Text = text.Substring(entity.Offset, entity.Length) };
 
@@ -276,29 +275,6 @@ namespace Telegram.Common
             {
                 span.Inlines.Add(new Run { Text = text.Substring(previous) });
             }
-
-            //var previous = 0;
-            //var index = markdown.IndexOf("**");
-            //var next = index > -1 ? markdown.IndexOf("**", index + 2) : -1;
-
-            //while (index > -1 && next > -1)
-            //{
-            //    if (index - previous > 0)
-            //    {
-            //        sender.Inlines.Add(new Run { Text = markdown.Substring(previous, index - previous) });
-            //    }
-
-            //    sender.Inlines.Add(new Run { Text = markdown.Substring(index + 2, next - index - 2), FontWeight = FontWeights.SemiBold });
-
-            //    previous = next + 2;
-            //    index = markdown.IndexOf("**", next + 2);
-            //    next = index > -1 ? markdown.IndexOf("**", index + 2) : -1;
-            //}
-
-            //if (markdown.Length - previous > 0)
-            //{
-            //    sender.Inlines.Add(new Run { Text = markdown.Substring(previous, markdown.Length - previous) });
-            //}
         }
 
         #endregion
@@ -439,64 +415,54 @@ namespace Telegram.Common
 
         private static void Hyperlink_Click(Hyperlink sender, TextEntityType type, string data)
         {
-            IClientService clientService = null;
-            INavigationService navigationService = null;
-
-            // TODO: move the code to resolve the current session from Window to TypeResolver
-            if (Window.Current.Content is RootPage rootPage && rootPage.NavigationService != null)
+            var navigationService = WindowContext.GetNavigationService(sender.XamlRoot);
+            if (navigationService == null)
             {
-                navigationService = rootPage.NavigationService;
-                clientService = TypeResolver.Current.Resolve<IClientService>(navigationService.SessionId);
-            }
-            else if (Window.Current.Content is StandalonePage standalonePage && standalonePage.NavigationService != null)
-            {
-                navigationService = standalonePage.NavigationService;
-                clientService = TypeResolver.Current.Resolve<IClientService>(navigationService.SessionId);
+                return;
             }
 
-            if (clientService != null && navigationService != null)
+            var clientService = TypeResolver.Current.Resolve<IClientService>(navigationService.SessionId);
+
+            if (type is TextEntityTypeTextUrl textUrl)
             {
-                if (type is TextEntityTypeTextUrl textUrl)
-                {
-                    if (string.IsNullOrEmpty(textUrl.Url))
-                    {
-                        var header = sender.GetParent<HeaderedControl>();
-                        if (header != null)
-                        {
-                            header?.OnClick(string.Empty);
-                            return;
-                        }
-
-                        var footer = sender.GetParent<SettingsFooter>();
-                        footer?.OnClick(string.Empty);
-
-                        var headline = sender.GetParent<SettingsHeadline>();
-                        headline?.OnClick(string.Empty);
-                    }
-                    else
-                    {
-                        MessageHelper.OpenUrl(clientService, navigationService, data);
-                    }
-                }
-                else if (type is TextEntityTypeMention)
-                {
-                    MessageHelper.NavigateToUsername(clientService, navigationService, data.TrimStart('@'));
-                }
-                else if (type is TextEntityTypeUrl)
+                if (string.IsNullOrEmpty(textUrl.Url))
                 {
                     var header = sender.GetParent<HeaderedControl>();
                     if (header != null)
                     {
-                        header?.OnClick(data);
+                        header?.OnClick(string.Empty);
                         return;
                     }
 
                     var footer = sender.GetParent<SettingsFooter>();
-                    footer?.OnClick(data);
+                    footer?.OnClick(string.Empty);
 
                     var headline = sender.GetParent<SettingsHeadline>();
                     headline?.OnClick(string.Empty);
                 }
+                else
+                {
+                    MessageHelper.OpenUrl(clientService, navigationService, data);
+                }
+            }
+            else if (type is TextEntityTypeMention)
+            {
+                MessageHelper.NavigateToUsername(clientService, navigationService, data.TrimStart('@'));
+            }
+            else if (type is TextEntityTypeUrl)
+            {
+                var header = sender.GetParent<HeaderedControl>();
+                if (header != null)
+                {
+                    header?.OnClick(data);
+                    return;
+                }
+
+                var footer = sender.GetParent<SettingsFooter>();
+                footer?.OnClick(data);
+
+                var headline = sender.GetParent<SettingsHeadline>();
+                headline?.OnClick(string.Empty);
             }
         }
     }

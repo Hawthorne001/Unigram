@@ -1,11 +1,10 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
-using System.Collections;
 using Telegram.Collections;
 using Telegram.Common;
 using Telegram.Controls.Chats;
@@ -18,11 +17,12 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Automation.Provider;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls
 {
-    public class CaptionTextBox : FormattedTextBox
+    public partial class CaptionTextBox : FormattedTextBox
     {
         public ComposeViewModel ViewModel { get; set; }
 
@@ -33,17 +33,14 @@ namespace Telegram.Controls
             SelectionChanged += OnSelectionChanged;
         }
 
-        public ListView Autocomplete { get; set; }
+        public ListViewBase Autocomplete { get; set; }
 
         protected override void OnKeyDown(KeyRoutedEventArgs e)
         {
             if (e.Key is VirtualKey.Up or VirtualKey.Down)
             {
-                var alt = WindowContext.IsKeyDown(VirtualKey.Menu);
-                var ctrl = WindowContext.IsKeyDown(VirtualKey.Control);
-                var shift = WindowContext.IsKeyDown(VirtualKey.Shift);
-
-                if (!alt && !ctrl && !shift)
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == VirtualKeyModifiers.None)
                 {
                     if (Autocomplete != null && View.Autocomplete != null)
                     {
@@ -63,10 +60,10 @@ namespace Telegram.Controls
             }
             else if ((e.Key == VirtualKey.Tab || e.Key == VirtualKey.Enter) && Autocomplete != null && Autocomplete.Items.Count > 0 && View.Autocomplete != null && View.Autocomplete is not SearchStickersCollection)
             {
-                var container = Autocomplete.ContainerFromIndex(Math.Max(0, Autocomplete.SelectedIndex)) as ListViewItem;
+                var container = Autocomplete.ContainerFromIndex(Math.Max(0, Autocomplete.SelectedIndex)) as SelectorItem;
                 if (container != null)
                 {
-                    var peer = new ListViewItemAutomationPeer(container);
+                    var peer = FrameworkElementAutomationPeer.FromElement(container);
                     var provider = peer.GetPattern(PatternInterface.Invoke) as IInvokeProvider;
                     provider.Invoke();
                 }
@@ -91,7 +88,14 @@ namespace Telegram.Controls
 
         protected override void OnAccept()
         {
-            View?.Accept();
+            if (View != null)
+            {
+                View?.Accept();
+            }
+            else
+            {
+                base.OnAccept();
+            }
         }
 
         private void OnSelectionChanged(object sender, RoutedEventArgs e)
@@ -117,14 +121,11 @@ namespace Telegram.Controls
                         return;
                     }
 
-                    var members = true;
-                    if (chat.Type is ChatTypePrivate || chat.Type is ChatTypeSecret || chat.Type is ChatTypeSupergroup supergroup && supergroup.IsChannel)
+                    if (chat.Type is ChatTypeBasicGroup or ChatTypeSupergroup { IsChannel: false })
                     {
-                        members = false;
+                        View.Autocomplete = new ChatTextBox.UsernameCollection(viewModel.ClientService, viewModel.Chat.Id, viewModel.ThreadId, result, false, true, false);
+                        return;
                     }
-
-                    View.Autocomplete = new ChatTextBox.UsernameCollection(viewModel.ClientService, viewModel.Chat.Id, viewModel.ThreadId, result, index == 0, members);
-                    return;
                 }
                 else if (entity == AutocompleteEntity.Emoji)
                 {
@@ -139,7 +140,7 @@ namespace Telegram.Controls
 
     public interface IViewWithAutocomplete
     {
-        ICollection Autocomplete { get; set; }
+        IAutocompleteCollection Autocomplete { get; set; }
         void Accept();
     }
 }

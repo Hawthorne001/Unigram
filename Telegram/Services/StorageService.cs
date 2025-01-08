@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using SAP = Windows.Storage.AccessCache.StorageApplicationPermissions;
 
 namespace Telegram.Services
 {
-    public class DownloadFolder
+    public partial class DownloadFolder
     {
         public string DisplayPath { get; }
 
@@ -68,7 +68,7 @@ namespace Telegram.Services
         Task<DownloadFolder> SetDownloadFolderAsync(StorageFolder folder);
     }
 
-    public class StorageService : IStorageService
+    public partial class StorageService : IStorageService
     {
         private readonly IClientService _clientService;
 
@@ -124,18 +124,15 @@ namespace Telegram.Services
 
         public Task OpenFileAsync(File file)
         {
-            return OpenFileAsync(file, null);
+            return OpenFileAsync(file, false);
         }
 
         public Task OpenFileWithAsync(File file)
         {
-            return OpenFileAsync(file, new LauncherOptions
-            {
-                DisplayApplicationPicker = true
-            });
+            return OpenFileAsync(file, true);
         }
 
-        private async Task OpenFileAsync(File file, LauncherOptions options = null)
+        private async Task OpenFileAsync(File file, bool displayApplicationPicker)
         {
             // When opening a file, we always want to retrieve the permanent copy
             var permanent = await _clientService.GetPermanentFileAsync(file);
@@ -146,6 +143,16 @@ namespace Telegram.Services
 
             try
             {
+                LauncherOptions options = null;
+                if (displayApplicationPicker)
+                {
+                    // Even constructing LauncherOptions may throw HRESULT 0x800706BA
+                    options = new LauncherOptions
+                    {
+                        DisplayApplicationPicker = true
+                    };
+                }
+
                 var opened = options != null
                     ? await Launcher.LaunchFileAsync(permanent, options)
                     : await Launcher.LaunchFileAsync(permanent);

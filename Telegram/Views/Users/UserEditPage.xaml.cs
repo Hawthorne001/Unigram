@@ -1,9 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
+using Telegram.Controls;
+using Telegram.Converters;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
 using Telegram.ViewModels.Users;
@@ -36,10 +38,12 @@ namespace Telegram.Views.Users
 
                 FindName(nameof(UsernamePanel));
                 FindName(nameof(BotPanel));
+                FindName(nameof(BotPanel2));
 
                 LayoutRoot.Footer = string.Empty;
 
-                Username.Badge = user.ActiveUsername();
+                Username.Content = Strings.BotPublicLink;
+                Username.Badge = MeUrlPrefixConverter.Convert(ViewModel.ClientService, user.ActiveUsername(), true);
 
                 FirstName.PlaceholderText = Strings.BotName;
                 FirstName.VerticalAlignment = VerticalAlignment.Center;
@@ -61,7 +65,25 @@ namespace Telegram.Views.Users
         {
             if (ResetPhoto != null)
             {
-                ResetPhoto.Visibility = fullInfo.PersonalPhoto == null ? Visibility.Collapsed : Visibility.Visible;
+                if (fullInfo.PersonalPhoto != null)
+                {
+                    if (fullInfo.Photo != null)
+                    {
+                        ResetPhotoPhoto.SetChatPhoto(ViewModel.ClientService, fullInfo.Photo, 28);
+                    }
+                    else
+                    {
+                        ResetPhotoPhoto.Source = PlaceholderImage.GetUser(ViewModel.ClientService, user);
+                    }
+
+                    ResetPhotoPhoto.Visibility = Visibility.Visible;
+                    ResetPhoto.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ResetPhotoPhoto.Visibility = Visibility.Collapsed;
+                    ResetPhoto.Visibility = Visibility.Collapsed;
+                }
             }
 
             if (fullInfo.NeedPhoneNumberPrivacyException)
@@ -70,10 +92,29 @@ namespace Telegram.Views.Users
 
                 SharePhoneCheck.Content = string.Format(Strings.SharePhoneNumberWith, user.FirstName);
             }
+
+            if (fullInfo.BotInfo?.AffiliateProgram != null)
+            {
+                AffiliateProgram.Badge = fullInfo.BotInfo.AffiliateProgram.Parameters.CommissionPercent();
+            }
+            else if (AffiliateProgram != null)
+            {
+                AffiliateProgram.Badge = Strings.AffiliateProgramBotOff;
+            }
         }
 
         public void UpdateUserStatus(Chat chat, User user) { }
 
         #endregion
+
+        public string ConvertStarCount(StarAmount amount)
+        {
+            if (amount != null)
+            {
+                return amount.ToValue();
+            }
+
+            return null;
+        }
     }
 }

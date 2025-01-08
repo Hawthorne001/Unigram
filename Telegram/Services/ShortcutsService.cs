@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,24 +10,24 @@ using System.Linq;
 using System.Text;
 using Telegram.Collections;
 using Telegram.Navigation;
-using Telegram.Services.Keyboard;
 using Windows.Data.Json;
 using Windows.Storage;
 using Windows.System;
+using Windows.UI.Xaml.Input;
 
 namespace Telegram.Services
 {
     public interface IShortcutsService
     {
-        InvokedShortcut Process(InputKeyDownEventArgs args);
+        InvokedShortcut Process(ProcessKeyboardAcceleratorEventArgs args);
 
-        bool TryGetShortcut(InputKeyDownEventArgs args, out Shortcut shortcut);
+        bool TryGetShortcut(ProcessKeyboardAcceleratorEventArgs args, out Shortcut shortcut);
 
         IList<ShortcutList> GetShortcuts();
         IList<ShortcutList> Update(Shortcut shortcut, ShortcutCommand command);
     }
 
-    public class InvokedShortcut : Shortcut
+    public partial class InvokedShortcut : Shortcut
     {
         public IList<ShortcutCommand> Commands { get; }
 
@@ -38,7 +38,7 @@ namespace Telegram.Services
         }
     }
 
-    public class ShortcutsService : ViewModelBase, IShortcutsService
+    public partial class ShortcutsService : ViewModelBase, IShortcutsService
     {
         #region Const
 
@@ -166,6 +166,11 @@ namespace Telegram.Services
             { ShortcutCommand.ShowArchive    , "show_archive" },
             { ShortcutCommand.SetStatus      , "set_status" },
             { ShortcutCommand.Downloads      , "downloads" },
+
+            { ShortcutCommand.CallAccept     , "call_accept" },
+            { ShortcutCommand.CallReject     , "call_accept" },
+            { ShortcutCommand.CallToggleCamera     , "call_camera" },
+            { ShortcutCommand.CallToggleMicrophone , "call_microphone" },
         };
 
         #endregion
@@ -179,28 +184,14 @@ namespace Telegram.Services
             InitializeCustom();
         }
 
-        public InvokedShortcut Process(InputKeyDownEventArgs args)
+        public InvokedShortcut Process(ProcessKeyboardAcceleratorEventArgs args)
         {
-            var modifiers = VirtualKeyModifiers.None;
-            if (args.AltKey)
+            if (args.Key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
             {
-                modifiers |= VirtualKeyModifiers.Menu;
-            }
-            if (args.ControlKey)
-            {
-                modifiers |= VirtualKeyModifiers.Control;
-            }
-            if (args.ShiftKey)
-            {
-                modifiers |= VirtualKeyModifiers.Shift;
+                return Process(args.Modifiers, VirtualKey.Number0 + (args.Key - VirtualKey.NumberPad0));
             }
 
-            if (args.VirtualKey is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
-            {
-                return Process(modifiers, VirtualKey.Number0 + (args.VirtualKey - VirtualKey.NumberPad0));
-            }
-
-            return Process(modifiers, args.VirtualKey);
+            return Process(args.Modifiers, args.Key);
         }
 
         private InvokedShortcut Process(VirtualKeyModifiers modifiers, VirtualKey key)
@@ -220,23 +211,9 @@ namespace Telegram.Services
         //int nonVirtualKey = MapVirtualKey((uint)args.VirtualKey, 2);
         //char mappedChar = Convert.ToChar(nonVirtualKey);
 
-        public bool TryGetShortcut(InputKeyDownEventArgs args, out Shortcut shortcut)
+        public bool TryGetShortcut(ProcessKeyboardAcceleratorEventArgs args, out Shortcut shortcut)
         {
-            var modifiers = VirtualKeyModifiers.None;
-            if (args.AltKey)
-            {
-                modifiers |= VirtualKeyModifiers.Menu;
-            }
-            if (args.ControlKey)
-            {
-                modifiers |= VirtualKeyModifiers.Control;
-            }
-            if (args.ShiftKey)
-            {
-                modifiers |= VirtualKeyModifiers.Shift;
-            }
-
-            return TryGetShortcut(modifiers, args.VirtualKey, out shortcut);
+            return TryGetShortcut(args.Modifiers, args.Key, out shortcut);
         }
 
         private bool TryGetShortcut(VirtualKeyModifiers modifiers, VirtualKey key, out Shortcut shortcut)
@@ -421,6 +398,11 @@ namespace Telegram.Services
 
             Set("ctrl+shift+y", ShortcutCommand.SetStatus);
             Set("ctrl+j", ShortcutCommand.Downloads);
+
+            Set("ctrl+home", ShortcutCommand.CallAccept);
+            Set("ctrl+end", ShortcutCommand.CallReject);
+            Set("ctrl+pgdown", ShortcutCommand.CallToggleMicrophone);
+            Set("ctrl+pgup", ShortcutCommand.CallToggleCamera);
         }
 
         private async void InitializeCustom()
@@ -499,20 +481,20 @@ namespace Telegram.Services
         {
             var split = keys.Split('+');
 
-            if (int.TryParse(split[split.Length - 1], out int number))
+            if (int.TryParse(split[^1], out int number))
             {
-                split[split.Length - 1] = $"number{number}";
+                split[^1] = $"number{number}";
             }
-            else if (string.Equals(split[split.Length - 1], "pgdown", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(split[^1], "pgdown", StringComparison.OrdinalIgnoreCase))
             {
-                split[split.Length - 1] = "pagedown";
+                split[^1] = "pagedown";
             }
-            else if (string.Equals(split[split.Length - 1], "pgup", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(split[^1], "pgup", StringComparison.OrdinalIgnoreCase))
             {
-                split[split.Length - 1] = "pageup";
+                split[^1] = "pageup";
             }
 
-            if (Enum.TryParse(split[split.Length - 1], true, out VirtualKey result))
+            if (Enum.TryParse(split[^1], true, out VirtualKey result))
             {
                 var modifiers = VirtualKeyModifiers.None;
                 var key = result;
@@ -564,7 +546,7 @@ namespace Telegram.Services
         }
     }
 
-    public sealed class ShortcutList : KeyedList<string, ShortcutInfo>
+    public sealed partial class ShortcutList : KeyedList<string, ShortcutInfo>
     {
         public ShortcutList(string key)
             : base(key)
@@ -572,7 +554,7 @@ namespace Telegram.Services
         }
     }
 
-    public sealed class ShortcutInfo : BindableBase
+    public sealed partial class ShortcutInfo : BindableBase
     {
         public ShortcutInfo(Shortcut shortcut, ShortcutCommand command)
         {
@@ -595,7 +577,7 @@ namespace Telegram.Services
         }
     }
 
-    public class Shortcut
+    public partial class Shortcut
     {
         public VirtualKeyModifiers Modifiers { get; }
         public VirtualKey Key { get; }
@@ -725,7 +707,12 @@ namespace Telegram.Services
         ScheduleMessage,
 
         SetStatus,
-        Downloads
+        Downloads,
+
+        CallAccept,
+        CallReject,
+        CallToggleMicrophone,
+        CallToggleCamera,
 
         //SupportReloadTemplates,
         //SupportToggleMuted,

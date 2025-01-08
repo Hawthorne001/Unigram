@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,10 +22,9 @@ using Point = Windows.Foundation.Point;
 namespace Telegram.Controls.Messages
 {
     // Simplified version of ReactionButton
-    public class SavedMessagesTagButton : RadioButton
+    public partial class SavedMessagesTagButton : RadioButton
     {
         private Grid LayoutRoot;
-        private Image Presenter;
         private CustomEmojiIcon Icon;
         private AnimatedTextBlock Count;
 
@@ -44,15 +43,15 @@ namespace Telegram.Controls.Messages
 
         public string GetAutomationName()
         {
-            if (_tag is SavedMessagesTag interaction)
+            if (_reaction is SavedMessagesTag interaction)
             {
                 if (interaction.Tag is ReactionTypeEmoji emoji)
                 {
                     return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, 1, emoji.Emoji);
                 }
-                else if (_sticker is Sticker sticker)
+                else
                 {
-                    return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, 1, string.Format(Strings.AccDescrCustomEmoji, sticker.Emoji));
+                    return Locale.Declension(Strings.R.AccDescrNumberOfPeopleReactions, 1, Strings.AccDescrCustomEmoji2);
                 }
             }
 
@@ -60,77 +59,51 @@ namespace Telegram.Controls.Messages
         }
 
         private ChatSearchViewModel _viewModel;
-        private SavedMessagesTag _tag;
-        private EmojiReaction _reaction;
-        private Sticker _sticker;
+        private SavedMessagesTag _reaction;
+        private ReactionType _reactionType;
 
-        public SavedMessagesTag Tag => _tag;
-        public EmojiReaction EmojiReaction => _reaction;
-        public Sticker CustomReaction => _sticker;
+        public SavedMessagesTag Reaction => _reaction;
 
-        private long _presenterId;
-
-        public async void SetReaction(ChatSearchViewModel viewModel, SavedMessagesTag tag, EmojiReaction value)
+        public void SetReaction(ChatSearchViewModel viewModel, SavedMessagesTag reaction)
         {
-            if (Presenter == null)
+            if (Icon == null)
             {
                 _viewModel = viewModel;
-                _tag = tag;
-                _reaction = value;
+                _reaction = reaction;
                 return;
             }
 
-            var recycled = tag.Tag.AreTheSame(_tag?.Tag);
+            var recycled = reaction.Tag.AreTheSame(_reaction?.Tag);
 
             _viewModel = viewModel;
-            _tag = tag;
-            _reaction = value;
+            _reaction = reaction;
 
-            UpdateInteraction(viewModel, tag, recycled);
+            UpdateInteraction(viewModel, reaction, recycled);
 
-            var center = value?.CenterAnimation?.StickerValue;
-            if (center == null || center.Id == _presenterId)
+            if (_reactionType.AreTheSame(reaction.Tag))
             {
                 return;
             }
 
-            _presenterId = center.Id;
-            Presenter.Source = null;
+            _reactionType = reaction.Tag;
 
-            var bitmap = await EmojiCache.GetLottieFrameAsync(viewModel.ClientService, center, 32, 32);
-            if (center.Id == _presenterId)
+            using (Icon.BeginBatchUpdate())
             {
-                Presenter.Source = bitmap;
+                var custom = reaction.Tag is ReactionTypeCustomEmoji;
+                var size = custom ? 20 : 32;
+
+                Icon.Width = Icon.Height = size;
+                Icon.FrameSize = new Size(size, size);
+                Icon.LoopCount = custom ? 3 : 1;
+
+                Icon.IsViewportAware = custom;
+
+                Icon.Source = new ReactionFileSource(viewModel.ClientService, reaction.Tag)
+                {
+                    UseCenterAnimation = true,
+                    IsUnique = true
+                };
             }
-        }
-
-        public void SetReaction(ChatSearchViewModel viewModel, SavedMessagesTag tag, Sticker value)
-        {
-            if (Presenter == null)
-            {
-                _viewModel = viewModel;
-                _tag = tag;
-                _sticker = value;
-                return;
-            }
-
-            var recycled = tag.Tag.AreTheSame(_tag?.Tag);
-
-            _viewModel = viewModel;
-            _tag = tag;
-            _sticker = value;
-
-            UpdateInteraction(viewModel, tag, recycled);
-
-            if (_presenterId == value?.StickerValue.Id)
-            {
-                return;
-            }
-
-            _presenterId = value.StickerValue.Id;
-
-            Icon ??= GetTemplateChild(nameof(Icon)) as CustomEmojiIcon;
-            Icon.Source = new DelayedFileSource(viewModel.ClientService, value);
         }
 
         private void UpdateInteraction(ChatSearchViewModel viewModel, SavedMessagesTag tag, bool recycled)
@@ -199,15 +172,11 @@ namespace Telegram.Controls.Messages
         protected override void OnApplyTemplate()
         {
             LayoutRoot = GetTemplateChild(nameof(LayoutRoot)) as Grid;
-            Presenter = GetTemplateChild(nameof(Presenter)) as Image;
+            Icon = GetTemplateChild(nameof(Icon)) as CustomEmojiIcon;
 
-            if (_sticker != null)
+            if (_reaction != null)
             {
-                SetReaction(_viewModel, _tag, _sticker);
-            }
-            else if (_tag != null)
-            {
-                SetReaction(_viewModel, _tag, _reaction);
+                SetReaction(_viewModel, _reaction);
             }
 
             base.OnApplyTemplate();
@@ -220,8 +189,8 @@ namespace Telegram.Controls.Messages
 
         private void OnClick(object sender, RoutedEventArgs e)
         {
-            var chosen = _tag;
-            if (chosen == null || Presenter == null)
+            var chosen = _reaction;
+            if (chosen == null || Icon == null)
             {
                 return;
             }
@@ -233,7 +202,7 @@ namespace Telegram.Controls.Messages
             }
             else
             {
-                _viewModel.SavedMessagesTag = _tag.Tag;
+                _viewModel.SavedMessagesTag = _reaction.Tag;
                 SetValue(IsCheckedProperty, true);
             }
         }
@@ -278,7 +247,7 @@ namespace Telegram.Controls.Messages
         }
     }
 
-    public class ReactionAsTagPath : SavedMessagesTagPath
+    public partial class ReactionAsTagPath : SavedMessagesTagPath
     {
         public ReactionAsTagPath()
             : base(true)
@@ -287,7 +256,7 @@ namespace Telegram.Controls.Messages
         }
     }
 
-    public class SavedMessagesTagPath : Path
+    public partial class SavedMessagesTagPath : Path
     {
         private readonly PathFigure _figure;
         private readonly EllipseGeometry _ellipse;
@@ -379,7 +348,7 @@ namespace Telegram.Controls.Messages
         }
     }
 
-    public class SavedMessagesTagButtonAutomationPeer : RadioButtonAutomationPeer
+    public partial class SavedMessagesTagButtonAutomationPeer : RadioButtonAutomationPeer
     {
         private readonly SavedMessagesTagButton _owner;
 

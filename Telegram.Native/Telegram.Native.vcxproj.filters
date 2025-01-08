@@ -94,6 +94,12 @@
     <Filter Include="libwebp\demux">
       <UniqueIdentifier>{d0ccdb7a-8a40-43aa-91c1-c022df2e3775}</UniqueIdentifier>
     </Filter>
+    <Filter Include="InternalsRT">
+      <UniqueIdentifier>{2a54e86b-aff6-450a-81af-2d98899ae281}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Detours">
+      <UniqueIdentifier>{fa873c42-155d-4565-92ce-cb208010b179}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -744,6 +750,45 @@
     <ClCompile Include="libyuv\source\scale_rvv.cc">
       <Filter>libyuv\source</Filter>
     </ClCompile>
+    <ClCompile Include="InternalsRT\CoreWindowHelpers.cpp">
+      <Filter>InternalsRT</Filter>
+    </ClCompile>
+    <ClCompile Include="Composition\DirectRectangleClip2.cpp">
+      <Filter>Composition</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\creatwth.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\detours.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disasm.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disolarm.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disolarm64.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disolia64.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disolx64.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\disolx86.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\image.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\modules.cpp">
+      <Filter>Detours</Filter>
+    </ClCompile>
+    <ClCompile Include="Composition\WindowVisual.cpp">
+      <Filter>Composition</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
@@ -1175,6 +1220,33 @@
     <ClInclude Include="libyuv\include\libyuv\scale_rgb.h">
       <Filter>libyuv\include\libyuv</Filter>
     </ClInclude>
+    <ClInclude Include="InternalsRT\CoreWindowHelpers.h">
+      <Filter>InternalsRT</Filter>
+    </ClInclude>
+    <ClInclude Include="Composition\DirectRectangleClip2.h">
+      <Filter>Composition</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\detours.h">
+      <Filter>Detours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\detver.h">
+      <Filter>Detours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\MemoryApi.h">
+      <Filter>Detours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Libraries\CoreWindowCustomDPI\InternalsRT.Detours\MissingImports.h">
+      <Filter>Detours</Filter>
+    </ClInclude>
+    <ClInclude Include="Composition\WindowVisual.h">
+      <Filter>Composition</Filter>
+    </ClInclude>
+    <ClInclude Include="Composition\DwmThumbnail.h">
+      <Filter>Composition</Filter>
+    </ClInclude>
+    <ClInclude Include="Composition\dcomp.local.h">
+      <Filter>Composition</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Telegram.Native.def" />
@@ -1213,5 +1285,13 @@
     <Midl Include="LokiRng.idl" />
     <Midl Include="SurfaceImage.idl" />
     <Midl Include="FatalError.idl" />
+    <Midl Include="ParticlesAnimation.idl" />
+    <Midl Include="TextFormat.idl" />
+    <Midl Include="Composition\DirectRectangleClip2.idl">
+      <Filter>Composition</Filter>
+    </Midl>
+    <Midl Include="Composition\WindowVisual.idl">
+      <Filter>Composition</Filter>
+    </Midl>
   </ItemGroup>
 </Project>

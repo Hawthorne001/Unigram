@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -25,7 +25,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsThemesViewModel : ViewModelBase
+    public partial class SettingsThemesViewModel : ViewModelBase
     {
         private readonly IThemeService _themeService;
         private readonly bool _darkOnly;
@@ -182,13 +182,13 @@ namespace Telegram.ViewModels.Settings
                     accent = BootStrapper.Current.UISettings.GetColorValue(UIColorType.Accent);
                 }
 
-                var dialog = new ChooseColorPopup();
-                dialog.Color = accent;
+                var popup = new ChooseColorPopup();
+                popup.Color = accent;
 
-                var confirm = await ShowPopupAsync(dialog);
+                var confirm = await ShowPopupAsync(popup);
                 if (confirm == ContentDialogResult.Primary)
                 {
-                    await SetThemeAsync(ThemeAccentInfo.FromAccent(type, dialog.Color));
+                    await SetThemeAsync(ThemeAccentInfo.FromAccent(type, popup.Color));
                 }
             }
         }
@@ -199,14 +199,14 @@ namespace Telegram.ViewModels.Settings
         {
             if (theme != null)
             {
-                await _themeService.CreateThemeAsync(theme);
+                await _themeService.CreateThemeAsync(NavigationService, theme);
                 await RefreshThemesAsync();
             }
         }
 
         public async void ShareTheme(ThemeCustomInfo theme)
         {
-            await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(theme.Path), null, false, null)));
+            await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostMessage(new InputMessageDocument(new InputFileLocal(theme.Path), null, false, null)));
         }
 
         public async void EditTheme(ThemeCustomInfo theme)

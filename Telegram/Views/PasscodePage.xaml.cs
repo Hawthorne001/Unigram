@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using System;
 using Telegram.Common;
 using Telegram.Controls;
+using Telegram.Navigation;
 using Telegram.Services;
 using Windows.ApplicationModel;
 using Windows.Security.Credentials;
@@ -109,10 +110,14 @@ namespace Telegram.Views
             }
         }
 
-        private async void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
+        private async void OnLoaded(object sender, RoutedEventArgs args)
         {
-            Window.Current.Activated += Window_Activated;
-            Window.Current.SizeChanged += Window_SizeChanged;
+            var context = WindowContext.ForXamlRoot(this);
+            if (context != null)
+            {
+                context.Activated += Window_Activated;
+                context.SizeChanged += Window_SizeChanged;
+            }
 
             Field.LosingFocus += Field_LosingFocus;
 
@@ -133,21 +138,25 @@ namespace Telegram.Views
             }
         }
 
+        private void OnUnloaded(object sender, RoutedEventArgs args)
+        {
+            var context = WindowContext.ForXamlRoot(this);
+            if (context != null)
+            {
+                context.Activated -= Window_Activated;
+                context.SizeChanged -= Window_SizeChanged;
+            }
+
+            Field.LosingFocus -= Field_LosingFocus;
+
+            _retryTimer.Stop();
+        }
 
         private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
         {
             if (_passcodeService.IsLocked || !_accepted)
             {
                 args.Cancel = true;
-            }
-            else
-            {
-                Window.Current.Activated -= Window_Activated;
-                Window.Current.SizeChanged -= Window_SizeChanged;
-
-                Field.LosingFocus -= Field_LosingFocus;
-
-                _retryTimer.Stop();
             }
         }
 
@@ -168,7 +177,7 @@ namespace Telegram.Views
 
         private void UpdateView()
         {
-            var bounds = Window.Current.Bounds;
+            var bounds = WindowContext.Current.Bounds;
 
             Margin = new Thickness();
             MinWidth = bounds.Width;

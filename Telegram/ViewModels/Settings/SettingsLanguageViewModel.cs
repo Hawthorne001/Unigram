@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -25,7 +25,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsLanguageViewModel : ViewModelBase
+    public partial class SettingsLanguageViewModel : ViewModelBase
     {
         private readonly ILocaleService _localeService;
         private readonly List<LanguagePackInfo> _officialLanguages = new();
@@ -129,7 +129,7 @@ namespace Telegram.ViewModels.Settings
             }
             else
             {
-                ToastPopup.ShowFeature(NavigationService, new PremiumFeatureRealTimeChatTranslation());
+                ToastPopup.ShowFeaturePromo(NavigationService, new PremiumFeatureRealTimeChatTranslation());
             }
         }
 

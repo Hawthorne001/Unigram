@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Folders
 {
-    public class ShareFolderViewModel : ViewModelBase
+    public partial class ShareFolderViewModel : ViewModelBase
     {
         public ShareFolderViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -40,7 +40,7 @@ namespace Telegram.ViewModels.Folders
                 var response = await ClientService.SendAsync(new GetChatFolder(data.Item1));
                 if (response is ChatFolder folder)
                 {
-                    Title = folder.Title;
+                    Name = folder.Name;
 
                     var ids = new List<long>(data.Item2?.ChatIds ?? Array.Empty<long>());
 
@@ -101,11 +101,11 @@ namespace Telegram.ViewModels.Folders
 
         public MvxObservableCollection<Chat> SelectedItems { get; private set; } = new();
 
-        private string _title;
-        public string Title
+        private ChatFolderName _name;
+        public ChatFolderName Name
         {
-            get => _title;
-            set => Set(ref _title, value);
+            get => _name;
+            set => Set(ref _name, value);
         }
 
         private string _inviteLink;
@@ -152,12 +152,12 @@ namespace Telegram.ViewModels.Folders
 
         public void Copy()
         {
-            MessageHelper.CopyLink(_inviteLink);
+            MessageHelper.CopyLink(XamlRoot, _inviteLink);
         }
 
         public async void Share()
         {
-            await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostLink(new HttpUrl(_inviteLink)));
+            await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostLink(new HttpUrl(_inviteLink)));
         }
     }
 }

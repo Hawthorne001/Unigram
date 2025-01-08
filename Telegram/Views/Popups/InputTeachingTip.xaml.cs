@@ -1,12 +1,14 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Microsoft.UI.Xaml.Controls;
+using System;
 using System.Threading.Tasks;
 using Telegram.Common;
+using Telegram.Controls;
 using Windows.Globalization.NumberFormatting;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -14,7 +16,7 @@ using Windows.UI.Xaml.Input;
 
 namespace Telegram.Views.Popups
 {
-    public sealed partial class InputTeachingTip : TeachingTip
+    public sealed partial class InputTeachingTip : TeachingTipEx
     {
         public string Header { get; set; }
 
@@ -25,10 +27,14 @@ namespace Telegram.Views.Popups
 
         public int MaxLength { get; set; } = int.MaxValue;
         public int MinLength { get; set; } = 1;
+
+        public double Minimum { get; set; } = 0;
         public double Maximum { get; set; } = double.MaxValue;
 
         public InputScopeNameValue InputScope { get; set; }
         public INumberFormatter2 Formatter { get; set; }
+
+        private readonly InputPopupType _type;
 
         private readonly TaskCompletionSource<ContentDialogResult> _tsc = new();
         private readonly RelayCommand _actionButtonCommand;
@@ -38,7 +44,7 @@ namespace Telegram.Views.Popups
         {
             InitializeComponent();
 
-            switch (type)
+            switch (_type = type)
             {
                 case InputPopupType.Text:
                     FindName(nameof(Label));
@@ -47,6 +53,7 @@ namespace Telegram.Views.Popups
                     FindName(nameof(Password));
                     break;
                 case InputPopupType.Value:
+                case InputPopupType.Stars:
                     FindName(nameof(Number));
                     break;
             }
@@ -56,6 +63,8 @@ namespace Telegram.Views.Popups
             (Content as FrameworkElement).Loaded += OnOpened;
             Closed += OnClosed;
         }
+
+        public event EventHandler<InputPopupValidatingEventArgs> Validating;
 
         private void OnOpened(object sender, RoutedEventArgs args)
         {
@@ -97,16 +106,28 @@ namespace Telegram.Views.Popups
             }
             else if (Number != null)
             {
-                Number.NumberFormatter = Formatter;
+                if (Formatter != null)
+                {
+                    Number.NumberFormatter = Formatter;
+                }
+
+                Number.Minimum = Minimum;
                 Number.Maximum = Maximum;
                 Number.Value = Value;
 
                 Number.Focus(FocusState.Keyboard);
+
+                if (_type == InputPopupType.Stars)
+                {
+                    Number.Padding = new Thickness(36, Number.Padding.Top, Number.Padding.Right, Number.Padding.Bottom);
+                    FindName(nameof(StarCount));
+                }
             }
         }
 
         private void ActionButtonExecute()
         {
+            FrameworkElement target = null;
             if (Label != null)
             {
                 if (Label.Text.Length < MinLength)
@@ -115,6 +136,7 @@ namespace Telegram.Views.Popups
                     return;
                 }
 
+                target = Label;
                 Text = Label.Text;
             }
             else if (Password != null)
@@ -125,6 +147,7 @@ namespace Telegram.Views.Popups
                     return;
                 }
 
+                target = Password;
                 Text = Password.Password;
             }
             else if (Number != null)
@@ -135,7 +158,21 @@ namespace Telegram.Views.Popups
                     return;
                 }
 
+                target = Number;
                 Value = Number.Value;
+            }
+
+            if (Validating != null && target != null)
+            {
+                var temp = new InputPopupValidatingEventArgs(Text, Value);
+
+                Validating(this, temp);
+
+                if (temp.Cancel)
+                {
+                    VisualUtilities.ShakeView(target);
+                    return;
+                }
             }
 
             _tsc.TrySetResult(ContentDialogResult.Primary);
@@ -170,7 +207,7 @@ namespace Telegram.Views.Popups
 
         private void Number_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
         {
-            _actionButtonEnabled = args.NewValue >= 0 && args.NewValue <= Maximum;
+            _actionButtonEnabled = args.NewValue >= Minimum && args.NewValue <= Maximum;
             _actionButtonCommand.RaiseCanExecuteChanged();
         }
 

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,6 +15,7 @@ using Telegram.Navigation;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.Views;
+using WinRT;
 
 namespace Telegram.ViewModels.Drawers
 {
@@ -27,10 +28,11 @@ namespace Telegram.ViewModels.Drawers
         ChatPhoto,
         UserPhoto,
         Background,
-        Topics
+        Topics,
+        Text
     }
 
-    public class EmojiDrawerViewModel : ViewModelBase
+    public partial class EmojiDrawerViewModel : ViewModelBase
     {
         private bool _updated;
 
@@ -201,7 +203,7 @@ namespace Telegram.ViewModels.Drawers
 
             var stickers = new List<object>();
 
-            if (_mode == EmojiDrawerMode.Chat)
+            if (_mode is EmojiDrawerMode.Chat or EmojiDrawerMode.Text)
             {
                 var recents = Emoji.GetRecents(SettingsService.Current.Stickers.SkinTone);
                 var emojiGroups = Emoji.Get(SettingsService.Current.Stickers.SkinTone);
@@ -213,6 +215,11 @@ namespace Telegram.ViewModels.Drawers
                 {
                     if (item.Value.Contains(';'))
                     {
+                        if (_mode == EmojiDrawerMode.Text)
+                        {
+                            continue;
+                        }
+
                         var split = item.Value.Split(';');
                         if (split.Length == 2 && long.TryParse(split[1], out long customEmojiId))
                         {
@@ -262,6 +269,11 @@ namespace Telegram.ViewModels.Drawers
                 stickers.AddRange(emojiGroups);
 
                 StandardSets.ReplaceWith(emojiGroups);
+
+                if (_mode == EmojiDrawerMode.Text)
+                {
+                    return;
+                }
             }
 
             var installedSets = _allowCustomEmoji || _mode != EmojiDrawerMode.Reactions
@@ -467,11 +479,11 @@ namespace Telegram.ViewModels.Drawers
             return Array.Empty<StickerSetViewModel>();
         }
 
-        public async Task<List<(AvailableReaction, Sticker)>> UpdateReactions(AvailableReactions available)
+        public async Task<IList<(AvailableReaction, Sticker)>> UpdateReactions(AvailableReactions available)
         {
             if (available == null)
             {
-                return null;
+                return Array.Empty<(AvailableReaction, Sticker)>();
             }
 
             var sum = available.TopReactions.Count
@@ -490,7 +502,7 @@ namespace Telegram.ViewModels.Drawers
             {
                 available.TopReactions
                     .Select(x => x.Type)
-                    .Discern(out var emoji, out var customEmoji);
+                    .Discern(out _, out var emoji, out var customEmoji);
 
                 foreach (var item in additional)
                 {
@@ -520,7 +532,7 @@ namespace Telegram.ViewModels.Drawers
 
             source
                 .Select(x => x.Type)
-                .Discern(out var missingReactions, out var missingEmoji);
+                .Discern(out _, out var missingReactions, out var missingEmoji);
 
             IDictionary<long, Sticker> assets = null;
             if (missingEmoji != null)
@@ -528,7 +540,7 @@ namespace Telegram.ViewModels.Drawers
                 var response = await ClientService.SendAsync(new GetCustomEmojiStickers(missingEmoji.ToArray()));
                 if (response is not Stickers stickers)
                 {
-                    return null;
+                    return Array.Empty<(AvailableReaction, Sticker)>();
                 }
 
                 assets = stickers.StickersValue.ToDictionary(x => x.FullType is StickerFullTypeCustomEmoji customEmoji ? customEmoji.CustomEmojiId : 0);
@@ -556,6 +568,10 @@ namespace Telegram.ViewModels.Drawers
                     {
                         target.Add((item, sticker));
                     }
+                    else if (item.Type is ReactionTypePaid)
+                    {
+                        target.Add((item, new Sticker(0, 0, 512, 512, "\u2B50", new StickerFormatTgs(), new StickerFullTypeRegular(), null, TdExtensions.GetLocalFile("Assets\\Animations\\PaidReactionActivate.tgs"))));
+                    }
                 }
             }
 
@@ -574,7 +590,7 @@ namespace Telegram.ViewModels.Drawers
                 .Union(available.PopularReactions)
                 .Union(available.RecentReactions)
                 .Select(x => x.Type)
-                .Discern(out var missingReactions, out var missingEmoji);
+                .Discern(out _, out var missingReactions, out var missingEmoji);
 
             IDictionary<long, Sticker> assets = null;
             if (missingEmoji != null)
@@ -642,7 +658,8 @@ namespace Telegram.ViewModels.Drawers
         }
     }
 
-    public class RecentEmoji
+    [GeneratedBindableCustomProperty]
+    public partial class RecentEmoji
     {
         public string Title { get; }
 
@@ -655,9 +672,14 @@ namespace Telegram.ViewModels.Drawers
             Title = Strings.RecentStickers;
             Stickers = new MvxObservableCollection<object>(items);
         }
+
+        public override string ToString()
+        {
+            return Title;
+        }
     }
 
-    public class EmojiSetDiffHandler : IDiffHandler<object>
+    public partial class EmojiSetDiffHandler : IDiffHandler<object>
     {
         public bool CompareItems(object oldItem, object newItem)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,10 +8,10 @@ using System;
 using System.Numerics;
 using Telegram.Common;
 using Telegram.Controls;
+using Telegram.Navigation;
 using Telegram.Streams;
 using Telegram.ViewModels.Authorization;
 using Telegram.ViewModels.Delegates;
-using Windows.Foundation;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Hosting;
@@ -27,18 +27,19 @@ namespace Telegram.Views.Authorization
         public AuthorizationPage()
         {
             InitializeComponent();
-            Window.Current.SetTitleBar(TitleBar);
         }
 
         private bool _waiting = true;
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
+            ViewModel.NavigationService.Window.SetTitleBar(TitleBar);
             ViewModel.PropertyChanged += OnPropertyChanged;
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
+            ViewModel.NavigationService.Window.SetTitleBar(null);
             ViewModel.PropertyChanged -= OnPropertyChanged;
         }
 
@@ -93,12 +94,12 @@ namespace Telegram.Views.Authorization
             var inner2 = ElementComposition.GetElementVisual(PhoneInnerPanel);
 
             var transform1 = Logo2Panel.TransformToVisual(Logo1Panel);
-            var point1 = transform1.TransformPoint(new Point()).ToVector2();
+            var point1 = transform1.TransformVector2();
 
             var transform2 = Logo1Panel.TransformToVisual(Logo2Panel);
-            var point2 = transform2.TransformPoint(new Point()).ToVector2();
+            var point2 = transform2.TransformVector2();
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 TokenPanel.Visibility = Visibility.Collapsed;
@@ -106,15 +107,15 @@ namespace Telegram.Views.Authorization
             };
 
             // Small to big
-            var offset1 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var offset1 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             offset1.InsertKeyFrame(0, new Vector3());
             offset1.InsertKeyFrame(1, new Vector3(point1.X, point1.Y, 0));
 
-            var scale1 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale1 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale1.InsertKeyFrame(0, new Vector3(1));
             scale1.InsertKeyFrame(1, new Vector3(160f / 48f));
 
-            var opacity1 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity1 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity1.InsertKeyFrame(0, 1);
             opacity1.InsertKeyFrame(1, 0);
 
@@ -123,15 +124,15 @@ namespace Telegram.Views.Authorization
             logo1.StartAnimation("Opacity", opacity1);
 
             // Big to small
-            var offset2 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var offset2 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             offset2.InsertKeyFrame(0, new Vector3(point2.X, point2.Y, 0));
             offset2.InsertKeyFrame(1, new Vector3());
 
-            var scale2 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale2 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale2.InsertKeyFrame(0, new Vector3(48f / 160f));
             scale2.InsertKeyFrame(1, new Vector3(1));
 
-            var opacity2 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity2 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity2.InsertKeyFrame(0, 0);
             opacity2.InsertKeyFrame(1, 1);
 
@@ -140,11 +141,11 @@ namespace Telegram.Views.Authorization
             logo2.StartAnimation("Opacity", opacity2);
 
             // Other
-            var scale3 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale3 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale3.InsertKeyFrame(0, new Vector3(1));
             scale3.InsertKeyFrame(1, new Vector3(0));
 
-            var opacity3 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity3 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity3.InsertKeyFrame(0, 1);
             opacity3.InsertKeyFrame(1, 0);
 
@@ -175,12 +176,12 @@ namespace Telegram.Views.Authorization
             var inner2 = ElementComposition.GetElementVisual(PhoneInnerPanel);
 
             var transform1 = Logo2Panel.TransformToVisual(Logo1Panel);
-            var point1 = transform1.TransformPoint(new Point()).ToVector2();
+            var point1 = transform1.TransformVector2();
 
             var transform2 = Logo1Panel.TransformToVisual(Logo2Panel);
-            var point2 = transform2.TransformPoint(new Point()).ToVector2();
+            var point2 = transform2.TransformVector2();
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 TokenPanel.Visibility = Visibility.Visible;
@@ -188,15 +189,15 @@ namespace Telegram.Views.Authorization
             };
 
             // Small to big
-            var offset1 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var offset1 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             offset1.InsertKeyFrame(1, new Vector3());
             offset1.InsertKeyFrame(0, new Vector3(point1.X, point1.Y, 0));
 
-            var scale1 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale1 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale1.InsertKeyFrame(1, new Vector3(1));
             scale1.InsertKeyFrame(0, new Vector3(160f / 48f));
 
-            var opacity1 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity1 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity1.InsertKeyFrame(1, 1);
             opacity1.InsertKeyFrame(0, 0);
 
@@ -205,15 +206,15 @@ namespace Telegram.Views.Authorization
             logo1.StartAnimation("Opacity", opacity1);
 
             // Big to small
-            var offset2 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var offset2 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             offset2.InsertKeyFrame(1, new Vector3(point2.X, point2.Y, 0));
             offset2.InsertKeyFrame(0, new Vector3());
 
-            var scale2 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale2 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale2.InsertKeyFrame(1, new Vector3(48f / 160f));
             scale2.InsertKeyFrame(0, new Vector3(1));
 
-            var opacity2 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity2 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity2.InsertKeyFrame(1, 0);
             opacity2.InsertKeyFrame(0, 1);
 
@@ -222,11 +223,11 @@ namespace Telegram.Views.Authorization
             logo2.StartAnimation("Opacity", opacity2);
 
             // Other
-            var scale3 = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var scale3 = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             scale3.InsertKeyFrame(0, new Vector3(0));
             scale3.InsertKeyFrame(1, new Vector3(1));
 
-            var opacity3 = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity3 = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             opacity3.InsertKeyFrame(0, 0);
             opacity3.InsertKeyFrame(1, 1);
 
@@ -276,13 +277,13 @@ namespace Telegram.Views.Authorization
                 return;
             }
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 TokenPlaceholder.Source = null;
             };
 
-            var opacity = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var opacity = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             //opacity.InsertKeyFrame(0.0f, 0);
             //opacity.InsertKeyFrame(1.0f, 1);
             //token.StartAnimation("Opacity", opacity);

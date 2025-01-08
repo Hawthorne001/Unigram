@@ -1,9 +1,10 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
+using System.Collections.Specialized;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Converters;
@@ -26,9 +27,17 @@ namespace Telegram.Views.Popups
             DataContext = new ChatJoinRequestsViewModel(chat, inviteLink, clientService, settingsService, aggregator);
 
             ViewModel.NavigationService = navigationService;
+            ViewModel.Items.CollectionChanged += OnCollectionChanged;
 
             Title = Strings.MemberRequests;
-            PrimaryButtonText = Strings.Close;
+        }
+
+        private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove && ViewModel.Items.Empty())
+            {
+                Hide();
+            }
         }
 
         private void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -69,9 +78,9 @@ namespace Telegram.Views.Popups
                 primary.Content = ViewModel.IsChannel
                     ? Strings.AddToChannel
                     : Strings.AddToGroup;
-            //}
-            //else if (args.Phase == 1)
-            //{
+                //}
+                //else if (args.Phase == 1)
+                //{
                 var time = content.Children[2] as TextBlock;
                 time.Text = Formatter.DateExtended(request.Date);
 

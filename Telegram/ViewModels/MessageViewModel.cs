@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -13,7 +13,7 @@ using Telegram.ViewModels.Delegates;
 
 namespace Telegram.ViewModels
 {
-    public class MessageViewModel : MessageWithOwner
+    public partial class MessageViewModel : MessageWithOwner
     {
         private readonly IPlaybackService _playbackService;
 
@@ -92,6 +92,9 @@ namespace Telegram.ViewModels
 
         private bool? _isSaved;
         public bool IsSaved => _isSaved ??= _message.IsSaved(_clientService.Options.MyId);
+
+        private bool? _isVerificationCode;
+        public bool IsVerificationCode => _isVerificationCode ??= _message.ChatId == _clientService.Options.VerificationCodesBotChatId && _message.ForwardInfo != null;
 
         // TODO: BaseObject
         public object ReplyToItem { get; set; }
@@ -185,9 +188,9 @@ namespace Telegram.ViewModels
             {
                 return true;
             }
-            else if (SenderId is MessageSenderUser senderUser)
+            else if (SenderId is MessageSenderUser senderUser && !IsChannelPost)
             {
-                if (Content is MessageText text && text.WebPage == null)
+                if (Content is MessageText text && text.LinkPreview == null)
                 {
                     return false;
                 }
@@ -235,6 +238,11 @@ namespace Telegram.ViewModels
 
             if (IsChannelPost)
             {
+                if (ClientService.TryGetSupergroup(Chat, out var supergroup))
+                {
+                    return supergroup.ShowMessageSender;
+                }
+
                 return false;
             }
             else if (IsSaved && ForwardInfo?.Source is { IsOutgoing: false })
@@ -246,7 +254,7 @@ namespace Telegram.ViewModels
                 return false;
             }
 
-            return Chat?.Type is ChatTypeSupergroup or ChatTypeBasicGroup;
+            return Chat?.Type is ChatTypeSupergroup or ChatTypeBasicGroup || _message.ChatId == _clientService.Options.VerificationCodesBotChatId;
         }
 
 
@@ -263,16 +271,7 @@ namespace Telegram.ViewModels
         public void UpdateWith(Message message)
         {
             _message.AuthorSignature = message.AuthorSignature;
-            _message.CanBeDeletedForAllUsers = message.CanBeDeletedForAllUsers;
-            _message.CanBeDeletedOnlyForSelf = message.CanBeDeletedOnlyForSelf;
-            _message.CanBeEdited = message.CanBeEdited;
             _message.CanBeSaved = message.CanBeSaved;
-            _message.CanBeForwarded = message.CanBeForwarded;
-            _message.CanGetMessageThread = message.CanGetMessageThread;
-            _message.CanGetStatistics = message.CanGetStatistics;
-            _message.CanBeRepliedInAnotherChat = message.CanBeRepliedInAnotherChat;
-            _message.CanGetViewers = message.CanGetViewers;
-            _message.CanGetReadDate = message.CanGetReadDate;
             _message.ChatId = message.ChatId;
             _message.ContainsUnreadMention = message.ContainsUnreadMention;
             //_message.Content = message.Content;
@@ -288,6 +287,7 @@ namespace Telegram.ViewModels
             _message.MediaAlbumId = message.MediaAlbumId;
             _message.ReplyMarkup = message.ReplyMarkup;
             _message.ReplyTo = message.ReplyTo;
+            _message.FactCheck = message.FactCheck;
             _message.SenderId = message.SenderId;
             _message.SendingState = message.SendingState;
             _message.SelfDestructType = message.SelfDestructType;
@@ -301,12 +301,10 @@ namespace Telegram.ViewModels
             _message.ImportInfo = message.ImportInfo;
             _message.IsTopicMessage = message.IsTopicMessage;
             _message.HasTimestampedMedia = message.HasTimestampedMedia;
-            _message.CanReportReactions = message.CanReportReactions;
-            _message.CanGetMediaTimestampLinks = message.CanGetMediaTimestampLinks;
-            _message.CanGetAddedReactions = message.CanGetAddedReactions;
             _message.SchedulingState = message.SchedulingState;
             _message.SenderBoostCount = message.SenderBoostCount;
             _message.SenderBusinessBotUserId = message.SenderBusinessBotUserId;
+            _message.EffectId = message.EffectId;
 
             _isSaved = null;
 
@@ -314,6 +312,8 @@ namespace Telegram.ViewModels
             {
                 FormattedText caption = null;
                 StyledText text = null;
+                bool showCaptionAboveMedia = false;
+                int editDate = 0;
 
                 if (album.IsMedia)
                 {
@@ -325,7 +325,9 @@ namespace Telegram.ViewModels
                             if (caption == null || string.IsNullOrEmpty(caption.Text))
                             {
                                 caption = childCaption;
+                                showCaptionAboveMedia = child.ShowCaptionAboveMedia();
                                 text = child.Text;
+                                editDate = child.EditDate;
                             }
                             else
                             {
@@ -339,16 +341,20 @@ namespace Telegram.ViewModels
                 else if (album.Messages.Count > 0)
                 {
                     caption = album.Messages[^1].GetCaption();
+                    showCaptionAboveMedia = album.Messages[^1].ShowCaptionAboveMedia();
                     text = album.Messages[^1].Text;
+                    editDate = album.Messages[^1].EditDate;
                 }
 
                 album.Caption = caption ?? new FormattedText();
+                album.ShowCaptionAboveMedia = showCaptionAboveMedia;
                 Text = text;
+                EditDate = editDate;
             }
         }
     }
 
-    public class MessageWithOwner
+    public partial class MessageWithOwner
     {
         protected readonly IClientService _clientService;
         protected Message _message;
@@ -377,6 +383,7 @@ namespace Telegram.ViewModels
         public double SelfDestructIn { get => _message.SelfDestructIn; set => _message.SelfDestructIn = value; }
         public MessageSelfDestructType SelfDestructType => _message.SelfDestructType;
         public MessageReplyTo ReplyTo { get => _message.ReplyTo; set => _message.ReplyTo = value; }
+        public FactCheck FactCheck { get => _message.FactCheck; set => _message.FactCheck = value; }
         public MessageForwardInfo ForwardInfo => _message.ForwardInfo;
         public MessageImportInfo ImportInfo => _message.ImportInfo;
         public IList<UnreadReaction> UnreadReactions { get => _message.UnreadReactions; set => _message.UnreadReactions = value; }
@@ -386,16 +393,7 @@ namespace Telegram.ViewModels
         public bool IsFromOffline => _message.IsFromOffline;
         public bool IsChannelPost => _message.IsChannelPost;
         public bool IsTopicMessage => _message.IsTopicMessage;
-        public bool CanBeDeletedForAllUsers => _message.CanBeDeletedForAllUsers;
-        public bool CanBeDeletedOnlyForSelf => _message.CanBeDeletedOnlyForSelf;
-        public bool CanBeRepliedInAnotherChat => _message.CanBeRepliedInAnotherChat;
-        public bool CanBeForwarded => _message.CanBeForwarded;
-        public bool CanBeEdited => _message.CanBeEdited;
         public bool CanBeSaved => _message.CanBeSaved;
-        public bool CanGetMessageThread => _message.CanGetMessageThread;
-        public bool CanGetStatistics => _message.CanGetStatistics;
-        public bool CanGetViewers => _message.CanGetViewers;
-        public bool CanGetReadDate => _message.CanGetReadDate;
         public bool IsOutgoing { get => _message.IsOutgoing; set => _message.IsOutgoing = value; }
         public bool IsPinned { get => _message.IsPinned; set => _message.IsPinned = value; }
         public bool HasTimestampedMedia => _message.HasTimestampedMedia;
@@ -403,10 +401,13 @@ namespace Telegram.ViewModels
         public MessageSendingState SendingState => _message.SendingState;
         public long ChatId => _message.ChatId;
         public long MessageThreadId => _message.MessageThreadId;
-        public MessageSender SenderId => _message.SenderId;
+        public MessageSender SenderId { get => _message.SenderId; set => _message.SenderId = value; }
         public int SenderBoostCount => _message.SenderBoostCount;
         public long SenderBusinessBotUserId => _message.SenderBusinessBotUserId;
         public long Id => _message.Id;
+        public long EffectId => _message.EffectId;
+
+        public MessageEffect Effect { get; set; }
 
         private void SetContent(MessageContent content)
         {

@@ -30,17 +30,26 @@ namespace winrt::Telegram::Native::implementation
         static hstring GetCurrentCulture();
         static hstring GetKeyboardCulture();
 
+        static hstring FormatTime(winrt::Windows::Foundation::DateTime value);
+        static hstring FormatDate(winrt::Windows::Foundation::DateTime value, hstring format);
+        static hstring FormatDate(int year, int month, int day, hstring format);
+
         static hstring FormatTime(int value);
-        static hstring FormatDate(int value);
+        static hstring FormatDate(int value, hstring format);
 
         static bool IsFileReadable(hstring path);
         static bool IsFileReadable(hstring path, int64_t& fileSize, int64_t& fileTime);
 
         static bool IsMediaSupported();
 
+        static void OverrideScaleForCurrentView(int32_t value);
+        static int32_t GetScaleForCurrentView();
+
         static void SetFatalErrorCallback(FatalErrorCallback action);
-        static winrt::Telegram::Native::FatalError GetFatalError(bool onlyNative);
+        static winrt::Windows::Foundation::Collections::IVector<winrt::Telegram::Native::FatalErrorFrame> GetStowedException();
         static winrt::Telegram::Native::FatalError GetBackTrace(DWORD code);
+
+        static hstring GetLogMessage(int64_t format, int64_t args);
 
         static void Crash();
 

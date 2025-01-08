@@ -4,8 +4,24 @@
 
 namespace winrt::Telegram::Native::Calls::implementation
 {
-    VoipDescriptor::VoipDescriptor()
+    hstring VoipDescriptor::Version()
     {
+        return m_version;
+    }
+
+    void VoipDescriptor::Version(hstring value)
+    {
+        m_version = value;
+    }
+
+    hstring VoipDescriptor::CustomParameters()
+    {
+        return m_customParameters;
+    }
+
+    void VoipDescriptor::CustomParameters(hstring value)
+    {
+        m_customParameters = value;
     }
 
     double VoipDescriptor::InitializationTimeout()

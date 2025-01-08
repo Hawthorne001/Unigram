@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,13 +7,14 @@
 using Microsoft.UI.Xaml.Controls;
 using System.Threading.Tasks;
 using Telegram.Common;
+using Telegram.Controls;
 using Telegram.Views.Host;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Input;
 
 namespace Telegram.Views.Popups
 {
-    public sealed partial class CreateLinkPopup : TeachingTip
+    public sealed partial class CreateLinkPopup : TeachingTipEx
     {
         public CreateLinkPopup()
         {
@@ -91,9 +92,9 @@ namespace Telegram.Views.Popups
             }
         }
 
-        public Task<bool> ShowQueuedAsync()
+        public Task<bool> ShowQueuedAsync(XamlRoot xamlRoot)
         {
-            if (Window.Current.Content is not IToastHost host)
+            if (xamlRoot.Content is not IToastHost host)
             {
                 return Task.FromResult(false);
             }
@@ -103,11 +104,11 @@ namespace Telegram.Views.Popups
             {
                 sender.Closed -= handler;
 
-                host.Disconnect(sender);
+                host.ToastClosed(sender);
                 tsc.SetResult(IsValid);
             }
 
-            host.Connect(this);
+            host.ToastOpened(this);
             Closed += handler;
             IsOpen = true;
 

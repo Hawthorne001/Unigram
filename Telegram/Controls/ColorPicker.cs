@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -19,7 +19,7 @@ namespace Telegram.Controls
     [TemplatePart(Name = "Spectrum", Type = typeof(Border))]
     [TemplatePart(Name = "SpectrumThumb", Type = typeof(UIElement))]
     [TemplatePart(Name = "ValueSlider", Type = typeof(Slider))]
-    public class ColorPicker : Control
+    public partial class ColorPicker : Control
     {
         private Border Spectrum;
         private UIElement SpectrumThumb;
@@ -206,7 +206,7 @@ namespace Telegram.Controls
 
     }
 
-    public sealed class ColorChangedEventArgs : EventArgs
+    public sealed partial class ColorChangedEventArgs : EventArgs
     {
         public ColorChangedEventArgs(Color newColor, Color oldColor)
         {

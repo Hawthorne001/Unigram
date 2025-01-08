@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -24,7 +24,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class AlbumContent : Grid, IContentWithFile
+    public sealed partial class AlbumContent : Grid, IContentWithFile
     {
         public MessageViewModel Message => _message;
         private MessageViewModel _message;
@@ -149,7 +149,7 @@ namespace Telegram.Controls.Messages.Content
                 FrameworkElement element;
                 if (pos.Content is MessagePhoto)
                 {
-                    element = new PhotoContent(pos, true);
+                    element = new PhotoContent(pos, null, true);
                 }
                 else if (pos.Content is MessageVideo)
                 {
@@ -168,14 +168,16 @@ namespace Telegram.Controls.Messages.Content
                     continue;
                 }
 
-                Children.Add(new MessageSelector(pos, element));
+                var selector = new MessageSelector(pos, element);
+
+                Children.Add(selector);
 
                 if (album.IsMedia)
                 {
                     element.MinWidth = 0;
                     element.MinHeight = 0;
-                    element.MaxWidth = MessageAlbum.MAX_WIDTH;
-                    element.MaxHeight = MessageAlbum.MAX_HEIGHT;
+                    element.MaxWidth = double.PositiveInfinity;
+                    element.MaxHeight = double.PositiveInfinity;
                     element.Margin = new Thickness(0, 0, MessageAlbum.ITEM_MARGIN, MessageAlbum.ITEM_MARGIN);
                     element.Tag = true;
 
@@ -183,10 +185,12 @@ namespace Telegram.Controls.Messages.Content
                 }
                 else if (pos == album.Messages.Last())
                 {
+                    element.Margin = new Thickness(0, 0, 0, 2);
                     return;
                 }
 
-                element.Margin = new Thickness(0, 0, 0, 8);
+                element.Margin = new Thickness(0, 0, 0, 2);
+                selector.Margin = new Thickness(0, 0, 0, 6);
 
                 var caption = pos.GetCaption();
                 if (string.IsNullOrEmpty(caption?.Text))
@@ -450,11 +454,11 @@ namespace Telegram.Controls.Messages.Content
             }
             else if (type is TextEntityTypeTextUrl textUrl)
             {
-                message.Delegate.OpenUrl(textUrl.Url, true);
+                message.Delegate.OpenUrl(textUrl.Url, true, new OpenUrlSourceChat(message.ChatId, message.SenderId));
             }
             else if (type is TextEntityTypeUrl)
             {
-                message.Delegate.OpenUrl(data, false);
+                message.Delegate.OpenUrl(data, false, new OpenUrlSourceChat(message.ChatId, message.SenderId));
             }
             else if (type is TextEntityTypeBankCardNumber)
             {

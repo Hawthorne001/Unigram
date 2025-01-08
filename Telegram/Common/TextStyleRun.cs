@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,7 +12,7 @@ using Telegram.Td.Api;
 
 namespace Telegram.Common
 {
-    public class TextStyleRun
+    public partial class TextStyleRun
     {
         public TextStyle Flags { get; set; }
 
@@ -120,7 +120,7 @@ namespace Telegram.Common
                 {
                     newRun.Flags = TextStyle.Italic;
                 }
-                else if (entity.Type is TextEntityTypeBlockQuote)
+                else if (entity.Type is TextEntityTypeBlockQuote or TextEntityTypeExpandableBlockQuote)
                 {
                     newRun.Flags = TextStyle.Quote;
                 }
@@ -402,7 +402,7 @@ namespace Telegram.Common
             for (int i = 0; i < entities.Count; i++)
             {
                 var entity = entities[i];
-                if (entity.Type is TextEntityTypePre or TextEntityTypePreCode or TextEntityTypeBlockQuote)
+                if (entity.Type is TextEntityTypePre or TextEntityTypePreCode or TextEntityTypeBlockQuote or TextEntityTypeExpandableBlockQuote)
                 {
                     if (entity.Offset > 0 && text[entity.Offset - 1] != '\n')
                     {
@@ -540,7 +540,7 @@ namespace Telegram.Common
         Quote = 512,
     }
 
-    public class StyledText
+    public partial class StyledText
     {
         public StyledText(string text, IList<StyledParagraph> paragraphs)
         {
@@ -564,7 +564,7 @@ namespace Telegram.Common
         public bool IsPlain { get; }
     }
 
-    public class StyledParagraph
+    public partial class StyledParagraph
     {
         public StyledParagraph(string text, IList<TextEntity> entities)
             : this(text, 0, text.Length, entities)
@@ -588,6 +588,7 @@ namespace Telegram.Common
                     TextEntityTypePreCode preCode => new TextParagraphTypeMonospace(preCode.Language),
                     TextEntityTypePre => new TextParagraphTypeMonospace(),
                     TextEntityTypeBlockQuote => new TextParagraphTypeQuote(),
+                    TextEntityTypeExpandableBlockQuote => new TextParagraphTypeQuote(),
                     _ => null
                 };
             }
@@ -613,12 +614,12 @@ namespace Telegram.Common
 
     }
 
-    public class TextParagraphTypeQuote : TextParagraphType
+    public partial class TextParagraphTypeQuote : TextParagraphType
     {
 
     }
 
-    public class TextParagraphTypeMonospace : TextParagraphType
+    public partial class TextParagraphTypeMonospace : TextParagraphType
     {
         public TextParagraphTypeMonospace(string language)
         {

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,15 +15,11 @@ using Telegram.Controls.Media;
 using Telegram.Converters;
 using Telegram.Navigation;
 using Telegram.Services;
-using Telegram.Services.Keyboard;
-using Telegram.Services.ViewService;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Chats;
 using Telegram.ViewModels.Delegates;
 using Telegram.ViewModels.Gallery;
 using Telegram.ViewModels.Users;
-using Telegram.Views;
 using Windows.Devices.Input;
 using Windows.Foundation;
 using Windows.UI.Composition;
@@ -38,6 +34,7 @@ using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Telegram.Controls.Gallery
 {
@@ -47,9 +44,9 @@ namespace Telegram.Controls.Gallery
     {
         public GalleryViewModelBase ViewModel => DataContext as GalleryViewModelBase;
 
-        public IClientService ClientService => ViewModel.ClientService;
+        public IClientService ClientService => ViewModel?.ClientService;
 
-        private Func<FrameworkElement> _closing;
+        private WeakReference<FrameworkElement> _closing;
 
         private readonly DispatcherTimer _inactivityTimer;
 
@@ -64,7 +61,7 @@ namespace Telegram.Controls.Gallery
 
         private bool _unloaded;
 
-        private static readonly ConcurrentDictionary<int, long> _knownPositions = new();
+        private static readonly ConcurrentDictionary<int, double> _knownPositions = new();
         private long? _initialPosition;
 
         public long InitialPosition
@@ -111,7 +108,7 @@ namespace Telegram.Controls.Gallery
             if (e.OriginalSource is FrameworkElement element)
             {
                 var button = element.GetParentOrSelf<ButtonBase>();
-                if (button != null)
+                if (button is not null and not FileButton)
                 {
                     return;
                 }
@@ -166,6 +163,17 @@ namespace Telegram.Controls.Gallery
             if (show != _transportCollapsed || (_transportFocused && !show))
             {
                 return;
+            }
+
+            if (show is false && XamlRoot != null)
+            {
+                foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot))
+                {
+                    if (popup.Child is not GalleryWindow)
+                    {
+                        return;
+                    }
+                }
             }
 
             _transportCollapsed = !show;
@@ -242,7 +250,7 @@ namespace Telegram.Controls.Gallery
 
         public void OpenFile(GalleryMedia item, File file)
         {
-            Play(LayoutRoot.CurrentElement, item);
+            Play(CurrentElement, item);
         }
 
         public void OpenItem(GalleryMedia item)
@@ -250,7 +258,7 @@ namespace Telegram.Controls.Gallery
             OnBackRequested(new BackRequestedRoutedEventArgs());
         }
 
-        public static Task<ContentDialogResult> ShowAsync(ViewModelBase viewModelBase, IStorageService storageService, Chat chat, Func<FrameworkElement> closing = null)
+        public static Task<ContentDialogResult> ShowAsync(ViewModelBase viewModelBase, IStorageService storageService, Chat chat, FrameworkElement closing = null)
         {
             var clientService = viewModelBase.ClientService;
             var aggregator = viewModelBase.Aggregator;
@@ -272,7 +280,7 @@ namespace Telegram.Controls.Gallery
 
                 var viewModel = new UserPhotosViewModel(clientService, storageService, aggregator, user, userFull);
                 viewModel.NavigationService = navigationService;
-                return ShowAsync(viewModel, closing);
+                return ShowAsync(navigationService.XamlRoot, viewModel, closing);
             }
             else if (chat.Type is ChatTypeBasicGroup)
             {
@@ -284,7 +292,7 @@ namespace Telegram.Controls.Gallery
 
                 var viewModel = new ChatPhotosViewModel(clientService, storageService, aggregator, chat, basicGroupFull.Photo);
                 viewModel.NavigationService = navigationService;
-                return ShowAsync(viewModel, closing);
+                return ShowAsync(navigationService.XamlRoot, viewModel, closing);
             }
             else if (chat.Type is ChatTypeSupergroup)
             {
@@ -296,29 +304,45 @@ namespace Telegram.Controls.Gallery
 
                 var viewModel = new ChatPhotosViewModel(clientService, storageService, aggregator, chat, supergroupFull.Photo);
                 viewModel.NavigationService = navigationService;
-                return ShowAsync(viewModel, closing);
+                return ShowAsync(navigationService.XamlRoot, viewModel, closing);
             }
 
             return Task.FromResult(ContentDialogResult.None);
         }
 
-        public static Task<ContentDialogResult> ShowAsync(GalleryViewModelBase parameter, Func<FrameworkElement> closing = null, long timestamp = 0)
+        public static Task<ContentDialogResult> ShowAsync(ViewModelBase viewModelBase, IStorageService storageService, User user, FrameworkElement closing = null)
+        {
+            var clientService = viewModelBase.ClientService;
+            var aggregator = viewModelBase.Aggregator;
+            var navigationService = viewModelBase.NavigationService;
+
+            var userFull = clientService.GetUserFull(user.Id);
+            if (userFull?.Photo == null && userFull?.PublicPhoto == null && userFull?.PersonalPhoto == null)
+            {
+                return Task.FromResult(ContentDialogResult.None);
+            }
+
+            var viewModel = new UserPhotosViewModel(clientService, storageService, aggregator, user, userFull);
+            viewModel.NavigationService = navigationService;
+            return ShowAsync(navigationService.XamlRoot, viewModel, closing);
+        }
+
+        public static Task<ContentDialogResult> ShowAsync(XamlRoot xamlRoot, GalleryViewModelBase parameter, FrameworkElement closing = null, long timestamp = 0, VideoPlayerBase player = null)
         {
             var popup = new GalleryWindow
             {
                 InitialPosition = timestamp
             };
 
-            return popup.ShowAsyncInternal(parameter, closing);
+            return popup.ShowAsyncInternal(xamlRoot, parameter, closing, player);
         }
 
-        private Task<ContentDialogResult> ShowAsyncInternal(GalleryViewModelBase parameter, Func<FrameworkElement> closing = null)
+        private Task<ContentDialogResult> ShowAsyncInternal(XamlRoot xamlRoot, GalleryViewModelBase parameter, FrameworkElement closing = null, VideoPlayerBase player = null)
         {
-            _closing = closing;
-
-            if (_closing != null && IsConstrainedToRootBounds)
+            if (closing != null && !SettingsService.Current.FullScreenGallery)
             {
-                ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("FullScreenPicture", _closing());
+                _closing = new WeakReference<FrameworkElement>(closing);
+                ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("FullScreenPicture", closing);
             }
 
             Load(parameter);
@@ -334,13 +358,13 @@ namespace Telegram.Controls.Gallery
                 parameter.Items.CollectionChanged -= OnCollectionChanged;
                 parameter.Items.CollectionChanged += OnCollectionChanged;
 
-                PrepareNext(0, true);
+                PrepareNext(0, true, false, player);
 
                 var applicationView = ApplicationView.GetForCurrentView();
 
                 _wasFullScreen = applicationView.IsFullScreenMode || ApiInfo.IsXbox;
 
-                if (CanUnconstrainFromRootBounds && !_wasFullScreen)
+                if (SettingsService.Current.FullScreenGallery && !_wasFullScreen)
                 {
                     applicationView.TryEnterFullScreenMode();
                 }
@@ -361,29 +385,20 @@ namespace Telegram.Controls.Gallery
             });
 
             Loaded += handler;
-            return ShowAsync();
+            return ShowAsync(xamlRoot);
         }
 
-        protected override void MaskTitleAndStatusBar()
+        protected override void MaskTitleAndStatusBar(WindowContext window)
         {
-            base.MaskTitleAndStatusBar();
-            Window.Current.SetTitleBar(TitleBar);
+            base.MaskTitleAndStatusBar(window);
+            window.SetTitleBar(TitleBar);
         }
 
         private void InitializeBackButton()
         {
-            if (IsConstrainedToRootBounds)
-            {
-                BackButton.Glyph = "\uE72B";
-                BackButton.Margin = new Thickness(0, -40, 0, 0);
-                BackButton.HorizontalAlignment = HorizontalAlignment.Left;
-            }
-            else
-            {
-                BackButton.Glyph = "\uE711";
-                BackButton.Margin = new Thickness();
-                BackButton.HorizontalAlignment = HorizontalAlignment.Right;
-            }
+            BackButton.Glyph = "\uE72B";
+            BackButton.Margin = new Thickness(0, -40, 0, 0);
+            BackButton.HorizontalAlignment = HorizontalAlignment.Left;
         }
 
         private void OnVisibleBoundsChanged(ApplicationView sender, object args)
@@ -408,7 +423,7 @@ namespace Telegram.Controls.Gallery
                         : Stretch.Uniform;
                 }
 
-                var anim = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+                var anim = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
                 anim.InsertKeyFrame(0, fullScreen ? 0 : 1);
                 anim.InsertKeyFrame(1, fullScreen ? 1 : 0);
 
@@ -430,7 +445,7 @@ namespace Telegram.Controls.Gallery
             {
                 applicationView.ExitFullScreenMode();
 
-                if (e.Key == VirtualKey.Escape)
+                if (e.Key == VirtualKey.Escape && !SettingsService.Current.FullScreenGallery)
                 {
                     Cancel();
                     return;
@@ -443,7 +458,7 @@ namespace Telegram.Controls.Gallery
 
             if (ViewModel != null)
             {
-                WindowContext.Current.EnableScreenCapture(ViewModel.GetHashCode());
+                ViewModel.NavigationService.Window.EnableScreenCapture(ViewModel.GetHashCode());
 
                 ViewModel.Aggregator.Unsubscribe(this);
                 ViewModel.Items.CollectionChanged -= OnCollectionChanged;
@@ -453,13 +468,12 @@ namespace Telegram.Controls.Gallery
                 if (ViewModel.SelectedItem == ViewModel.FirstItem && _closing != null)
                 {
                     var root = LayoutRoot.CurrentElement;
-                    if (root != null && root.IsLoaded && IsConstrainedToRootBounds && !_lastFullScreen)
+                    if (root != null && root.IsLoaded && !SettingsService.Current.FullScreenGallery && !_lastFullScreen)
                     {
-                        var animation = ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("FullScreenPicture", root);
-                        if (animation != null)
+                        if (_closing.TryGetTarget(out FrameworkElement element) && element.IsConnected())
                         {
-                            var element = _closing();
-                            if (element.IsLoaded)
+                            var animation = ConnectedAnimationService.GetForCurrentView().PrepareToAnimate("FullScreenPicture", root);
+                            if (animation != null)
                             {
                                 void handler(ConnectedAnimation s, object e)
                                 {
@@ -519,7 +533,7 @@ namespace Telegram.Controls.Gallery
             _layer.StartAnimation("Opacity", CreateScalarAnimation(0, 1, true));
             _bottom.StartAnimation("Opacity", CreateScalarAnimation(0, 1, true));
 
-            var container = LayoutRoot.CurrentElement as Grid;
+            var container = LayoutRoot.CurrentElement as GalleryContent;
 
             var animation = ConnectedAnimationService.GetForCurrentView().GetAnimation("FullScreenPicture");
             if (animation != null)
@@ -543,22 +557,12 @@ namespace Telegram.Controls.Gallery
             InitializeVideo(container, item);
         }
 
-        private void InitializeVideo(Grid container, GalleryMedia item)
+        private void InitializeVideo(GalleryContent content, GalleryMedia item)
         {
             if (item.IsVideo)
             {
-                Play(container, item);
-
-                if (GalleryCompactWindow.Current is ViewLifetimeControl compact)
-                {
-                    compact.Dispatcher.Dispatch(() =>
-                    {
-                        if (compact.Window.Content is GalleryCompactWindow player)
-                        {
-                            player.Pause();
-                        }
-                    });
-                }
+                Play(content, item);
+                GalleryCompactOverlay.Pause();
             }
         }
 
@@ -590,8 +594,12 @@ namespace Telegram.Controls.Gallery
 
         private string ConvertDate(int value)
         {
-            var date = Formatter.ToLocalTime(value);
-            return string.Format(Strings.formatDateAtTime, Formatter.ShortDate.Format(date), Formatter.ShortTime.Format(date));
+            if (value == 0)
+            {
+                return string.Empty;
+            }
+
+            return Formatter.DateAt(value);
         }
 
         private string ConvertOf(GalleryMedia item, int index, int count)
@@ -623,30 +631,36 @@ namespace Telegram.Controls.Gallery
 
         private GalleryContent _current;
 
-        private void Play(FrameworkElement container, GalleryMedia item)
+        private void Play(GalleryContent content, GalleryMedia item, VideoPlayerBase player = null)
         {
-            if (_unloaded || container is not GalleryContent content)
+            if (_unloaded)
             {
                 return;
             }
 
-            var position = 0L;
-            var file = item.GetFile();
+            var position = 0d;
+            var file = item.File;
 
             if (_initialPosition is long initialPosition)
             {
                 _initialPosition = null;
                 position = initialPosition;
             }
-            else if (_knownPositions.TryRemove(file.Id, out long knownPosition))
+            else if (_knownPositions.TryRemove(file.Id, out double knownPosition))
             {
                 position = knownPosition;
             }
 
-            //_mediaPlayer.IsLoopingEnabled = item.IsLoop;
-
-            _current = content;
-            _current.Play(item, position, Controls);
+            if (player != null)
+            {
+                _current = content;
+                _current.Play(player, item, Controls);
+            }
+            else
+            {
+                _current = content;
+                _current.Play(item, position, Controls);
+            }
         }
 
         private void Dispose()
@@ -656,7 +670,7 @@ namespace Telegram.Controls.Gallery
 
             if (_current != null)
             {
-                _current.Stop(out int fileId, out long position);
+                _current.Stop(out int fileId, out double position);
                 _current = null;
 
                 if (fileId != 0)
@@ -664,11 +678,6 @@ namespace Telegram.Controls.Gallery
                     _knownPositions[fileId] = position;
                 }
             }
-        }
-
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            WindowContext.Current.InputListener.KeyDown += OnAcceleratorKeyActivated;
         }
 
         private void Load(object parameter)
@@ -680,10 +689,13 @@ namespace Telegram.Controls.Gallery
                     .Subscribe<UpdateMessageContent>(Handle);
         }
 
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+        }
+
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             Unload();
-            WindowContext.Current.InputListener.KeyDown -= OnAcceleratorKeyActivated;
         }
 
         private void Unload()
@@ -707,48 +719,57 @@ namespace Telegram.Controls.Gallery
             Element2.Unload();
         }
 
-        private void OnAcceleratorKeyActivated(Window sender, InputKeyDownEventArgs args)
+        private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs args)
         {
-            var keyCode = (int)args.VirtualKey;
+            if (args.Key is VirtualKey.Space /*&& args.Modifiers == VirtualKeyModifiers.None*/)
+            {
+                Controls.TogglePlaybackState();
+                args.Handled = true;
+            }
+        }
 
-            if (args.VirtualKey is VirtualKey.Left or VirtualKey.GamepadLeftShoulder && args.OnlyKey)
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
+        {
+            var keyCode = (int)args.Key;
+
+            if (args.Key is VirtualKey.Left or VirtualKey.GamepadLeftShoulder && args.Modifiers == VirtualKeyModifiers.None)
             {
                 ChangeView(CarouselDirection.Previous, false);
                 args.Handled = true;
             }
-            else if (args.VirtualKey is VirtualKey.Right or VirtualKey.GamepadRightShoulder && args.OnlyKey)
+            else if (args.Key is VirtualKey.Right or VirtualKey.GamepadRightShoulder && args.Modifiers == VirtualKeyModifiers.None)
             {
                 ChangeView(CarouselDirection.Next, false);
                 args.Handled = true;
             }
-            else if (args.VirtualKey is VirtualKey.R && args.OnlyControl)
+            else if (args.Key is VirtualKey.R && args.Modifiers == VirtualKeyModifiers.Control)
             {
-                Rotate_Click(null, null);
                 args.Handled = true;
+                Rotate_Click(null, null);
             }
-            else if (args.VirtualKey is VirtualKey.C && args.OnlyControl)
+            else if (args.Key is VirtualKey.C && args.Modifiers == VirtualKeyModifiers.Control)
             {
                 ViewModel?.Copy();
                 args.Handled = true;
             }
-            else if (args.VirtualKey is VirtualKey.S && args.OnlyControl)
+            else if (args.Key is VirtualKey.S && args.Modifiers == VirtualKeyModifiers.Control)
             {
                 ViewModel?.Save();
                 args.Handled = true;
             }
-            else if (args.VirtualKey is VirtualKey.F11 || (args.VirtualKey is VirtualKey.F && args.OnlyControl))
+            else if (args.Key is VirtualKey.F11 || (args.Key is VirtualKey.F && args.Modifiers == VirtualKeyModifiers.Control))
             {
                 FullScreen_Click(null, null);
                 args.Handled = true;
             }
-            else if (keyCode is 187 or 189 || args.VirtualKey is VirtualKey.Add or VirtualKey.Subtract)
+            else if (keyCode is 187 or 189 || args.Key is VirtualKey.Add or VirtualKey.Subtract)
             {
-                ScrollingHost.Zoom(keyCode is 187 || args.VirtualKey is VirtualKey.Add);
+                ScrollingHost.Zoom(keyCode is 187 || args.Key is VirtualKey.Add);
                 args.Handled = true;
             }
             else
             {
-                Controls.OnAcceleratorKeyActivated(args);
+                Controls.ProcessKeyboardAccelerators(args);
             }
         }
 
@@ -759,9 +780,9 @@ namespace Telegram.Controls.Gallery
 
         private void LayoutRoot_ViewChanged(object sender, CarouselViewChangedEventArgs e)
         {
-            if (ViewModel?.SelectedItem is GalleryMedia item && item.IsVideo && (item.IsLoop || SettingsService.Current.IsStreamingEnabled))
+            if (ViewModel?.SelectedItem is GalleryMedia item && item.IsVideo && (item.IsLoopingEnabled || SettingsService.Current.IsStreamingEnabled))
             {
-                Play(LayoutRoot.CurrentElement, item);
+                Play(CurrentElement, item);
             }
         }
 
@@ -775,6 +796,8 @@ namespace Telegram.Controls.Gallery
             ChangeView(CarouselDirection.Next, false);
         }
 
+        public GalleryContent CurrentElement => LayoutRoot.CurrentElement as GalleryContent;
+
         #region Flippitiflip
 
         protected override Size ArrangeOverride(Size finalSize)
@@ -783,7 +806,7 @@ namespace Telegram.Controls.Gallery
             LayoutRoot.Height = Math.Max(0, finalSize.Height - Padding.Top);
 
             // TODO: setting a max width/height to the element causes a weird clipping effect if
-            // the final calculated size is actually larger than that to accomodate for rotation
+            // the final calculated size is actually larger than that to accommodate for rotation
             //static void Apply(AspectView element, Size size)
             //{
             //    if (element.Constraint is not Size)
@@ -853,7 +876,7 @@ namespace Telegram.Controls.Gallery
             return false;
         }
 
-        private void PrepareNext(CarouselDirection direction, bool initialize = false, bool dispose = false)
+        private void PrepareNext(CarouselDirection direction, bool initialize = false, bool dispose = false, VideoPlayerBase player = null)
         {
             var viewModel = ViewModel;
             if (viewModel == null)
@@ -866,8 +889,8 @@ namespace Telegram.Controls.Gallery
                 out GalleryContent target,
                 out GalleryContent next);
 
-            previous.IsEnabled = false;
             target.IsEnabled = true;
+            previous.IsEnabled = false;
             next.IsEnabled = false;
 
             var index = viewModel.SelectedIndex;
@@ -885,8 +908,11 @@ namespace Telegram.Controls.Gallery
 
             if (UIViewSettings.GetForCurrentView().UserInteractionMode == UserInteractionMode.Mouse)
             {
-                PrevButton.Visibility = index > 0 ? Visibility.Visible : Visibility.Collapsed;
-                NextButton.Visibility = index < viewModel.Items.Count - 1 ? Visibility.Visible : Visibility.Collapsed;
+                PrevButton.IsEnabled = index > 0;
+                NextButton.IsEnabled = index < viewModel.Items.Count - 1;
+
+                PrevButton.Visibility = Visibility.Visible;
+                NextButton.Visibility = Visibility.Visible;
             }
             else
             {
@@ -897,7 +923,11 @@ namespace Telegram.Controls.Gallery
             if (set)
             {
                 Dispose();
-                viewModel.OpenMessage(viewModel.Items[index]);
+
+                if (viewModel.Items[index].HasProtectedContent is false)
+                {
+                    viewModel.OpenMessage(viewModel.Items[index]);
+                }
             }
             else if (dispose)
             {
@@ -907,7 +937,7 @@ namespace Telegram.Controls.Gallery
             var item = viewModel.Items[index];
             if (item.IsVideo /*&& initialize*/)
             {
-                Play(target, item);
+                Play(target, item, player);
             }
         }
 
@@ -961,10 +991,10 @@ namespace Telegram.Controls.Gallery
 
         private void PopulateContextRequested(MenuFlyout flyout, GalleryViewModelBase viewModel, GalleryMedia item)
         {
-            flyout.CreateFlyoutItem(() => item.CanView, viewModel.View, Strings.ShowInChat, Icons.ChatEmpty);
-            flyout.CreateFlyoutItem(() => item.CanShare, viewModel.Forward, Strings.Forward, Icons.Share);
-            flyout.CreateFlyoutItem(() => item.CanCopy, viewModel.Copy, Strings.Copy, Icons.DocumentCopy, VirtualKey.C);
-            flyout.CreateFlyoutItem(() => item.CanSave, viewModel.Save, Strings.SaveAs, Icons.SaveAs, VirtualKey.S);
+            flyout.CreateFlyoutItem(() => item.CanBeViewed, viewModel.View, Strings.ShowInChat, Icons.ChatEmpty);
+            flyout.CreateFlyoutItem(() => item.CanBeShared, viewModel.Forward, Strings.Forward, Icons.Share);
+            flyout.CreateFlyoutItem(() => item.CanBeCopied, viewModel.Copy, Strings.Copy, Icons.DocumentCopy, VirtualKey.C);
+            flyout.CreateFlyoutItem(() => item.CanBeSaved, viewModel.Save, Strings.SaveAs, Icons.SaveAs, VirtualKey.S);
 
             if (viewModel is UserPhotosViewModel userPhotos && userPhotos.CanDelete && userPhotos.SelectedIndex > 0)
             {
@@ -995,80 +1025,16 @@ namespace Telegram.Controls.Gallery
 
             //if (_mediaPlayer == null || _mediaPlayer.Source == null)
             {
-                Play(LayoutRoot.CurrentElement, item);
+                Play(CurrentElement, item);
             }
 
-            var width = 320d;
-            var height = 200d;
+            var player = _current.Video;
+            player.IsUnloadedExpected = true;
 
-            var constraint = item.Constraint;
-            if (constraint is MessageAnimation messageAnimation)
-            {
-                constraint = messageAnimation.Animation;
-            }
-            else if (constraint is MessageVideo messageVideo)
-            {
-                constraint = messageVideo.Video;
-            }
-
-            if (constraint is Animation animation)
-            {
-                width = animation.Width;
-                height = animation.Height;
-            }
-            else if (constraint is Video video)
-            {
-                width = video.Width;
-                height = video.Height;
-            }
-
-            if (width > 320 || height > 320)
-            {
-                var ratioX = 320d / width;
-                var ratioY = 320d / height;
-                var ratio = Math.Min(ratioX, ratioY);
-
-                width *= ratio;
-                height *= ratio;
-            }
-
-            var aggregator = TypeResolver.Current.Resolve<IEventAggregator>(viewModel.SessionId);
-            var viewService = TypeResolver.Current.Resolve<IViewService>(viewModel.SessionId);
-
-            //var mediaPlayer = _mediaPlayer;
-            //var fileStream = _fileStream;
-
-            _current.Stop(out int fileId, out long time);
-
-            var fileStream = new RemoteFileStream(ViewModel.ClientService, item.GetFile());
-
-            if (GalleryCompactWindow.Current is ViewLifetimeControl control)
-            {
-                control.Dispatcher.Dispatch(() =>
-                {
-                    if (control.Window.Content is GalleryCompactWindow player)
-                    {
-                        player.Play(viewModel, fileStream, time);
-                    }
-
-                    ApplicationView.GetForCurrentView().TryResizeView(new Size(width, height));
-                });
-            }
-            else
-            {
-                var parameters = new ViewServiceParams
-                {
-                    ViewMode = ApplicationViewMode.CompactOverlay,
-                    Width = width,
-                    Height = height,
-                    PersistentId = "PIP",
-                    Content = control => new GalleryCompactWindow(control, viewModel, fileStream, time)
-                };
-
-                _ = viewService.OpenAsync(parameters);
-            }
-
+            _current.Video = null;
             OnBackRequestedOverride(this, new BackRequestedRoutedEventArgs());
+
+            GalleryCompactOverlay.CreateOrUpdate(viewModel, item, player);
         }
 
         #endregion

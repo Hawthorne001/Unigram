@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,39 +10,25 @@ using Telegram.Td.Api;
 
 namespace Telegram.ViewModels.Gallery
 {
-    public class GalleryVideo : GalleryMedia
+    public partial class GalleryVideo : GalleryMedia
     {
         private readonly Video _video;
         private readonly FormattedText _caption;
+        private readonly bool _protect;
 
-        public GalleryVideo(IClientService clientService, Video video)
+        public GalleryVideo(IClientService clientService, Video video, FormattedText caption = null, bool protect = false)
             : base(clientService)
         {
             _video = video;
-        }
+            _caption = caption ?? new FormattedText(string.Empty, Array.Empty<TextEntity>());
+            _protect = protect;
 
-        public GalleryVideo(IClientService clientService, Video video, FormattedText caption)
-            : base(clientService)
-        {
-            _video = video;
-            _caption = caption;
-        }
+            File = _video.VideoValue;
 
-        //public long Id => _video.Id;
-
-        public override File GetFile()
-        {
-            return _video.VideoValue;
-        }
-
-        public override File GetThumbnail()
-        {
-            if (_video.Thumbnail?.Format is ThumbnailFormatJpeg)
+            if (_video.Thumbnail is { Format: ThumbnailFormatJpeg })
             {
-                return _video.Thumbnail?.File;
+                Thumbnail = _video.Thumbnail.File;
             }
-
-            return null;
         }
 
         public override object Constraint => _video;
@@ -53,16 +39,14 @@ namespace Telegram.ViewModels.Gallery
 
         public override bool IsVideo => true;
 
-        public override bool CanSave => true;
-        public override bool CanShare => true;
+        public override bool CanBeSaved => !_protect;
+        public override bool CanBeShared => !_protect;
 
         public override int Duration => _video.Duration;
 
-        public override string MimeType => _video.MimeType;
-
         public override InputMessageContent ToInput()
         {
-            return new InputMessageVideo(new InputFileId(_video.VideoValue.Id), _video.Thumbnail?.ToInput(), Array.Empty<int>(), _video.Duration, _video.Width, _video.Height, _video.SupportsStreaming, null, null, false);
+            return new InputMessageVideo(new InputFileId(_video.VideoValue.Id), _video.Thumbnail?.ToInput(), Array.Empty<int>(), _video.Duration, _video.Width, _video.Height, _video.SupportsStreaming, null, false, null, false);
         }
     }
 }

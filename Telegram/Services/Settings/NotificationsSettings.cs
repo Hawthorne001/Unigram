@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,7 @@ using Windows.Storage;
 
 namespace Telegram.Services.Settings
 {
-    public class NotificationsSettings : SettingsServiceBase
+    public partial class NotificationsSettings : SettingsServiceBase
     {
         private readonly Dictionary<Type, ScopeNotificationSettings> _scopeNotificationSettings = new();
 
@@ -23,17 +23,22 @@ namespace Telegram.Services.Settings
 
         public Dictionary<Type, ScopeNotificationSettings> Scope => _scopeNotificationSettings;
 
-        public int GetMutedFor(Chat chat, ForumTopic topic)
+        public int GetMuteFor(Chat chat, ForumTopic topic)
         {
             if (topic.NotificationSettings.UseDefaultMuteFor)
             {
-                return GetMutedFor(chat);
+                return GetMuteFor(chat);
             }
 
             return topic.NotificationSettings.MuteFor;
         }
 
-        public int GetMutedFor(Chat chat)
+        public bool IsMuted(Chat chat)
+        {
+            return GetMuteFor(chat) > 0;
+        }
+
+        public int GetMuteFor(Chat chat)
         {
             if (chat.NotificationSettings.UseDefaultMuteFor && TryGetScope(chat, out var scope))
             {
@@ -102,6 +107,27 @@ namespace Telegram.Services.Settings
             set => AddOrUpdateValue(ref _inAppPreview, "InAppPreview", value);
         }
 
+        private bool? _showName;
+        public bool ShowName
+        {
+            get => _showName ??= GetValueOrDefault("ShowName", true);
+            set => AddOrUpdateValue(ref _showName, "ShowName", value);
+        }
+
+        private bool? _showText;
+        public bool ShowText
+        {
+            get => _showText ??= GetValueOrDefault("ShowText", true);
+            set => AddOrUpdateValue(ref _showText, "ShowText", value);
+        }
+
+        private bool? _showReply;
+        public bool ShowReply
+        {
+            get => _showReply ??= GetValueOrDefault("ShowReply", true);
+            set => AddOrUpdateValue(ref _showReply, "ShowReply", value);
+        }
+
         private bool? _inAppVibrate;
         public bool InAppVibrate
         {
@@ -130,11 +156,25 @@ namespace Telegram.Services.Settings
             set => AddOrUpdateValue(ref _includeMutedChats, "IncludeMutedChats", value);
         }
 
+        private bool? _includeMutedChatsInFolderCounters;
+        public bool IncludeMutedChatsInFolderCounters
+        {
+            get => _includeMutedChatsInFolderCounters ??= GetValueOrDefault("IncludeMutedChatsInFolderCounters", true);
+            set => AddOrUpdateValue(ref _includeMutedChatsInFolderCounters, "IncludeMutedChatsInFolderCounters", value);
+        }
+
         private bool? _countUnreadMessages;
         public bool CountUnreadMessages
         {
             get => _countUnreadMessages ??= GetValueOrDefault("CountUnreadMessages", true);
             set => AddOrUpdateValue(ref _countUnreadMessages, "CountUnreadMessages", value);
+        }
+
+        private bool? _hasRemovedCollections;
+        public bool HasRemovedCollections
+        {
+            get => _hasRemovedCollections ?? GetValueOrDefault("HasRemovedCollections", false);
+            set => AddOrUpdateValue(ref _hasRemovedCollections, "HasRemovedCollections", value);
         }
     }
 }

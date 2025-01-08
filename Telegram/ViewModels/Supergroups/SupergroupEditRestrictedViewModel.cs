@@ -1,10 +1,11 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Navigation;
@@ -12,20 +13,31 @@ using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
-using Telegram.Views.Popups;
 using Telegram.Views.Supergroups.Popups;
-using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Supergroups
 {
-    public class SupergroupEditRestrictedViewModel : ViewModelBase, IDelegable<IMemberPopupDelegate>
+    public partial record SelectionValue(int Value, string Text, bool IsCustom = false);
+
+    public partial class SupergroupEditRestrictedViewModel : ViewModelBase, IDelegable<IMemberPopupDelegate>
     {
         public IMemberPopupDelegate Delegate { get; set; }
 
         public SupergroupEditRestrictedViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
         {
+            var time = DateTime.Now.ToTimestamp();
+
+            Duration = new()
+            {
+                new SelectionValue(time + 60 * 60, Locale.Declension(Strings.R.Hours, 1)),
+                new SelectionValue(time + 60 * 60 * 24, Locale.Declension(Strings.R.Days, 1)),
+                new SelectionValue(time + 60 * 60 * 24 * 7, Locale.Declension(Strings.R.Weeks, 1)),
+                new SelectionValue(time + 60 * 60 * 24 * 30, Locale.Declension(Strings.R.Months, 1)),
+                new SelectionValue(int.MaxValue, Strings.UserRestrictionsUntilForever),
+                new SelectionValue(int.MinValue, Strings.LimitByPeriodCustom)
+            };
         }
 
         private Chat _chat;
@@ -42,6 +54,15 @@ namespace Telegram.ViewModels.Supergroups
         {
             get => _member;
             set => Set(ref _member, value);
+        }
+
+        public ObservableCollection<SelectionValue> Duration { get; }
+
+        private SelectionValue _selectedDuration;
+        public SelectionValue SelectedDuration
+        {
+            get => _selectedDuration;
+            set => Set(ref _selectedDuration, value);
         }
 
         protected override async Task OnNavigatedToAsync(object parameter, NavigationMode mode, NavigationState state)
@@ -83,20 +104,19 @@ namespace Telegram.ViewModels.Supergroups
 
                 if (member.Status is ChatMemberStatusRestricted restricted)
                 {
-                    CanChangeInfo = restricted.Permissions.CanChangeInfo;
-                    CanPinMessages = restricted.Permissions.CanPinMessages;
-                    CanInviteUsers = restricted.Permissions.CanInviteUsers;
-                    CanSendPhotos = restricted.Permissions.CanSendPhotos;
-                    CanSendVideos = restricted.Permissions.CanSendVideos;
-                    CanSendOtherMessages = restricted.Permissions.CanSendOtherMessages;
-                    CanSendAudios = restricted.Permissions.CanSendAudios;
-                    CanSendDocuments = restricted.Permissions.CanSendDocuments;
-                    CanSendVoiceNotes = restricted.Permissions.CanSendVoiceNotes;
-                    CanSendVideoNotes = restricted.Permissions.CanSendVideoNotes;
-                    CanSendPolls = restricted.Permissions.CanSendPolls;
-                    CanAddWebPagePreviews = restricted.Permissions.CanAddWebPagePreviews;
-                    CanSendBasicMessages = restricted.Permissions.CanSendBasicMessages;
-                    UntilDate = restricted.RestrictedUntilDate;
+                    CanChangeInfo = restricted.Permissions.CanChangeInfo && chat.Permissions.CanChangeInfo;
+                    CanPinMessages = restricted.Permissions.CanPinMessages && chat.Permissions.CanPinMessages;
+                    CanInviteUsers = restricted.Permissions.CanInviteUsers && chat.Permissions.CanInviteUsers;
+                    CanSendPhotos = restricted.Permissions.CanSendPhotos && chat.Permissions.CanSendPhotos;
+                    CanSendVideos = restricted.Permissions.CanSendVideos && chat.Permissions.CanSendVideos;
+                    CanSendOtherMessages = restricted.Permissions.CanSendOtherMessages && chat.Permissions.CanSendOtherMessages;
+                    CanSendAudios = restricted.Permissions.CanSendAudios && chat.Permissions.CanSendAudios;
+                    CanSendDocuments = restricted.Permissions.CanSendDocuments && chat.Permissions.CanSendDocuments;
+                    CanSendVoiceNotes = restricted.Permissions.CanSendVoiceNotes && chat.Permissions.CanSendVoiceNotes;
+                    CanSendVideoNotes = restricted.Permissions.CanSendVideoNotes && chat.Permissions.CanSendVideoNotes;
+                    CanSendPolls = restricted.Permissions.CanSendPolls && chat.Permissions.CanSendPolls;
+                    CanAddLinkPreviews = restricted.Permissions.CanAddLinkPreviews && chat.Permissions.CanAddLinkPreviews;
+                    CanSendBasicMessages = restricted.Permissions.CanSendBasicMessages && chat.Permissions.CanSendBasicMessages;
                 }
                 else if (member.Status is ChatMemberStatusBanned banned)
                 {
@@ -105,7 +125,6 @@ namespace Telegram.ViewModels.Supergroups
                     CanInviteUsers = false;
                     CanSendMediaMessages = false;
                     CanSendBasicMessages = false;
-                    UntilDate = banned.BannedUntilDate;
                 }
                 else
                 {
@@ -120,9 +139,8 @@ namespace Telegram.ViewModels.Supergroups
                     CanSendVoiceNotes = chat.Permissions.CanSendVoiceNotes;
                     CanSendVideoNotes = chat.Permissions.CanSendVideoNotes;
                     CanSendPolls = chat.Permissions.CanSendPolls;
-                    CanAddWebPagePreviews = chat.Permissions.CanAddWebPagePreviews;
+                    CanAddLinkPreviews = chat.Permissions.CanAddLinkPreviews;
                     CanSendBasicMessages = chat.Permissions.CanSendBasicMessages;
-                    UntilDate = 0;
                 }
             }
         }
@@ -138,9 +156,9 @@ namespace Telegram.ViewModels.Supergroups
                 Set(ref _canSendBasicMessages, value);
 
                 // Don't allow send media
-                if (!value && _canAddWebPagePreviews)
+                if (!value && _CanAddLinkPreviews)
                 {
-                    CanAddWebPagePreviews = false;
+                    CanAddLinkPreviews = false;
                 }
             }
         }
@@ -163,7 +181,7 @@ namespace Telegram.ViewModels.Supergroups
                     CanSendVoiceNotes = value.Value;
                     CanSendVideoNotes = value.Value;
                     CanSendPolls = value.Value;
-                    CanAddWebPagePreviews = value.Value;
+                    CanAddLinkPreviews = value.Value;
                 }
             }
         }
@@ -179,7 +197,7 @@ namespace Telegram.ViewModels.Supergroups
         private int Count()
         {
             var count = 0;
-            if (_canAddWebPagePreviews)
+            if (_CanAddLinkPreviews)
             {
                 count++;
             }
@@ -315,13 +333,13 @@ namespace Telegram.ViewModels.Supergroups
             }
         }
 
-        private bool _canAddWebPagePreviews;
-        public bool CanAddWebPagePreviews
+        private bool _CanAddLinkPreviews;
+        public bool CanAddLinkPreviews
         {
-            get => _canAddWebPagePreviews;
+            get => _CanAddLinkPreviews;
             set
             {
-                Set(ref _canAddWebPagePreviews, value);
+                Set(ref _CanAddLinkPreviews, value);
                 UpdateCanSendMediaMessages();
             }
         }
@@ -350,13 +368,6 @@ namespace Telegram.ViewModels.Supergroups
         }
 
         #endregion
-
-        private int _untilDate;
-        public int UntilDate
-        {
-            get => _untilDate;
-            set => Set(ref _untilDate, value);
-        }
 
         public void OpenProfile()
         {
@@ -393,7 +404,7 @@ namespace Telegram.ViewModels.Supergroups
             var status = new ChatMemberStatusRestricted
             {
                 IsMember = true,
-                RestrictedUntilDate = _untilDate,
+                RestrictedUntilDate = SelectedDuration?.Value ?? 0,
                 Permissions = new ChatPermissions
                 {
                     CanChangeInfo = _canChangeInfo,
@@ -407,7 +418,7 @@ namespace Telegram.ViewModels.Supergroups
                     CanSendVoiceNotes = _canSendVoiceNotes,
                     CanSendVideoNotes = _canSendVideoNotes,
                     CanSendPolls = _canSendPolls,
-                    CanAddWebPagePreviews = _canAddWebPagePreviews,
+                    CanAddLinkPreviews = _CanAddLinkPreviews,
                     CanSendBasicMessages = _canSendBasicMessages,
                 }
             };
@@ -423,21 +434,27 @@ namespace Telegram.ViewModels.Supergroups
             }
         }
 
-        public async void EditUntil()
+        public ChatMemberStatus SelectedStatus => new ChatMemberStatusRestricted
         {
-            // TODO: this is currently unsupported
-
-            var dialog = new SupergroupEditRestrictedUntilPopup(_untilDate);
-            var confirm = await ShowPopupAsync(dialog);
-            if (confirm == ContentDialogResult.Primary)
+            IsMember = true,
+            RestrictedUntilDate = SelectedDuration?.Value ?? 0,
+            Permissions = new ChatPermissions
             {
-                UntilDate = dialog.Value <= DateTime.Now ? 0 : dialog.Value.ToTimestamp();
+                CanChangeInfo = _canChangeInfo,
+                CanPinMessages = _canPinMessages,
+                CanInviteUsers = _canInviteUsers,
+                CanSendPhotos = _canSendPhotos,
+                CanSendVideos = _canSendVideos,
+                CanSendOtherMessages = _canSendOtherMessages,
+                CanSendAudios = _canSendAudios,
+                CanSendDocuments = _canSendDocuments,
+                CanSendVoiceNotes = _canSendVoiceNotes,
+                CanSendVideoNotes = _canSendVideoNotes,
+                CanSendPolls = _canSendPolls,
+                CanAddLinkPreviews = _CanAddLinkPreviews,
+                CanSendBasicMessages = _canSendBasicMessages,
             }
-            else if (confirm == ContentDialogResult.Secondary)
-            {
-                UntilDate = 0;
-            }
-        }
+        };
 
         public async void Dismiss()
         {

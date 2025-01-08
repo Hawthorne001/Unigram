@@ -1,16 +1,16 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
-using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Telegram.Common;
 using Telegram.Native;
+using Telegram.Navigation;
 using Telegram.Td.Api;
 using Windows.Foundation;
 using Windows.UI;
@@ -22,7 +22,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class LoadingTextBlock : Control
+    public partial class LoadingTextBlock : Control
     {
         private ContainerVisual _skeleton;
         private SpriteVisual _foreground;
@@ -37,8 +37,8 @@ namespace Telegram.Controls
 
         protected override void OnApplyTemplate()
         {
-            var ease = Window.Current.Compositor.CreateLinearEasingFunction();
-            var animation = Window.Current.Compositor.CreateVector3KeyFrameAnimation();
+            var ease = BootStrapper.Current.Compositor.CreateLinearEasingFunction();
+            var animation = BootStrapper.Current.Compositor.CreateVector3KeyFrameAnimation();
             animation.InsertKeyFrame(0, new Vector3(-1, 0, 0), ease);
             animation.InsertKeyFrame(1, new Vector3(0, 0, 0), ease);
             animation.IterationBehavior = AnimationIterationBehavior.Forever;
@@ -47,19 +47,19 @@ namespace Telegram.Controls
             var backgroundColor = GetColor(BorderBrushProperty);
             var foregroundColor = GetColor(BackgroundProperty);
 
-            var gradient = Window.Current.Compositor.CreateLinearGradientBrush();
-            gradient.ColorStops.Add(Window.Current.Compositor.CreateColorGradientStop(0, Color.FromArgb(0x00, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
-            gradient.ColorStops.Add(Window.Current.Compositor.CreateColorGradientStop(0.67f, Color.FromArgb(0x67, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
-            gradient.ColorStops.Add(Window.Current.Compositor.CreateColorGradientStop(1, Color.FromArgb(0x00, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
+            var gradient = BootStrapper.Current.Compositor.CreateLinearGradientBrush();
+            gradient.ColorStops.Add(BootStrapper.Current.Compositor.CreateColorGradientStop(0, Color.FromArgb(0x00, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
+            gradient.ColorStops.Add(BootStrapper.Current.Compositor.CreateColorGradientStop(0.67f, Color.FromArgb(0x67, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
+            gradient.ColorStops.Add(BootStrapper.Current.Compositor.CreateColorGradientStop(1, Color.FromArgb(0x00, backgroundColor.R, backgroundColor.G, backgroundColor.B)));
             gradient.StartPoint = new Vector2(0, 0);
             gradient.EndPoint = new Vector2(0.5f, 0);
             gradient.ExtendMode = CompositionGradientExtendMode.Wrap;
 
-            var background = Window.Current.Compositor.CreateSpriteVisual();
+            var background = BootStrapper.Current.Compositor.CreateSpriteVisual();
             background.RelativeSizeAdjustment = Vector2.One;
-            background.Brush = Window.Current.Compositor.CreateColorBrush(foregroundColor);
+            background.Brush = BootStrapper.Current.Compositor.CreateColorBrush(foregroundColor);
 
-            _foreground = Window.Current.Compositor.CreateSpriteVisual();
+            _foreground = BootStrapper.Current.Compositor.CreateSpriteVisual();
             _foreground.RelativeSizeAdjustment = new Vector2(2, 1);
             _foreground.Brush = gradient;
             _foreground.StartAnimation("RelativeOffsetAdjustment", animation);
@@ -67,7 +67,7 @@ namespace Telegram.Controls
             _placeholder = GetTemplateChild("Placeholder") as TextBlock;
             _presenter = GetTemplateChild("Presenter") as TextBlock;
 
-            _skeleton = Window.Current.Compositor.CreateContainerVisual();
+            _skeleton = BootStrapper.Current.Compositor.CreateContainerVisual();
             _skeleton.Children.InsertAtTop(background);
             _skeleton.Children.InsertAtTop(_foreground);
             _skeleton.Opacity = 0.67f;
@@ -93,7 +93,7 @@ namespace Telegram.Controls
 
         private CompositionBrush GetBrush(DependencyProperty dp)
         {
-            return Window.Current.Compositor.CreateColorBrush(GetColor(dp));
+            return BootStrapper.Current.Compositor.CreateColorBrush(GetColor(dp));
         }
 
         #region PlaceholderText
@@ -149,13 +149,13 @@ namespace Telegram.Controls
 
             await this.UpdateLayoutAsync();
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 _placeholder.Visibility = Visibility.Collapsed;
             };
 
-            var fadeIn = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
+            var fadeIn = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
             fadeIn.InsertKeyFrame(0, 0);
             fadeIn.InsertKeyFrame(1, 1);
 
@@ -164,8 +164,8 @@ namespace Telegram.Controls
 
             visual1.StartAnimation("Opacity", fadeIn);
 
-            var size1 = _presenter.DesiredSize.ToVector2();
-            var size2 = _placeholder.DesiredSize.ToVector2();
+            var size1 = _presenter.ActualSize;
+            var size2 = _placeholder.ActualSize;
 
             var final = new Vector2(MathF.Max(size1.X, size2.X), MathF.Max(size1.Y, size2.Y));
 
@@ -185,7 +185,7 @@ namespace Telegram.Controls
             var width = MathF.Max(actualWidth - left, actualHeight - top);
             var diaginal = MathF.Sqrt((width * width) + (width * width));
 
-            var device = CanvasDevice.GetSharedDevice();
+            var device = ElementComposition.GetSharedDevice();
 
             var rect1 = CanvasGeometry.CreateRectangle(device, 0, 0, show ? 0 : actualWidth, show ? 0 : actualHeight);
 
@@ -195,11 +195,11 @@ namespace Telegram.Controls
             var elli2 = CanvasGeometry.CreateCircle(device, left, top, diaginal);
             var group2 = CanvasGeometry.CreateGroup(device, new[] { elli2, rect1 }, CanvasFilledRegionDetermination.Alternate);
 
-            var ellipse = Window.Current.Compositor.CreatePathGeometry(new CompositionPath(group2));
-            var clip = Window.Current.Compositor.CreateGeometricClip(ellipse);
+            var ellipse = BootStrapper.Current.Compositor.CreatePathGeometry(new CompositionPath(group2));
+            var clip = BootStrapper.Current.Compositor.CreateGeometricClip(ellipse);
 
-            var ease = Window.Current.Compositor.CreateCubicBezierEasingFunction(new Vector2(.42f, 0), new Vector2(1, 1));
-            var anim = Window.Current.Compositor.CreatePathKeyFrameAnimation();
+            var ease = BootStrapper.Current.Compositor.CreateCubicBezierEasingFunction(new Vector2(.42f, 0), new Vector2(1, 1));
+            var anim = BootStrapper.Current.Compositor.CreatePathKeyFrameAnimation();
             anim.InsertKeyFrame(0, new CompositionPath(group1), ease);
             anim.InsertKeyFrame(1, new CompositionPath(group2), ease);
             anim.Duration = TimeSpan.FromMilliseconds(500);
@@ -270,7 +270,7 @@ namespace Telegram.Controls
                 return finalSize;
             }
 
-            var device = CanvasDevice.GetSharedDevice();
+            var device = ElementComposition.GetSharedDevice();
             var list = new List<CanvasGeometry>();
 
             var left = (float)Padding.Left;
@@ -287,7 +287,7 @@ namespace Telegram.Controls
                 list.Add(CanvasGeometry.CreateRoundedRectangle(device, new Rect(left + rect.X - 4, top + rect.Y - 2, rect.Width + 6, rect.Height + 6), 4, 4));
             }
 
-            _skeleton.Clip = Window.Current.Compositor.CreateGeometricClip(Window.Current.Compositor.CreatePathGeometry(new CompositionPath(CanvasGeometry.CreateGroup(device, list.ToArray(), CanvasFilledRegionDetermination.Winding))));
+            _skeleton.Clip = BootStrapper.Current.Compositor.CreateGeometricClip(BootStrapper.Current.Compositor.CreatePathGeometry(new CompositionPath(CanvasGeometry.CreateGroup(device, list.ToArray(), CanvasFilledRegionDetermination.Winding))));
             _skeleton.Size = _placeholder.DesiredSize.ToVector2();
 
             return finalSize;

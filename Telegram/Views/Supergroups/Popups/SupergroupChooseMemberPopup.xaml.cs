@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -8,7 +8,6 @@ using System;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Cells;
-using Telegram.Streams;
 using Telegram.Td;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
@@ -25,7 +24,7 @@ namespace Telegram.Views.Supergroups.Popups
         Block
     }
 
-    public class SupergroupChooseMemberArgs
+    public partial class SupergroupChooseMemberArgs
     {
         public SupergroupChooseMemberArgs(long chatId, SupergroupChooseMemberMode mode)
         {
@@ -62,7 +61,7 @@ namespace Telegram.Views.Supergroups.Popups
             };
         }
 
-        public override void OnNavigatedTo()
+        public override void OnNavigatedTo(object parameter)
         {
             Title = ViewModel.Mode switch
             {
@@ -91,7 +90,7 @@ namespace Telegram.Views.Supergroups.Popups
                     var text = string.Format(Strings.MessageLockedPremiumLocked, tempUser.FirstName);
                     var markdown = ClientEx.ParseMarkdown(text);
 
-                    var confirm = await ToastPopup.ShowActionAsync(markdown, Strings.UserBlockedNonPremiumButton, new LocalFileSource("ms-appx:///Assets/Toasts/Premium.tgs"));
+                    var confirm = await ToastPopup.ShowActionAsync(XamlRoot, markdown, Strings.UserBlockedNonPremiumButton, ToastPopupIcon.Premium);
                     if (confirm == ContentDialogResult.Primary)
                     {
                         Hide();
@@ -110,19 +109,19 @@ namespace Telegram.Views.Supergroups.Popups
             }
             else
             {
-                var sourcePopupType = ViewModel.Mode switch
+                ContentPopup popup = ViewModel.Mode switch
                 {
-                    SupergroupChooseMemberMode.Promote => typeof(SupergroupEditAdministratorPopup),
-                    SupergroupChooseMemberMode.Restrict => typeof(SupergroupEditRestrictedPopup),
+                    SupergroupChooseMemberMode.Promote => new SupergroupEditAdministratorPopup(),
+                    SupergroupChooseMemberMode.Restrict => new SupergroupEditRestrictedPopup(),
                     _ => null
                 };
 
-                if (sourcePopupType == null)
+                if (popup == null)
                 {
                     return;
                 }
 
-                _ = ViewModel.NavigationService.ShowPopupAsync(sourcePopupType, new SupergroupEditMemberArgs(chat.Id, messageSender));
+                _ = ViewModel.NavigationService.ShowPopupAsync(popup, new SupergroupEditMemberArgs(chat.Id, messageSender));
             }
         }
 

@@ -17,23 +17,34 @@
                    Margin="0,0,0,4"
                    Style="{StaticResource BodyTextBlockStyle}" />
 
-        <TextBox x:Name="Label"
-                 x:Load="False"
-                 Margin="0,12,0,0"
-                 VerticalAlignment="Top"
-                 TextChanged="Label_TextChanged"
-                 KeyDown="Label_KeyDown" />
-        <PasswordBox x:Name="Password"
+        <Grid Margin="0,12,0,0"
+              VerticalAlignment="Top">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36" />
+                <ColumnDefinition />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="Label"
                      x:Load="False"
-                     Margin="0,12,0,0"
-                     VerticalAlignment="Top"
-                     PasswordChanged="Label_PasswordChanged"
-                     KeyDown="Label_KeyDown" />
-        <muxc:NumberBox x:Name="Number"
-                        x:Load="False"
-                        Margin="0,12,0,0"
-                        VerticalAlignment="Top"
-                        ValueChanged="Number_ValueChanged"
-                        KeyDown="Label_KeyDown" />
+                     TextChanged="Label_TextChanged"
+                     KeyDown="Label_KeyDown"
+                     Grid.ColumnSpan="2" />
+            <PasswordBox x:Name="Password"
+                         x:Load="False"
+                         PasswordChanged="Label_PasswordChanged"
+                         KeyDown="Label_KeyDown"
+                         Grid.ColumnSpan="2" />
+            <muxc:NumberBox x:Name="Number"
+                            x:Load="False"
+                            ValueChanged="Number_ValueChanged"
+                            KeyDown="Label_KeyDown"
+                            Grid.ColumnSpan="2" />
+
+            <controls:PremiumStarCount x:Name="StarCount"
+                                       x:Load="False"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Width="24"
+                                       Height="24" />
+        </Grid>
     </StackPanel>
 </controls:ContentPopup>

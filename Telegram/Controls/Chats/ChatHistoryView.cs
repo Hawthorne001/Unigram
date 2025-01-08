@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -27,7 +27,7 @@ using VirtualKey = Windows.System.VirtualKey;
 
 namespace Telegram.Controls.Chats
 {
-    public class ChatHistoryView : ListViewEx
+    public partial class ChatHistoryView : ListViewEx
     {
         public DialogViewModel ViewModel { get; set; }
         public IDialogDelegate Delegate { get; set; }
@@ -319,7 +319,7 @@ namespace Telegram.Controls.Chats
 
             // calculate the position object in order to know how much to scroll to
             var transform = selectorItem.TransformToVisual((UIElement)scrollViewer.Content);
-            var position = transform.TransformPoint(new Point(0, 0));
+            var position = transform.TransformPoint(new Point());
 
             if (alignment == VerticalAlignment.Top)
             {
@@ -529,10 +529,10 @@ namespace Telegram.Controls.Chats
 
         private void Recognizer_Tapped(GestureRecognizer sender, TappedEventArgs args)
         {
-            if (args.TapCount == 2 && args.PointerDeviceType == PointerDeviceType.Mouse)
+            if (args.TapCount == 2)
             {
                 _raised = true;
-                sender.CompleteGesture();
+                sender.TryCompleteGesture();
 
                 var children = VisualTreeHelper.FindElementsInHostCoordinates(args.Position, this);
                 var selector = children?.FirstOrDefault(x => x is SelectorItem) as SelectorItem;
@@ -556,26 +556,19 @@ namespace Telegram.Controls.Chats
         {
             if (IsSelectionEnabled is false && !_pressed)
             {
-                var point = e.GetCurrentPoint(Window.Current.Content as FrameworkElement);
+                var point = e.GetCurrentPoint(XamlRoot.Content);
                 if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed && e.Pointer.PointerDeviceType == PointerDeviceType.Mouse)
                 {
-                    try
-                    {
-                        _recognizer.ProcessDownEvent(point);
-                    }
-                    catch
-                    {
-                        _recognizer.CompleteGesture();
-                    }
+                    _recognizer.TryProcessDownEvent(point);
                 }
                 else if (_recognizer.IsActive)
                 {
-                    _recognizer.CompleteGesture();
+                    _recognizer.TryCompleteGesture();
                 }
             }
             else if (_recognizer.IsActive)
             {
-                _recognizer.CompleteGesture();
+                _recognizer.TryCompleteGesture();
             }
 
             _pressed = !_raised;
@@ -732,21 +725,14 @@ namespace Telegram.Controls.Chats
 
         internal void OnPointerReleased(MessageSelector item, PointerRoutedEventArgs e)
         {
-            var point = e.GetCurrentPoint(Window.Current.Content as FrameworkElement);
+            var point = e.GetCurrentPoint(XamlRoot.Content);
             if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonReleased && e.Pointer.PointerDeviceType == PointerDeviceType.Mouse)
             {
-                try
-                {
-                    _recognizer.ProcessUpEvent(point);
-                }
-                catch
-                {
-                    _recognizer.CompleteGesture();
-                }
+                _recognizer.TryProcessUpEvent(point);
             }
             else if (_recognizer.IsActive)
             {
-                _recognizer.CompleteGesture();
+                _recognizer.TryCompleteGesture();
             }
 
             var handled = _firstItem != null && ViewModel.SelectedItems.ContainsKey(_firstItem.Id) == _operation;
@@ -762,7 +748,7 @@ namespace Telegram.Controls.Chats
                 return;
             }
 
-            if (ViewModel.SelectedItems.Count < 1)
+            if (ViewModel.SelectedItems.Count < 1 && ViewModel.IsReportingMessages == null)
             {
                 IsSelectionEnabled = false;
             }
@@ -772,7 +758,7 @@ namespace Telegram.Controls.Chats
 
         internal void OnPointerCanceled(MessageSelector item, PointerRoutedEventArgs e)
         {
-            _recognizer.CompleteGesture();
+            _recognizer.TryCompleteGesture();
         }
 
         enum SelectionDirection

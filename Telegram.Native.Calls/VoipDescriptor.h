@@ -7,7 +7,15 @@ namespace winrt::Telegram::Native::Calls::implementation
 {
     struct VoipDescriptor : VoipDescriptorT<VoipDescriptor>
     {
-        VoipDescriptor();
+        VoipDescriptor() = default;
+
+        hstring m_version;
+        hstring Version();
+        void Version(hstring value);
+
+        hstring m_customParameters;
+        hstring CustomParameters();
+        void CustomParameters(hstring value);
 
         double m_initializationTimeout{ 0 };
         double InitializationTimeout();

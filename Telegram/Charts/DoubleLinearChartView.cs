@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -14,7 +14,7 @@ using Telegram.Charts.DataView;
 
 namespace Telegram.Charts
 {
-    public class DoubleLinearChartView : BaseChartView<DoubleLinearChartData, LineViewData>
+    public partial class DoubleLinearChartView : BaseChartView<DoubleLinearChartData, LineViewData>
     {
         protected bool drawSteps = true;
 
@@ -487,7 +487,7 @@ namespace Telegram.Charts
                 int rightIndex = chartData.linesK[0] == 1 ? 1 : 0;
                 k = chartData.linesK[rightIndex];
             }
-            return new ChartHorizontalLinesData(newMaxHeight, newMinHeight, useMinHeight, useCrypto, k);
+            return new ChartHorizontalLinesData(newMaxHeight, newMinHeight, useMinHeight, currency, k);
         }
     }
 }

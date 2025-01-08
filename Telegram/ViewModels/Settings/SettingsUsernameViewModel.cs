@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Settings
 {
-    public class SettingsUsernameViewModel : ViewModelBase, IHandle
+    public partial class SettingsUsernameViewModel : ViewModelBase, IHandle
     {
         private long _userId;
 
@@ -413,11 +413,11 @@ namespace Telegram.ViewModels.Settings
 
         public void Copy()
         {
-            MessageHelper.CopyLink(ClientService, new InternalLinkTypePublicChat(_username, string.Empty));
+            MessageHelper.CopyLink(ClientService, XamlRoot, new InternalLinkTypePublicChat(_username, string.Empty, false));
         }
     }
 
-    public class UsernameInfo : BindableBase
+    public partial class UsernameInfo : BindableBase
     {
         private readonly IClientService _clientService;
         private readonly bool _tme;
@@ -485,7 +485,7 @@ namespace Telegram.ViewModels.Settings
         public bool IsEditable { get; }
     }
 
-    public class UsernameInfoDiffHandler : IDiffHandler<UsernameInfo>
+    public partial class UsernameInfoDiffHandler : IDiffHandler<UsernameInfo>
     {
         public bool CompareItems(UsernameInfo oldItem, UsernameInfo newItem)
         {

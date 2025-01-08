@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Shapes;
 
 namespace Telegram.Controls.Messages.Content
 {
-    public sealed class VideoNoteContent : Control, IContentWithFile, IContentWithMask, IPlayerView
+    public sealed partial class VideoNoteContent : Control, IContentWithFile, IContentWithMask, IPlayerView
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -150,7 +150,7 @@ namespace Telegram.Controls.Messages.Content
 
                 Player.Source = null;
             }
-            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed)
+            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed || (message.SendingState is MessageSendingStatePending && !file.Remote.IsUploadingCompleted))
             {
                 //Button.Glyph = Icons.Cancel;
                 Button.SetGlyph(file.Id, MessageContentState.Uploading);
@@ -257,9 +257,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return true;
             }
-            else if (content is MessageText text && text.WebPage != null && !primary)
+            else if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return text.WebPage.VideoNote != null;
+                return text.LinkPreview.Type is LinkPreviewTypeVideoNote;
             }
 
             return false;
@@ -279,10 +279,10 @@ namespace Telegram.Controls.Messages.Content
                 isSecret = videoNote.IsSecret;
                 return videoNote.VideoNote;
             }
-            else if (content is MessageText text && text.WebPage != null)
+            else if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeVideoNote previewVideoNode)
             {
                 isSecret = false;
-                return text.WebPage.VideoNote;
+                return previewVideoNode.VideoNote;
             }
 
             isSecret = false;

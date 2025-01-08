@@ -1,11 +1,10 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using Telegram.Navigation.Services;
 using Telegram.Td.Api;
@@ -13,73 +12,12 @@ using Telegram.ViewModels;
 using Telegram.Views;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.Common
 {
     public static class UnigramNavigationServiceEx
     {
-        private static ContentDialog _currentDialog;
-
-        public static Task<ContentDialogResult> NavigateModalAsync(this INavigationService service, Type dialog)
-        {
-            return NavigateModalAsync(service, (ContentDialog)Activator.CreateInstance(dialog));
-        }
-
-        public static async Task<ContentDialogResult> NavigateModalAsync(this INavigationService service, ContentDialog dialog)
-        {
-            var viewModel = dialog.DataContext as INavigable;
-            if (viewModel != null)
-            {
-                viewModel.NavigationService = service;
-                dialog.Opened += async (s, args) =>
-                {
-                    await viewModel.NavigatedToAsync(null, NavigationMode.New, null);
-                };
-            }
-
-            _currentDialog = dialog;
-            return await dialog.ShowQueuedAsync();
-        }
-
-        public static void PopModal(this INavigationService service)
-        {
-            if (_currentDialog != null)
-            {
-                _currentDialog.Hide();
-                _currentDialog = null;
-            }
-        }
-
-        public static void Navigate<T>(this INavigationService service, Type page, object parameter = null, NavigationState state = null, NavigationTransitionInfo infoOverride = null)
-        {
-            //NavigatedEventHandler handler = null;
-            //handler = (s, args) =>
-            //{
-            //    service.Frame.Navigated -= handler;
-
-            //    var navigated = args.Content as Page;
-            //    if (navigated != null && args.SourcePageType == page)
-            //    {
-            //        navigated.DataContext = UnigramContainer.Instance.ResolveType<T>();
-            //    }
-            //};
-
-            ViewModels.Enqueue(typeof(T));
-            service.Navigate(page, parameter, state, infoOverride);
-        }
-
-        //public static void SelectUsers<T>(this INavigationService service, object parameter = null, NavigationTransitionInfo infoOverride = null)
-        //{
-        //    ViewModels.Enqueue(typeof(T));
-        //    service.Navigate(typeof(UsersSelectionPage), parameter, infoOverride);
-        //}
-
-        public static Queue<Type> ViewModels { get; } = new Queue<Type>();
-
-
-
         public static void RemoveSkip(this INavigationService service, int count)
         {
             while (service.Frame.BackStackDepth > count)
@@ -104,6 +42,22 @@ namespace Telegram.Common
             }
         }
 
+        public static void NavigateToWebApp(this INavigationService service, User botUser, string url, long launchId = 0, AttachmentMenuBot menuBot = null, WebAppOpenMode openMode = null, Chat sourceChat = null, InternalLinkType sourceLink = null)
+        {
+            if (service is TLNavigationService serviceEx)
+            {
+                serviceEx.NavigateToWebApp(botUser, url, launchId, menuBot, openMode, sourceChat, sourceLink);
+            }
+        }
+
+        public static void NavigateToWebApp(this INavigationService service, User botUser, string url, string title, long gameChatId = 0, long gameMessageId = 0)
+        {
+            if (service is TLNavigationService serviceEx)
+            {
+                serviceEx.NavigateToWebApp(botUser, url, title, gameChatId, gameMessageId);
+            }
+        }
+
         public static void NavigateToInstant(this INavigationService service, string url, string fallbackUrl = null)
         {
             if (service is TLNavigationService serviceEx)
@@ -120,11 +74,19 @@ namespace Telegram.Common
             }
         }
 
-        public static void NavigateToInvoice(this INavigationService service, InputInvoice inputInvoice)
+        public static void NavigateToReceipt(this INavigationService service, MessageViewModel message)
         {
             if (service is TLNavigationService serviceEx)
             {
-                serviceEx.NavigateToInvoice(inputInvoice);
+                serviceEx.NavigateToReceipt(message);
+            }
+        }
+
+        public static void NavigateToInvoice(this INavigationService service, InputInvoice inputInvoice, MessageContent content = null)
+        {
+            if (service is TLNavigationService serviceEx)
+            {
+                serviceEx.NavigateToInvoice(inputInvoice, content);
             }
         }
 
@@ -272,7 +234,7 @@ namespace Telegram.Common
                     return chatId;
                 }
             }
-            
+
             if (currentPageOnly)
             {
                 return 0;

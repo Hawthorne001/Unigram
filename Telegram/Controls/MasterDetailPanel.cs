@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.UI.Xaml.Input;
 
 namespace Telegram.Controls
 {
-    public class MasterDetailPanel : Panel
+    public partial class MasterDetailPanel : Panel
     {
         private const double columnCompactWidthLeft = 72;
         private const double columnMinimalWidthLeft = 260;
@@ -68,10 +68,9 @@ namespace Telegram.Controls
 
         protected override Size MeasureOverride(Size availableSize)
         {
-            var banner = Children[0];
-            var detail = Children[1];
-            var master = Children[2];
-            var grip = Children[3] as FrameworkElement;
+            var detail = Children[0];
+            var master = Children[1];
+            var grip = Children[2] as FrameworkElement;
 
             if (_registerEvents)
             {
@@ -90,10 +89,8 @@ namespace Telegram.Controls
             // Single column mode
             if (availableSize.Width < columnMinimalWidthLeft + columnMinimalWidthMain || !HasMaster)
             {
-                banner.Measure(CreateSize(availableSize.Width - 16, availableSize.Height));
-
-                master.Measure(CreateSize(availableSize.Width, Math.Max(0, availableSize.Height - banner.DesiredSize.Height)));
-                detail.Measure(CreateSize(availableSize.Width, Math.Max(0, availableSize.Height - banner.DesiredSize.Height)));
+                master.Measure(CreateSize(availableSize.Width, Math.Max(0, availableSize.Height)));
+                detail.Measure(CreateSize(availableSize.Width, Math.Max(0, availableSize.Height)));
 
                 grip.Measure(CreateSize(0, 0));
             }
@@ -109,10 +106,8 @@ namespace Telegram.Controls
                     result = dialogsWidthRatio > 0 ? CountDialogsWidthFromRatio(availableSize.Width, dialogsWidthRatio) : columnMinimalWidthLeft;
                 }
 
-                banner.Measure(CreateSize(availableSize.Width - result, availableSize.Height));
-
                 master.Measure(CreateSize(result, availableSize.Height));
-                detail.Measure(CreateSize(availableSize.Width - result, availableSize.Height - banner.DesiredSize.Height));
+                detail.Measure(CreateSize(availableSize.Width - result, availableSize.Height));
 
                 grip.Measure(CreateSize(8, availableSize.Height));
             }
@@ -122,20 +117,17 @@ namespace Telegram.Controls
 
         protected override Size ArrangeOverride(Size finalSize)
         {
-            var banner = Children[0];
-            var detail = Children[1];
-            var master = Children[2];
-            var grip = Children[3] as FrameworkElement;
+            var detail = Children[0];
+            var master = Children[1];
+            var grip = Children[2] as FrameworkElement;
 
             // Single column mode
             if (finalSize.Width < columnMinimalWidthLeft + columnMinimalWidthMain || !HasMaster)
             {
                 CurrentState = MasterDetailState.Minimal;
 
-                banner.Arrange(CreateRect(12, 0, finalSize.Width - 16, banner.DesiredSize.Height));
-
-                master.Arrange(CreateRect(0, banner.DesiredSize.Height, finalSize.Width, finalSize.Height - banner.DesiredSize.Height));
-                detail.Arrange(CreateRect(0, banner.DesiredSize.Height, finalSize.Width, finalSize.Height - banner.DesiredSize.Height));
+                master.Arrange(CreateRect(0, 0, finalSize.Width, finalSize.Height));
+                detail.Arrange(CreateRect(0, 0, finalSize.Width, finalSize.Height));
 
                 grip.Arrange(CreateRect(0, 0, 0, 0));
             }
@@ -153,10 +145,8 @@ namespace Telegram.Controls
                     CurrentState = MasterDetailState.Expanded;
                 }
 
-                banner.Arrange(CreateRect(result, 0, finalSize.Width - result, banner.DesiredSize.Height));
-
                 master.Arrange(CreateRect(0, 0, result, finalSize.Height));
-                detail.Arrange(CreateRect(result, banner.DesiredSize.Height, finalSize.Width - result, finalSize.Height - banner.DesiredSize.Height));
+                detail.Arrange(CreateRect(result, 0, finalSize.Width - result, finalSize.Height));
 
                 grip.Arrange(CreateRect(result, 0, 8, finalSize.Height));
             }
@@ -211,8 +201,8 @@ namespace Telegram.Controls
 
         private void Grip_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            var master = Children[2] as FrameworkElement;
-            var grip = Children[3] as UserControl;
+            var master = Children[1] as FrameworkElement;
+            var grip = Children[2] as UserControl;
 
             _pointerPressed = true;
             _pointerDelta = e.GetCurrentPoint(this).Position.X - master.ActualWidth;
@@ -227,8 +217,8 @@ namespace Telegram.Controls
         {
             if (_pointerPressed)
             {
-                var master = Children[2] as FrameworkElement;
-                var grip = Children[3] as UserControl;
+                var master = Children[1] as FrameworkElement;
+                var grip = Children[2] as UserControl;
 
                 var point = e.GetCurrentPoint(this);
 
@@ -253,8 +243,8 @@ namespace Telegram.Controls
 
         private void Grip_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            var master = Children[2] as FrameworkElement;
-            var grip = Children[3] as UserControl;
+            var master = Children[1] as FrameworkElement;
+            var grip = Children[2] as UserControl;
 
             _pointerPressed = false;
             VisualStateManager.GoToState(grip, "Normal", false);

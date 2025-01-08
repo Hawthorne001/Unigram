@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -21,7 +21,7 @@ namespace Telegram.Collections
         string Key { get; }
     }
 
-    public class FlatteningCollection : IncrementalCollection<object>
+    public partial class FlatteningCollection : IncrementalCollection<object>
     {
         private readonly List<IKeyedCollection> _groups = new();
 
@@ -76,7 +76,7 @@ namespace Telegram.Collections
 
         private void Insert(IKeyedCollection collection, int newStartingIndex, IList newItems)
         {
-            if (newStartingIndex == 0 && newItems.Count == collection.Count && collection.Count > 0)
+            if (newStartingIndex == 0 && newItems.Count == collection.Count && collection.Count > 0 && collection.Key != null)
             {
                 Insert(collection.Index, collection);
             }
@@ -95,7 +95,7 @@ namespace Telegram.Collections
                 RemoveAt(collection.TotalIndex + i);
             }
 
-            if (collection.Count == 0 && oldItemsCount > 0)
+            if (collection.Count == 0 && oldItemsCount > 0 && collection.Key != null)
             {
                 RemoveAt(collection.Index);
             }

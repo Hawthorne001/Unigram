@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,13 +7,12 @@
 using System;
 using Telegram.Common;
 using Telegram.Td.Api;
-using Telegram.ViewModels.Drawers;
 using Windows.ApplicationModel;
 using Path = System.IO.Path;
 
 namespace Telegram.Streams
 {
-    public class LocalFileSource : AnimatedImageSource
+    public partial class LocalFileSource : AnimatedImageSource
     {
         private long _offset;
 
@@ -30,26 +29,6 @@ namespace Telegram.Streams
             Format = PathToFormat(file.Local.Path);
 
             Id = file.Id;
-        }
-
-        public LocalFileSource(Sticker sticker)
-            : this(sticker.StickerValue)
-        {
-            Format = sticker.Format;
-            Width = sticker.Width;
-            Height = sticker.Height;
-            Outline = sticker.Outline;
-            NeedsRepainting = sticker.FullType is StickerFullTypeCustomEmoji { NeedsRepainting: true };
-        }
-
-        public LocalFileSource(StickerViewModel sticker)
-            : this(sticker.StickerValue)
-        {
-            Format = sticker.Format;
-            Width = sticker.Width;
-            Height = sticker.Height;
-            Outline = sticker.Outline;
-            NeedsRepainting = sticker.FullType is StickerFullTypeCustomEmoji { NeedsRepainting: true };
         }
 
         public LocalFileSource(string path)
@@ -105,7 +84,7 @@ namespace Telegram.Streams
 
         public override bool Equals(object obj)
         {
-            if (obj is LocalFileSource y)
+            if (obj is LocalFileSource y && !y.IsUnique && !IsUnique)
             {
                 return y.FilePath == FilePath;
             }
@@ -115,6 +94,11 @@ namespace Telegram.Streams
 
         public override int GetHashCode()
         {
+            if (IsUnique)
+            {
+                return base.GetHashCode();
+            }
+
             return FilePath.GetHashCode();
         }
     }

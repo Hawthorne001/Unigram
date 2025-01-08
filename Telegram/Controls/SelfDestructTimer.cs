@@ -1,11 +1,12 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
 using System.Numerics;
+using Telegram.Navigation;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -14,7 +15,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class SelfDestructTimer : Control
+    public partial class SelfDestructTimer : Control
     {
         private readonly ShapeVisual _visual;
         private readonly CompositionSpriteShape _shape;
@@ -28,11 +29,11 @@ namespace Telegram.Controls
             DefaultStyleKey = typeof(SelfDestructTimer);
             Visibility = Visibility.Collapsed;
 
-            var ellipse = Window.Current.Compositor.CreateEllipseGeometry();
+            var ellipse = BootStrapper.Current.Compositor.CreateEllipseGeometry();
             ellipse.Radius = new Vector2((float)Radius);
             ellipse.Center = new Vector2((float)Center);
 
-            var shape = Window.Current.Compositor.CreateSpriteShape(ellipse);
+            var shape = BootStrapper.Current.Compositor.CreateSpriteShape(ellipse);
             shape.CenterPoint = new Vector2((float)Center);
             shape.StrokeThickness = 2;
             shape.StrokeStartCap = CompositionStrokeCap.Round;
@@ -40,10 +41,10 @@ namespace Telegram.Controls
 
             if (Foreground is SolidColorBrush brush)
             {
-                shape.StrokeBrush = Window.Current.Compositor.CreateColorBrush(brush.Color);
+                shape.StrokeBrush = BootStrapper.Current.Compositor.CreateColorBrush(brush.Color);
             }
 
-            var visual = Window.Current.Compositor.CreateShapeVisual();
+            var visual = BootStrapper.Current.Compositor.CreateShapeVisual();
             visual.Shapes.Add(shape);
             visual.Size = new Vector2((float)Center * 2);
             visual.CenterPoint = new Vector3((float)Center);
@@ -73,8 +74,16 @@ namespace Telegram.Controls
         {
             if (_shape != null && Foreground is SolidColorBrush brush)
             {
-                _shape.StrokeBrush = Window.Current.Compositor.CreateColorBrush(brush.Color);
+                _shape.StrokeBrush = BootStrapper.Current.Compositor.CreateColorBrush(brush.Color);
             }
+        }
+
+        public void Fill()
+        {
+            _ellipse.StopAnimation("TrimStart");
+            _ellipse.TrimStart = 0;
+
+            Visibility = Visibility.Visible;
         }
 
         #region Value
@@ -125,18 +134,26 @@ namespace Telegram.Controls
                 Visibility = Visibility.Visible;
             }
 
-            var value = newValue.Value;
-            var difference = value - DateTime.Now;
-
+            var difference = newValue.Value - DateTime.Now;
             var seconds = (float)difference.TotalSeconds;
 
-            var easing = Window.Current.Compositor.CreateLinearEasingFunction();
-            var angleAnimation = Window.Current.Compositor.CreateScalarKeyFrameAnimation();
-            angleAnimation.InsertKeyFrame(0, 1f - (seconds / (Maximum ?? 0)));
-            angleAnimation.InsertKeyFrame(1, 1f, easing);
-            angleAnimation.Duration = difference;
+            var value = 1f - (seconds / (Maximum ?? 1));
+            value = Math.Clamp(value, 0, 1);
 
-            _ellipse.StartAnimation("TrimStart", angleAnimation);
+            if (difference.TotalMilliseconds >= 1 && difference.TotalHours < 8)
+            {
+                var easing = BootStrapper.Current.Compositor.CreateLinearEasingFunction();
+                var angleAnimation = BootStrapper.Current.Compositor.CreateScalarKeyFrameAnimation();
+                angleAnimation.InsertKeyFrame(0, value);
+                angleAnimation.InsertKeyFrame(1, 1f, easing);
+                angleAnimation.Duration = difference;
+
+                _ellipse.StartAnimation("TrimStart", angleAnimation);
+            }
+            else
+            {
+                _ellipse.TrimStart = value;
+            }
 
             //double value;
             ////if (oldValue > 0.0 && oldValue < 1.0 && newValue == 0.0)

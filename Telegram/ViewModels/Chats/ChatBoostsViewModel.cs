@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Chats
 {
-    public class ChatBoostsViewModel : ViewModelBase, IIncrementalCollectionOwner
+    public partial class ChatBoostsViewModel : ViewModelBase, IIncrementalCollectionOwner
     {
         private long _chatId;
         private string _nextOffset = string.Empty;
@@ -155,12 +155,12 @@ namespace Telegram.ViewModels.Chats
 
         public void CopyLink()
         {
-            MessageHelper.CopyLink("https://" + Link);
+            MessageHelper.CopyLink(XamlRoot, "https://" + Link);
         }
 
         public async void ShareLink()
         {
-            await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostLink(new HttpUrl("https://" + Link)));
+            await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostLink(new HttpUrl("https://" + Link)));
         }
 
         public void OpenProfile(ChatBoost chatBoost)

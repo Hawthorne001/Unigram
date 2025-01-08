@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -18,7 +18,7 @@ using Windows.UI.Xaml.Media.Imaging;
 namespace Telegram.Controls.Messages.Content
 {
     // TODO: turn the whole control into a Button
-    public sealed class DocumentContent : Control, IContent
+    public sealed partial class DocumentContent : Control, IContent
     {
         private MessageViewModel _message;
         public MessageViewModel Message => _message;
@@ -40,6 +40,7 @@ namespace Telegram.Controls.Messages.Content
         private Border Texture;
         private FileButton Button;
         private TextBlock Title;
+        private TextBlock TitleTrim;
         private TextBlock Subtitle;
         private bool _templateApplied;
 
@@ -48,6 +49,7 @@ namespace Telegram.Controls.Messages.Content
             Texture = GetTemplateChild(nameof(Texture)) as Border;
             Button = GetTemplateChild(nameof(Button)) as FileButton;
             Title = GetTemplateChild(nameof(Title)) as TextBlock;
+            TitleTrim = GetTemplateChild(nameof(TitleTrim)) as TextBlock;
             Subtitle = GetTemplateChild(nameof(Subtitle)) as TextBlock;
 
             ButtonDrag = new AutomaticDragHelper(Button, true);
@@ -76,7 +78,17 @@ namespace Telegram.Controls.Messages.Content
                 return;
             }
 
-            Title.Text = document.FileName;
+            var index = document.FileName.LastIndexOf('.');
+            if (index > 0)
+            {
+                Title.Text = document.FileName.Substring(0, index + 1);
+                TitleTrim.Text = document.FileName.Substring(index + 1);
+            }
+            else
+            {
+                Title.Text = document.FileName;
+                TitleTrim.Text = string.Empty;
+            }
 
             if (document.Thumbnail?.File.Id != null)
             {
@@ -127,7 +139,7 @@ namespace Telegram.Controls.Messages.Content
 
                 Subtitle.Text = string.Format("{0} / {1}", FileSizeConverter.Convert(file.Local.DownloadedSize, size), FileSizeConverter.Convert(size));
             }
-            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed)
+            else if (file.Remote.IsUploadingActive || message.SendingState is MessageSendingStateFailed || (message.SendingState is MessageSendingStatePending && !file.Remote.IsUploadingCompleted))
             {
                 Button.SetGlyph(file.Id, MessageContentState.Uploading);
                 Button.Progress = (double)file.Remote.UploadedSize / size;
@@ -236,9 +248,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return true;
             }
-            else if (content is MessageText text && text.WebPage != null && !primary)
+            else if (content is MessageText text && text.LinkPreview != null && !primary)
             {
-                return text.WebPage.Document != null && !string.Equals(text.WebPage.Type, "telegram_background", StringComparison.OrdinalIgnoreCase);
+                return text.LinkPreview.Type is LinkPreviewTypeDocument;
             }
 
             return false;
@@ -256,9 +268,9 @@ namespace Telegram.Controls.Messages.Content
             {
                 return document.Document;
             }
-            else if (content is MessageText text && text.WebPage != null)
+            else if (content is MessageText text && text.LinkPreview?.Type is LinkPreviewTypeDocument previewDocument)
             {
-                return text.WebPage.Document;
+                return previewDocument.Document;
             }
 
             return null;

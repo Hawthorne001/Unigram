@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,14 +10,14 @@ using Telegram.Controls;
 using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Services.Keyboard;
 using Windows.ApplicationModel.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 
 namespace Telegram.Views.Host
 {
-    public class StandaloneViewModel : ViewModelBase
+    public partial class StandaloneViewModel : ViewModelBase
     {
         public StandaloneViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -25,7 +25,7 @@ namespace Telegram.Views.Host
         }
     }
 
-    public sealed partial class StandalonePage : Page, IToastHost
+    public sealed partial class StandalonePage : Page, IPopupHost, IToastHost
     {
         private readonly INavigationService _navigationService;
         private readonly IShortcutsService _shortcutsService;
@@ -62,7 +62,7 @@ namespace Telegram.Views.Host
 
         public INavigationService NavigationService => _navigationService;
 
-        public void Connect(TeachingTip toast)
+        public void ToastOpened(TeachingTip toast)
         {
             if (_navigationService?.Frame != null)
             {
@@ -71,7 +71,7 @@ namespace Telegram.Views.Host
             }
         }
 
-        public void Disconnect(TeachingTip toast)
+        public void ToastClosed(TeachingTip toast)
         {
             if (_navigationService?.Frame != null && _navigationService.Frame.Resources.TryGetValue("TeachingTip", out object cached))
             {
@@ -80,6 +80,16 @@ namespace Telegram.Views.Host
                     _navigationService.Frame.Resources.Remove("TeachingTip");
                 }
             }
+        }
+
+        public void PopupOpened()
+        {
+            NavigationService.Window.SetTitleBar(null);
+        }
+
+        public void PopupClosed()
+        {
+            NavigationService.Window.SetTitleBar(TitleBarHandle);
         }
 
         private void OnNavigating(object sender, NavigatingEventArgs e)
@@ -108,7 +118,6 @@ namespace Telegram.Views.Host
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            WindowContext.Current.InputListener.KeyDown += OnAcceleratorKeyActivated;
             InitializeTitleBar();
         }
 
@@ -117,7 +126,6 @@ namespace Telegram.Views.Host
             MasterDetail.NavigationService.FrameFacade.Navigating -= OnNavigating;
             MasterDetail.Dispose();
 
-            WindowContext.Current.InputListener.KeyDown -= OnAcceleratorKeyActivated;
             UnloadTitleBar();
         }
 
@@ -155,7 +163,7 @@ namespace Telegram.Views.Host
             }
         }
 
-        private void OnAcceleratorKeyActivated(Window sender, InputKeyDownEventArgs args)
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
         {
             var invoked = _shortcutsService.Process(args);
             if (invoked == null)
@@ -169,7 +177,7 @@ namespace Telegram.Views.Host
             }
         }
 
-        private async void ProcessAppCommands(ShortcutCommand command, InputKeyDownEventArgs args)
+        private async void ProcessAppCommands(ShortcutCommand command, ProcessKeyboardAcceleratorEventArgs args)
         {
             if (command == ShortcutCommand.Search)
             {

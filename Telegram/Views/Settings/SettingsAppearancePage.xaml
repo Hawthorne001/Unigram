@@ -20,7 +20,7 @@
         <ScrollViewer x:Name="ScrollingHost"
                       VerticalScrollBarVisibility="Auto"
                       VerticalScrollMode="Auto">
-            <controls:SettingsPanel>
+            <controls:SettingsPanel SizeChanged="OnSizeChanged">
                 <controls:HeaderedControl>
                     <Grid x:Name="Preview"
                           CornerRadius="4,4,0,0">
@@ -45,13 +45,13 @@
                               SelectedItem="{x:Bind ViewModel.SelectedChatTheme, Mode=TwoWay}"
                               SelectionMode="Single"
                               SingleSelectionFollowsFocus="False"
+                              SelectionChanged="OnSelectionChanged"
                               ChoosingItemContainer="OnChoosingItemContainer"
                               ContainerContentChanging="OnContainerContentChanging"
-                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Hidden"
                               ScrollViewer.HorizontalScrollMode="Auto"
                               ScrollViewer.VerticalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollMode="Disabled"
-                              ItemContainerTransitions="{x:Null}"
                               Padding="12,16,0,12">
                         <GridView.ItemTemplate>
                             <DataTemplate>
@@ -70,6 +70,9 @@
                                 <ItemsStackPanel Orientation="Horizontal" />
                             </ItemsPanelTemplate>
                         </GridView.ItemsPanel>
+                        <GridView.ItemContainerTransitions>
+                            <TransitionCollection />
+                        </GridView.ItemContainerTransitions>
                         <GridView.Footer>
                             <Border Width="12" />
                         </GridView.Footer>
@@ -111,13 +114,48 @@
                                           IsChevronVisible="True" />
                 </controls:HeaderedControl>
 
-                <controls:HeaderedControl Background="{ThemeResource SettingsItemBackground}">
-                    <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <controls:HeaderedControl>
+                    <Grid Background="{ThemeResource SettingsItemBackground}"
+                          BorderBrush="{ThemeResource SettingsItemBorderBrush}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="56" />
                             <ColumnDefinition Width="1*" />
                             <ColumnDefinition Width="2*" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="44" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <CheckBox IsChecked="{x:Bind ViewModel.UseDefaultScaling, Mode=TwoWay}"
+                                  Content="{CustomResource DefaultInterfaceScale}"
+                                  Style="{StaticResource SettingsCheckBoxStyle}"
+                                  Background="Transparent"
+                                  Grid.ColumnSpan="3" />
+
+                        <Slider x:Name="ScalingSlider"
+                                AutomationProperties.Name="{CustomResource InterfaceScale}"
+                                Minimum="0"
+                                Maximum="6"
+                                SmallChange="1"
+                                LargeChange="1"
+                                TickFrequency="1"
+                                TickPlacement="Outside"
+                                IsThumbToolTipEnabled="False"
+                                Margin="12,6,12,6"
+                                Grid.Column="2"
+                                Grid.ColumnSpan="3" />
+                    </Grid>
+                    <Grid Background="{ThemeResource SettingsItemBackground}"
+                          BorderBrush="{ThemeResource SettingsItemBorderBrush}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="44" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <TextBlock FontSize="{StaticResource GlyphMediumFontSize}"
                                    HorizontalAlignment="Left"
                                    VerticalAlignment="Center"
@@ -126,10 +164,12 @@
                                    Text="&#xE9EB;"
                                    FontFamily="{StaticResource SymbolThemeFontFamily}" />
 
-                        <TextBlock Text="{CustomResource TextSizeHeader}"
+                        <TextBlock x:Name="TextSizeHeader"
+                                   Text="{CustomResource TextSizeHeader}"
                                    VerticalAlignment="Center"
                                    Grid.Column="1" />
-                        <Slider Value="{x:Bind ViewModel.FontSize, Mode=TwoWay}"
+                        <Slider x:Name="FontSizeSlider"
+                                Value="{x:Bind ViewModel.FontSize, Mode=TwoWay}"
                                 AutomationProperties.Name="{CustomResource TextSizeHeader}"
                                 Minimum="0"
                                 Maximum="6"
@@ -139,14 +179,20 @@
                                 TickPlacement="Outside"
                                 IsThumbToolTipEnabled="False"
                                 Margin="12,6,12,6"
-                                Grid.Column="2" />
+                                Grid.Column="2"
+                                Grid.ColumnSpan="3" />
                     </Grid>
-                    <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <Grid Background="{ThemeResource SettingsItemBackground}"
+                          BorderBrush="{ThemeResource SettingsItemBorderBrush}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="56" />
                             <ColumnDefinition Width="1*" />
                             <ColumnDefinition Width="2*" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="44" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <TextBlock FontSize="{StaticResource GlyphMediumFontSize}"
                                    HorizontalAlignment="Left"
                                    VerticalAlignment="Center"
@@ -155,10 +201,12 @@
                                    Text="&#xE9E8;"
                                    FontFamily="{StaticResource SymbolThemeFontFamily}" />
 
-                        <TextBlock Text="{CustomResource BubbleRadius}"
+                        <TextBlock x:Name="BubbleRadiusHeader"
+                                   Text="{CustomResource BubbleRadius}"
                                    VerticalAlignment="Center"
                                    Grid.Column="1" />
-                        <Slider Value="{x:Bind ViewModel.BubbleRadius, Mode=TwoWay}"
+                        <Slider x:Name="BubbleRadiusSlider"
+                                Value="{x:Bind ViewModel.BubbleRadius, Mode=TwoWay}"
                                 AutomationProperties.Name="{CustomResource BubbleRadius}"
                                 Minimum="0"
                                 Maximum="15"
@@ -168,7 +216,8 @@
                                 TickPlacement="Outside"
                                 IsThumbToolTipEnabled="False"
                                 Margin="12,6,12,6"
-                                Grid.Column="2" />
+                                Grid.Column="2"
+                                Grid.ColumnSpan="3" />
                     </Grid>
                 </controls:HeaderedControl>
 
@@ -188,6 +237,25 @@
                     <CheckBox IsChecked="{x:Bind ViewModel.SwipeToReply, Mode=TwoWay}"
                               Content="{CustomResource SwipeReply}"
                               Style="{StaticResource SettingsCheckBoxStyle}" />
+                </controls:HeaderedControl>
+
+                <controls:HeaderedControl Header="{CustomResource ChatDoubleClickAction}"
+                                          Footer="{x:Bind ConvertQuickAction(ViewModel.DoubleClickToReply), Mode=OneWay}">
+                    <RadioButton IsChecked="{x:Bind ViewModel.DoubleClickToReply, Mode=TwoWay}"
+                                 Content="{CustomResource DoubleClickReply}"
+                                 Style="{StaticResource SettingsRadioButtonStyle}"
+                                 GroupName="DoubleClick" />
+                    <Grid>
+                        <RadioButton IsChecked="{x:Bind ViewModel.DoubleClickToReact, Mode=TwoWay}"
+                                     Content="{CustomResource DoubleClickReact}"
+                                     Style="{StaticResource SettingsRadioButtonStyle}"
+                                     GroupName="DoubleClick" />
+                        <messages:ReactionButton x:Name="Reaction"
+                                                 Click="Reaction_Click"
+                                                 HorizontalAlignment="Right"
+                                                 VerticalAlignment="Center"
+                                                 Margin="0,0,12,0" />
+                    </Grid>
                 </controls:HeaderedControl>
 
                 <controls:HeaderedControl Header="{CustomResource OtherSettings}">

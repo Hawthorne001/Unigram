@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Telegram.Common
 {
-    public class ConcurrentQueueWorker
+    public partial class ConcurrentQueueWorker
     {
         private readonly ConcurrentQueue<Func<Task>> taskQueue = new();
         private readonly ManualResetEvent mre = new(true);
@@ -70,7 +70,7 @@ namespace Telegram.Common
         }
     }
 
-    public class LifoActionWorker
+    public partial class LifoActionWorker
     {
         private readonly ConcurrentStack<Action> taskQueue = new();
         private int _concurrentCount = 0;
@@ -97,7 +97,7 @@ namespace Telegram.Common
         }
     }
 
-    public class FifoActionWorker
+    public partial class FifoActionWorker
     {
         private readonly ConcurrentQueue<Action> taskQueue = new();
         private int _concurrentCount = 0;

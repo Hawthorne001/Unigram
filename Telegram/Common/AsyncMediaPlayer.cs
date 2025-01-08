@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -11,18 +11,22 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Telegram.Navigation;
-using Telegram.Streams;
+using Telegram.Services;
+using Telegram.Td;
+using Telegram.Td.Api;
 using Windows.Foundation;
 using Windows.Storage;
 
 namespace Telegram.Common
 {
-    public class AsyncMediaPlayer
+    public partial class AsyncMediaPlayer
     {
         private readonly IDispatcherContext _dispatcherQueue;
 
         private readonly LibVLC _library;
         private readonly MediaPlayer _player;
+
+        private readonly bool _enableDebugLogs;
 
         private Media _media;
         private MediaInput _input;
@@ -33,13 +37,19 @@ namespace Telegram.Common
         public AsyncMediaPlayer(params string[] options)
         {
             _dispatcherQueue = WindowContext.Current.Dispatcher;
-            
+
             // This should be not needed
             _dispatcherQueue ??= WindowContext.Main.Dispatcher;
 
-            // Generating plugins cache requires a breakpoint in bank.c#662
-            _library = new LibVLC(options); //"--quiet", "--reset-plugins-cache");
-            //_library.Log += _library_Log;
+            _enableDebugLogs = SettingsService.Current.VerbosityLevel >= 4;
+
+            // Generating plugins cache requires a breakpoint in bank.c#504
+            _library = new LibVLC(_enableDebugLogs, options); //"--quiet", "--reset-plugins-cache");
+
+            if (_enableDebugLogs)
+            {
+                _library.Log += OnLog;
+            }
 
             _player = new MediaPlayer(_library);
 
@@ -65,7 +75,7 @@ namespace Telegram.Common
             //_player.EndReached += OnEndReached;
         }
 
-        public void Play(RemoteFileStream input)
+        public void Play(MediaInput input)
         {
             Write(valid => PlayImpl(input, valid));
         }
@@ -188,6 +198,11 @@ namespace Telegram.Common
                 _input = null;
             }
 
+            if (_enableDebugLogs)
+            {
+                _library.Log -= OnLog;
+            }
+
             lock (_closeLock)
             {
                 _closed = true;
@@ -199,7 +214,7 @@ namespace Telegram.Common
 
         #region Events
 
-        public event TypedEventHandler<AsyncMediaPlayer, MediaPlayerVoutEventArgs> Vout;
+        public event TypedEventHandler<AsyncMediaPlayer, EventArgs> Vout;
         public event TypedEventHandler<AsyncMediaPlayer, MediaPlayerESSelectedEventArgs> ESSelected;
         public event TypedEventHandler<AsyncMediaPlayer, EventArgs> EndReached;
         public event TypedEventHandler<AsyncMediaPlayer, MediaPlayerBufferingEventArgs> Buffering;
@@ -213,7 +228,7 @@ namespace Telegram.Common
 
         private void OnVout(object sender, MediaPlayerVoutEventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => Vout?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => Vout?.Invoke(this, EventArgs.Empty));
         }
 
         private void OnESSelected(object sender, MediaPlayerESSelectedEventArgs e)
@@ -223,7 +238,7 @@ namespace Telegram.Common
 
         private void OnEndReached(object sender, EventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => EndReached?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => EndReached?.Invoke(this, EventArgs.Empty));
         }
 
         private void OnBuffering(object sender, MediaPlayerBufferingEventArgs e)
@@ -243,17 +258,17 @@ namespace Telegram.Common
 
         private void OnPlaying(object sender, EventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => Playing?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => Playing?.Invoke(this, EventArgs.Empty));
         }
 
         private void OnPaused(object sender, EventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => Paused?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => Paused?.Invoke(this, EventArgs.Empty));
         }
 
         private void OnStopped(object sender, EventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => Stopped?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => Stopped?.Invoke(this, EventArgs.Empty));
         }
 
         private void OnVolumeChanged(object sender, MediaPlayerVolumeChangedEventArgs e)
@@ -263,7 +278,7 @@ namespace Telegram.Common
 
         private void OnEncounteredError(object sender, EventArgs e)
         {
-            _dispatcherQueue.Dispatch(() => EncounteredError?.Invoke(this, e));
+            _dispatcherQueue.Dispatch(() => EncounteredError?.Invoke(this, EventArgs.Empty));
         }
 
         #endregion
@@ -273,8 +288,11 @@ namespace Telegram.Common
         private static readonly Regex _videoLooking = new("using (.*?) module \"(.*?)\" from (.*?)$", RegexOptions.Compiled);
         private static readonly object _syncObject = new();
 
-        private void _library_Log(object sender, LogEventArgs e)
+        private void OnLog(object sender, LogEventArgs e)
         {
+            Client.Execute(new AddLogMessage(2, e.FormattedLog));
+            return;
+
             Debug.WriteLine(e.FormattedLog);
 
             lock (_syncObject)

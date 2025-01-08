@@ -82,6 +82,13 @@
                                           IsChevronVisible="True"
                                           Glyph="&#xEA0A;" />
 
+                    <controls:BadgeButton Content="{CustomResource PrivacyGifts}"
+                                          Badge="{x:Bind ViewModel.AutosaveGiftsRules.Badge, Mode=OneWay}"
+                                          Style="{StaticResource GlyphBadgeButtonStyle}"
+                                          Click="{x:Bind ViewModel.OpenGifts}"
+                                          IsChevronVisible="True"
+                                          Glyph="&#xE9D4;" />
+
                     <controls:BadgeButton Content="{CustomResource PrivacyBirthday}"
                                           Badge="{x:Bind ViewModel.ShowBirthdateRules.Badge, Mode=OneWay}"
                                           Style="{StaticResource GlyphBadgeButtonStyle}"
@@ -138,15 +145,9 @@
                                           Glyph="&#xE7B8;" />
                 </controls:HeaderedControl>
 
-                <controls:HeaderedControl Header="{CustomResource PrivacyAdvanced}"
+                <controls:HeaderedControl Header="{CustomResource DeleteMyAccount}"
                                           Footer="{CustomResource DeleteAccountHelp}">
-                    <controls:BadgeButton Content="{CustomResource PrivacyDeleteCloudDrafts}"
-                                          Click="{x:Bind ViewModel.ClearDrafts}"
-                                          Style="{StaticResource GlyphBadgeButtonStyle}"
-                                          Foreground="{ThemeResource DangerButtonBackground}"
-                                          Glyph="&#xE74D;" />
-
-                    <controls:BadgeButton Content="{CustomResource DeleteAccountIfAwayFor2}">
+                    <controls:BadgeButton Content="{CustomResource DeleteAccountIfAwayFor3}">
                         <controls:BadgeButton.Badge>
                             <controls:SettingsComboBox ItemsSource="{x:Bind ViewModel.AccountTtlOptions}"
                                                        SelectedIndex="{x:Bind ViewModel.AccountTtl, Mode=TwoWay}"
@@ -172,16 +173,6 @@
 
                 <controls:HeaderedControl Header="{CustomResource Contacts}"
                                           Footer="{CustomResource SuggestContactsInfo}">
-                    <controls:BadgeButton Click="{x:Bind ViewModel.ClearContacts}"
-                                          Content="{CustomResource SyncContactsDelete}"
-                                          Style="{StaticResource GlyphBadgeButtonStyle}"
-                                          Foreground="{ThemeResource DangerButtonBackground}"
-                                          Glyph="&#xE74D;" />
-
-                    <CheckBox IsChecked="{x:Bind ViewModel.IsContactsSyncEnabled, Mode=TwoWay}"
-                              Content="{CustomResource SyncContacts}"
-                              Style="{StaticResource SettingsCheckBoxStyle}" />
-
                     <CheckBox IsChecked="{x:Bind ViewModel.IsContactsSuggestEnabled, Mode=TwoWay}"
                               Content="{CustomResource SuggestContacts}"
                               Style="{StaticResource SettingsCheckBoxStyle}" />

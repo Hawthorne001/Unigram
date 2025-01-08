@@ -18,7 +18,7 @@ namespace Telegram.ViewModels.Business
         Custom
     }
 
-    public class BusinessAwayViewModel : BusinessRecipientsViewModelBase, IHandle
+    public partial class BusinessAwayViewModel : BusinessRecipientsViewModelBase, IHandle
     {
         public BusinessAwayViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator)
             : base(clientService, settingsService, aggregator)
@@ -75,6 +75,11 @@ namespace Telegram.ViewModels.Business
 
                 UpdateRecipients(settings.Recipients);
             }
+            else if (mode == NavigationMode.Back)
+            {
+                IsEnabled = true;
+                Replies = ClientService.GetQuickReplyShortcut("away");
+            }
 
             return Task.CompletedTask;
         }
@@ -86,7 +91,7 @@ namespace Telegram.ViewModels.Business
 
         private void Handle(UpdateQuickReplyShortcut update)
         {
-            if (update.Shortcut.Id == Replies?.Id)
+            if (update.Shortcut.Name == "away")
             {
                 BeginOnUIThread(() => Replies = update.Shortcut);
             }
@@ -94,7 +99,8 @@ namespace Telegram.ViewModels.Business
 
         public void Create()
         {
-            NavigationService.Navigate(typeof(ChatBusinessRepliesPage), new ChatBusinessRepliesIdNavigationArgs(ClientService.Options.MyId, Replies.Id));
+            _completed = true;
+            NavigationService.Navigate(typeof(ChatBusinessRepliesPage), new ChatBusinessRepliesIdNavigationArgs("away"));
         }
 
         public bool IsAlwaysSend
@@ -203,6 +209,12 @@ namespace Telegram.ViewModels.Business
 
         public override async void Continue()
         {
+            if (IsEnabled && Replies == null)
+            {
+                RaisePropertyChanged("REPLIES_MISSING");
+                return;
+            }
+
             _completed = true;
 
             var settings = GetSettings();

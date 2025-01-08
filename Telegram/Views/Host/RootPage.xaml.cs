@@ -1,11 +1,10 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using LinqToVisualTree;
-using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -22,7 +21,6 @@ using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Services.Settings;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels;
 using Telegram.Views.Authorization;
@@ -35,21 +33,30 @@ using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
-using Point = Windows.Foundation.Point;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Telegram.Views.Host
 {
     public interface IToastHost
     {
-        void Connect(TeachingTip toast);
-        void Disconnect(TeachingTip toast);
+        void ToastOpened(TeachingTip toast);
+        void ToastClosed(TeachingTip toast);
     }
 
-    public sealed partial class RootPage : Page, IToastHost
+    public interface IPopupHost
+    {
+        void PopupOpened();
+        void PopupClosed();
+    }
+
+    public sealed partial class RootPage : Page, IPopupHost, IToastHost
     {
         private readonly ILifetimeService _lifetime;
+        private readonly WindowContext _context;
+
         private NavigationService _navigationService;
 
         private RootDestination _navigationViewSelected;
@@ -57,12 +64,13 @@ namespace Telegram.Views.Host
 
         private long _attachmentMenuBots;
 
-        public RootPage(NavigationService service)
+        public RootPage(WindowContext context, NavigationService service)
         {
             RequestedTheme = SettingsService.Current.Appearance.GetCalculatedElementTheme();
             InitializeComponent();
 
             _lifetime = TypeResolver.Current.Lifetime;
+            _context = context;
 
             _navigationViewSelected = RootDestination.Chats;
             _navigationViewItems = new MvxObservableCollection<object>
@@ -78,6 +86,8 @@ namespace Telegram.Views.Host
                 // ------------
                 RootDestination.Separator,
                 // ------------
+                RootDestination.NewGroup,
+                RootDestination.NewChannel,
                 RootDestination.Chats,
                 RootDestination.Contacts,
                 RootDestination.Calls,
@@ -99,7 +109,7 @@ namespace Telegram.Views.Host
 
             Navigation.Content = _navigationService.Frame;
 
-            DropShadowEx.Attach(ThemeShadow);
+            VisualUtilities.DropShadow(ThemeShadow);
 
             //if (ApiInfo.IsXbox)
             //{
@@ -149,7 +159,7 @@ namespace Telegram.Views.Host
             }
         }
 
-        public void Connect(TeachingTip toast)
+        public void ToastOpened(TeachingTip toast)
         {
             if (_navigationService?.Frame != null)
             {
@@ -158,7 +168,7 @@ namespace Telegram.Views.Host
             }
         }
 
-        public void Disconnect(TeachingTip toast)
+        public void ToastClosed(TeachingTip toast)
         {
             if (_navigationService?.Frame != null && _navigationService.Frame.Resources.TryGetValue("TeachingTip", out object cached))
             {
@@ -225,10 +235,10 @@ namespace Telegram.Views.Host
 
             Navigation.IsPaneOpen = false;
 
-            var service = WindowContext.Current.NavigationServices.GetByFrameId($"{session.Id}") as NavigationService;
+            var service = _context.NavigationServices.GetByFrameId($"{session.Id}") as NavigationService;
             if (service == null)
             {
-                service = BootStrapper.Current.NavigationServiceFactory(BootStrapper.BackButton.Attach, new Frame { CacheSize = 0 }, session.Id, $"{session.Id}", true) as NavigationService;
+                service = BootStrapper.Current.NavigationServiceFactory(_context, BootStrapper.BackButton.Attach, new Frame { CacheSize = 0 }, session.Id, $"{session.Id}", true) as NavigationService;
                 service.Frame.Navigating += OnNavigating;
                 service.Frame.Navigated += OnNavigated;
 
@@ -408,7 +418,7 @@ namespace Telegram.Views.Host
 
             if (_attachmentMenuBots != botsHash)
             {
-                for (int i = bots.Count - 1; i >= 0; i--)
+                for (int i = 0; i < bots.Count; i++)
                 {
                     _navigationViewItems.Insert(index - 1, bots[i]);
                     index++;
@@ -503,11 +513,13 @@ namespace Telegram.Views.Host
         private void OnContextRequested(UIElement sender, Windows.UI.Xaml.Input.ContextRequestedEventArgs args)
         {
             var container = sender as ListViewItem;
-            if (container.Content is ISessionService session && !session.IsActive)
+
+            var item = NavigationViewList.ItemFromContainer(container);
+            if (item is ISessionService session && !session.IsActive)
             {
 
             }
-            else if (container.Content is AttachmentMenuBot menuBot)
+            else if (item is AttachmentMenuBot menuBot)
             {
                 if (_navigationService.Content is MainPage page)
                 {
@@ -518,13 +530,10 @@ namespace Telegram.Views.Host
                     flyout.ShowAt(sender, args);
                 }
             }
-            else if (container.Content is RootDestination.AddAccount)
+            else if (item is RootDestination.AddAccount)
             {
-                var alt = WindowContext.IsKeyDown(Windows.System.VirtualKey.Menu);
-                var ctrl = WindowContext.IsKeyDown(Windows.System.VirtualKey.Control);
-                var shift = WindowContext.IsKeyDown(Windows.System.VirtualKey.Shift);
-
-                if (alt && !ctrl && shift)
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == (VirtualKeyModifiers.Menu | VirtualKeyModifiers.Shift))
                 {
                     var flyout = new MenuFlyout();
                     flyout.CreateFlyoutItem(() => Switch(_lifetime.Create(test: false)), "Production Server", Icons.Globe);
@@ -532,7 +541,7 @@ namespace Telegram.Views.Host
                     flyout.ShowAt(sender, args);
                 }
             }
-            else if (container.Content is RootDestination.ArchivedChats)
+            else if (item is RootDestination.ArchivedChats)
             {
                 if (_navigationService.Content is MainPage page)
                 {
@@ -562,6 +571,7 @@ namespace Telegram.Views.Host
             }
 
             UpdateContainerContent(args.ItemContainer, args.Item);
+            args.Handled = true;
         }
 
         private void UpdateContainerContent(SelectorItem container, object item)
@@ -590,7 +600,9 @@ namespace Telegram.Views.Host
                 photo.SetUser(session.ClientService, user, 28);
 
                 var identity = content.FindName("Identity") as IdentityIcon;
-                identity.SetStatus(session.ClientService, user);
+                var botVerified = content.FindName("BotVerified") as CustomEmojiIcon;
+
+                identity.SetStatus(session.ClientService, user, botVerified);
 
                 AutomationProperties.SetName(container, user.FullName());
             }
@@ -604,7 +616,7 @@ namespace Telegram.Views.Host
                 content.Glyph = menuBot.BotUserId == 1985737506 ? Icons.Wallet : Icons.Bot;
                 content.BadgeVisibility = menuBot.ShowDisclaimerInSideMenu ? Visibility.Visible : Visibility.Collapsed;
             }
-            else if (item is RootDestination destination && _navigationService.Content is MainPage page)
+            else if (item is RootDestination destination)
             {
                 var content = container as Controls.NavigationViewItem;
                 if (content != null)
@@ -620,13 +632,21 @@ namespace Telegram.Views.Host
                         content.Glyph = Icons.PersonAdd;
                         break;
 
+                    case RootDestination.NewGroup:
+                        content.Text = Strings.NewGroup;
+                        content.Glyph = Icons.People;
+                        break;
+                    case RootDestination.NewChannel:
+                        content.Text = Strings.NewChannel;
+                        content.Glyph = Icons.Megaphone;
+                        break;
                     case RootDestination.Chats:
                         content.Text = Strings.FilterChats;
                         content.Glyph = Icons.ChatMultiple;
                         break;
                     case RootDestination.Contacts:
                         content.Text = Strings.Contacts;
-                        content.Glyph = Icons.People;
+                        content.Glyph = Icons.Person;
                         break;
                     case RootDestination.Calls:
                         content.Text = Strings.Calls;
@@ -647,7 +667,7 @@ namespace Telegram.Views.Host
                         break;
 
                     case RootDestination.Status:
-                        if (page.ViewModel.ClientService.TryGetUser(page.ViewModel.ClientService.Options.MyId, out User user))
+                        if (_navigationService.Content is MainPage page && page.ViewModel.ClientService.TryGetUser(page.ViewModel.ClientService.Options.MyId, out User user))
                         {
                             content.Text = user.EmojiStatus == null ? Strings.SetEmojiStatus : Strings.ChangeEmojiStatus;
                             content.Glyph = user.EmojiStatus == null ? Icons.EmojiAdd : Icons.EmojiEdit;
@@ -776,11 +796,9 @@ namespace Telegram.Views.Host
             {
                 if (session.IsActive)
                 {
-                    var alt = WindowContext.IsKeyDown(Windows.System.VirtualKey.Menu);
-                    var ctrl = WindowContext.IsKeyDown(Windows.System.VirtualKey.Control);
-                    var shift = WindowContext.IsKeyDown(Windows.System.VirtualKey.Shift);
+                    var modifiers = WindowContext.KeyModifiers();
 
-                    if (SettingsService.Current.Diagnostics.ShowMemoryUsage && alt && !ctrl && !shift)
+                    if (SettingsService.Current.Diagnostics.ShowMemoryUsage && modifiers == VirtualKeyModifiers.Menu)
                     {
                         TestDestroy();
                     }
@@ -838,6 +856,8 @@ namespace Telegram.Views.Host
                 disposable.Dispose();
             }
 
+            element.XamlRoot = XamlRoot;
+
             Transition.Child = element;
             Navigation.Visibility = element != null
                 ? Visibility.Collapsed
@@ -863,8 +883,6 @@ namespace Telegram.Views.Host
             }
 
             SetChecked(RootDestination.Chats, value);
-            SetChecked(RootDestination.Contacts, value);
-            SetChecked(RootDestination.Calls, value);
             SetChecked(RootDestination.Settings, value);
         }
 
@@ -875,6 +893,7 @@ namespace Telegram.Views.Host
             var resize = ThemePage == null;
 
             FindName("ThemePage");
+            ThemePage.ViewModel.NavigationService = _navigationService;
             ThemePage.Load(theme);
 
             if (resize)
@@ -924,7 +943,7 @@ namespace Telegram.Views.Host
                     await Test();
                 }
 
-                var visual = Window.Current.Compositor.CreateRedirectVisual(this, Vector2.Zero, ActualSize, true);
+                var visual = BootStrapper.Current.Compositor.CreateRedirectVisual(this, Vector2.Zero, ActualSize, true);
                 await VisualUtilities.WaitForCompositionRenderedAsync();
 
                 ElementCompositionPreview.SetElementChildVisual(Transition, visual);
@@ -940,12 +959,12 @@ namespace Telegram.Views.Host
                 var actualHeight = (float)ActualHeight;
 
                 var transform = Theme.TransformToVisual(this);
-                var point = transform.TransformPoint(new Point()).ToVector2();
+                var point = transform.TransformVector2();
 
                 var width = MathF.Max(actualWidth - point.X, actualHeight - point.Y);
                 var diaginal = MathF.Sqrt((width * width) + (width * width));
 
-                var device = CanvasDevice.GetSharedDevice();
+                var device = ElementComposition.GetSharedDevice();
                 var expand = false; // ActualTheme == ElementTheme.Dark;
 
                 var rect1 = CanvasGeometry.CreateRectangle(device, 0, 0, expand ? 0 : actualWidth, expand ? 0 : actualHeight);
@@ -995,7 +1014,7 @@ namespace Telegram.Views.Host
             if (SettingsService.Current.Appearance.NightMode != NightMode.Disabled)
             {
                 SettingsService.Current.Appearance.NightMode = NightMode.Disabled;
-                ToastPopup.Show(Strings.AutoNightModeOff, new LocalFileSource("ms-appx:///Assets/Toasts/AutoNightOff.tgs"));
+                ToastPopup.Show(XamlRoot, Strings.AutoNightModeOff, ToastPopupIcon.AutoNightOff);
             }
 
             SettingsService.Current.Appearance.ForceNightMode = ActualTheme != ElementTheme.Dark;
@@ -1049,16 +1068,18 @@ namespace Telegram.Views.Host
                         index = i--;
                     }
                 }
+
+                // The list was not initiated yet
+                if (index == -1 && bots.Count > 0)
+                {
+                    InitializeSessions(SettingsService.Current.IsAccountsSelectorExpanded, _lifetime.Items);
+                    return;
+                }
             }
 
             NavigationViewList.ForEach(container =>
             {
-                UpdateContainerContent(container, container.Content);
-
-                if (container.Content is RootDestination.Status)
-                {
-                    return;
-                }
+                UpdateContainerContent(container, NavigationViewList.ItemFromContainer(container));
             });
 
             if (_attachmentMenuBots != botsHash && index != -1)
@@ -1142,7 +1163,7 @@ namespace Telegram.Views.Host
 
             ElementCompositionPreview.SetIsTranslationEnabled(Info, true);
 
-            var batch = Window.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+            var batch = BootStrapper.Current.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
             batch.Completed += (s, args) =>
             {
                 Theme.Visibility = Visibility.Collapsed;
@@ -1237,9 +1258,12 @@ namespace Telegram.Views.Host
             }
         }
 
-        private void Photo_Click(object sender, RoutedEventArgs e)
+        private void OnProcessKeyboardAccelerators(UIElement sender, ProcessKeyboardAcceleratorEventArgs args)
         {
-            IsPaneOpen = false;
+            if (_navigationService?.Frame.Content is MainPage mainPage)
+            {
+                mainPage.ProcessKeyboardAccelerators(args);
+            }
         }
     }
 
@@ -1266,6 +1290,8 @@ namespace Telegram.Views.Host
         ArchivedChats,
         SavedMessages,
 
+        NewGroup,
+        NewChannel,
         Chats,
         Contacts,
         Calls,

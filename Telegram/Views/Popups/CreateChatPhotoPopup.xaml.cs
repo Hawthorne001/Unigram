@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -38,6 +38,8 @@ namespace Telegram.Views.Popups
 
         private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
         {
+            _completion.TrySetResult(null);
+
             UnloadAtIndex(0);
             UnloadAtIndex(1);
         }
@@ -74,7 +76,7 @@ namespace Telegram.Views.Popups
 
         private void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
         {
-            ViewModel.Completion = _completion;
+            _completion.SetResult(ViewModel.Send());
         }
 
         private void ContentDialog_SecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)

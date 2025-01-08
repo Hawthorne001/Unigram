@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -59,9 +59,11 @@ namespace Telegram.Streams
 
         public abstract long Offset { get; }
 
+        public bool IsUnique { get; set; }
+
         public override bool Equals(object obj)
         {
-            if (obj is AnimatedImageSource y)
+            if (obj is AnimatedImageSource y && !y.IsUnique && !IsUnique)
             {
                 return y.Id == Id;
             }
@@ -71,6 +73,11 @@ namespace Telegram.Streams
 
         public override int GetHashCode()
         {
+            if (IsUnique)
+            {
+                return base.GetHashCode();
+            }
+
             return Id.GetHashCode();
         }
     }

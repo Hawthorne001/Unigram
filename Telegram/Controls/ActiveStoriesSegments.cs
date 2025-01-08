@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,6 +9,7 @@ using System;
 using System.Numerics;
 using Telegram.Common;
 using Telegram.Controls.Stories;
+using Telegram.Navigation;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Td.Api;
@@ -24,7 +25,7 @@ using Point = Windows.Foundation.Point;
 
 namespace Telegram.Controls
 {
-    public class ActiveStoriesSegments : HyperlinkButton
+    public partial class ActiveStoriesSegments : HyperlinkButton
     {
         private static readonly Color _storyUnreadTopColor = Color.FromArgb(0xFF, 0x34, 0xC7, 0x6F);
         private static readonly Color _storyUnreadBottomColor = Color.FromArgb(0xFF, 0x3D, 0xA1, 0xFD);
@@ -74,7 +75,7 @@ namespace Telegram.Controls
                 var settings = TypeResolver.Current.Resolve<ISettingsService>(clientService.SessionId);
                 var aggregator = TypeResolver.Current.Resolve<IEventAggregator>(clientService.SessionId);
 
-                var activeStories = new ActiveStoriesViewModel(clientService, settings, aggregator, chatActiveStories);
+                var activeStories = new ActiveStoriesViewModel(clientService, settings, aggregator, chatActiveStories, chat);
                 await activeStories.Wait;
 
                 if (activeStories.Items.Count > 0 && activeStories.SelectedItem != null)
@@ -84,7 +85,7 @@ namespace Telegram.Controls
 
                     var window = new StoriesWindow();
                     window.Update(viewModel, activeStories, StoryOpenOrigin.ProfilePhoto, pointz, origin);
-                    _ = window.ShowAsync();
+                    _ = window.ShowAsync(XamlRoot);
                 }
             }
 
@@ -156,7 +157,7 @@ namespace Telegram.Controls
             }
         }
 
-        private void UpdateActiveStories(IClientService clientService, long chatId, bool hasActiveStories,  bool hasUnreadActiveStories, int side)
+        private void UpdateActiveStories(IClientService clientService, long chatId, bool hasActiveStories, bool hasUnreadActiveStories, int side)
         {
             if (chatId == 0 || !hasActiveStories)
             {
@@ -252,7 +253,7 @@ namespace Telegram.Controls
 
         private void UpdateSegments(int side, bool closeFriends, int total, int unread, float unreadThickness = 2.0f, float readThickness = 1.0f)
         {
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var read = total - unread;
 
             var unreadPath = GetSegments(compositor, side, total, 0, unread, unreadThickness, unreadThickness * 2);
@@ -349,7 +350,7 @@ namespace Telegram.Controls
 
         public void ShowIndeterminate(int side, int unreadCount, bool closeFriends)
         {
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
 
             var center = new Vector2(side * 0.5f);
             //var clip = compositor.CreateRectangleClip(0, 0, side, side, center, center, center, center);

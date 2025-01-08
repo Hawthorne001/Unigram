@@ -32,8 +32,14 @@ namespace Telegram.Native
         static String GetCurrentCulture();
         static String GetKeyboardCulture();
 
+        [default_overload]
         static String FormatTime(Int32 value);
-        static String FormatDate(Int32 value);
+        static String FormatTime(Windows.Foundation.DateTime value);
+
+        [default_overload]
+        static String FormatDate(Int32 value, String format);
+        static String FormatDate(Windows.Foundation.DateTime value, String format);
+        static String FormatDate(Int32 year, Int32 month, Int32 day, String format);
 
         [default_overload]
         static Boolean IsFileReadable(String path);
@@ -41,9 +47,14 @@ namespace Telegram.Native
 
         static Boolean IsMediaSupported();
 
+        static void OverrideScaleForCurrentView(Int32 value);
+        static Int32 GetScaleForCurrentView();
+
         static void SetFatalErrorCallback(FatalErrorCallback action);
-        static FatalError GetFatalError(Boolean onlyNative);
+        static Windows.Foundation.Collections.IVector<FatalErrorFrame> GetStowedException();
         static FatalError GetBackTrace(UInt64 code);
+
+        static String GetLogMessage(Int64 format, Int64 args);
 
         static void Crash();
     }

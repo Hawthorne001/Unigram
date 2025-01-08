@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -20,7 +20,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Supergroups
 {
-    public class SupergroupEditAdministratorViewModel : ViewModelBase, IDelegable<IMemberPopupDelegate>
+    public partial class SupergroupEditAdministratorViewModel : ViewModelBase, IDelegable<IMemberPopupDelegate>
     {
         public IMemberPopupDelegate Delegate { get; set; }
 
@@ -173,9 +173,9 @@ namespace Telegram.ViewModels.Supergroups
                     (!supergroup.IsChannel || _canEditMessages) &&
                     (supergroup.IsChannel || _canPinMessages) &&
                     (!supergroup.IsChannel || _canPostMessages) &&
-                    (!supergroup.IsChannel || _canPostStories) &&
-                    (!supergroup.IsChannel || _canEditStories) &&
-                    (!supergroup.IsChannel || _canDeleteStories) &&
+                    _canPostStories &&
+                    _canEditStories &&
+                    _canDeleteStories &&
                     (supergroup.IsChannel || _canRestrictMembers) &&
                     (supergroup.IsChannel || _canManageVideoChats);
             }
@@ -494,9 +494,9 @@ namespace Telegram.ViewModels.Supergroups
                         CanInviteUsers = _canInviteUsers,
                         CanPinMessages = !channel && _canPinMessages,
                         CanPostMessages = channel && _canPostMessages,
-                        CanPostStories = channel && _canPostStories,
-                        CanEditStories = channel && _canEditStories,
-                        CanDeleteStories = channel && _canDeleteStories,
+                        CanPostStories = _canPostStories,
+                        CanEditStories = _canEditStories,
+                        CanDeleteStories = _canDeleteStories,
                         CanPromoteMembers = _canPromoteMembers,
                         CanRestrictMembers = !channel && _canRestrictMembers,
                         CanManageVideoChats = !channel && _canManageVideoChats
@@ -563,7 +563,7 @@ namespace Telegram.ViewModels.Supergroups
                     builder.AppendLine(Strings.EditAdminTransferAlertText3);
                 }
 
-                var confirm = await ShowPopupAsync(null, builder.ToString(), Strings.EditAdminTransferAlertTitle, primary, Strings.Cancel);
+                var confirm = await ShowPopupAsync(builder.ToString(), Strings.EditAdminTransferAlertTitle, primary, Strings.Cancel);
                 if (confirm == ContentDialogResult.Primary && canTransfer is CanTransferOwnershipResultPasswordNeeded)
                 {
                     NavigationService.NavigateToPassword();
@@ -571,7 +571,7 @@ namespace Telegram.ViewModels.Supergroups
             }
             else if (canTransfer is CanTransferOwnershipResultOk)
             {
-                var confirm = await ShowPopupAsync(null, string.Format(Strings.EditAdminTransferReadyAlertText, chat.Title, user.FullName()), supergroup.IsChannel ? Strings.EditAdminChannelTransfer : Strings.EditAdminGroupTransfer, Strings.EditAdminTransferChangeOwner, Strings.Cancel);
+                var confirm = await ShowPopupAsync(string.Format(Strings.EditAdminTransferReadyAlertText, chat.Title, user.FullName()), supergroup.IsChannel ? Strings.EditAdminChannelTransfer : Strings.EditAdminGroupTransfer, Strings.EditAdminTransferChangeOwner, Strings.Cancel);
                 if (confirm != ContentDialogResult.Primary)
                 {
                     return;

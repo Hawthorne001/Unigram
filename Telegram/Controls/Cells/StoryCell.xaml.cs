@@ -1,10 +1,11 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using Telegram.Common;
+using Telegram.Controls.Media;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Stories;
 using Windows.Foundation;
@@ -26,9 +27,30 @@ namespace Telegram.Controls.Cells
             LayoutRoot.Constraint = new Size(256, 320);
         }
 
-        public void Update(StoryViewModel story)
+        public void Update(StoryViewModel story, bool pinned = false)
         {
             _viewModel = story;
+
+            var glyph = pinned
+                ? Icons.PinFilled16
+                : story.PrivacySettings switch
+                {
+                    StoryPrivacySettingsCloseFriends => Icons.StarFilled16,
+                    StoryPrivacySettingsSelectedUsers => Icons.PeopleFilled16,
+                    StoryPrivacySettingsContacts => Icons.PersonCircleFilled16,
+                    _ => null
+                };
+
+            if (glyph != null)
+            {
+                Glyph.Text = glyph;
+                VisualUtilities.DropShadow(Glyph, target: Shadow);
+            }
+            else
+            {
+                Glyph.Text = string.Empty;
+            }
+
 
             if (story.Content is StoryContentPhoto photo)
             {

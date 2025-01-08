@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,6 +10,7 @@ using Telegram.Td.Api;
 using Telegram.ViewModels.Drawers;
 using Telegram.Views.Popups;
 using Windows.Devices.Input;
+using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -19,7 +20,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Common
 {
-    public class ZoomableListHandler
+    public partial class ZoomableListHandler
     {
         private readonly ListViewBase _listView;
         private readonly FrameworkElementState _manager;
@@ -173,7 +174,7 @@ namespace Telegram.Common
         {
             if (_popupHost.IsOpen)
             {
-                var pointer = e.GetCurrentPoint(Window.Current.Content);
+                var pointer = e.GetCurrentPoint(_listView.XamlRoot.Content);
                 var children = VisualTreeHelper.FindElementsInHostCoordinates(pointer.Position, _listView);
 
                 var container = children?.FirstOrDefault(x => x is SelectorItem) as SelectorItem;
@@ -187,7 +188,7 @@ namespace Telegram.Common
 
                     _popupContent = content;
 
-                    if (content is StickerViewModel stickerViewModel)
+                    if (content is StickerViewModel stickerViewModel && stickerViewModel.StickerValue != null)
                     {
                         _popupPanel.SetSticker(stickerViewModel);
                     }
@@ -278,6 +279,7 @@ namespace Telegram.Common
                 _popupPanel.SetAnimation(animation);
             }
 
+            // TODO: WinUI - Can be safely removed.
             var bounds = ApplicationView.GetForCurrentView().VisibleBounds;
             if (bounds != Window.Current.Bounds)
             {
@@ -297,7 +299,13 @@ namespace Telegram.Common
 
             _popupPanel.Width = bounds.Width;
             _popupPanel.Height = bounds.Height;
+            _popupPanel.RequestedTheme = _listView.ActualTheme;
+            _popupPanel.Background = new SolidColorBrush(_listView.ActualTheme == ElementTheme.Light
+                ? Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)
+                : Color.FromArgb(0x99, 0x00, 0x00, 0x00));
+
             _popupContent = item;
+            _popupHost.XamlRoot = _listView.XamlRoot;
             _popupHost.IsOpen = true;
 
             //_scrollingHost.CancelDirectManipulations();

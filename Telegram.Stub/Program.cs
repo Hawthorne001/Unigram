@@ -15,9 +15,9 @@ namespace Telegram.Stub
     static class Program
     {
 #if DEBUG
-        const string MUTEX_NAME = "TelegramBridgeMutex";
+        const string MUTEX_NAME = "TelegramBridgeMutexV2";
 #else
-        const string MUTEX_NAME = "UnigramBridgeMutex";
+        const string MUTEX_NAME = "UnigramBridgeMutexV2";
 #endif
 
         static readonly Mutex _mutex = new Mutex(true, MUTEX_NAME);
@@ -36,7 +36,7 @@ namespace Telegram.Stub
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new BridgeApplicationContext());
-                
+
                 _mutex.ReleaseMutex();
             }
         }

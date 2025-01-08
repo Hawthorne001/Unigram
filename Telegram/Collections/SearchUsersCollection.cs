@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,7 @@ using Windows.UI.Xaml.Data;
 
 namespace Telegram.Collections
 {
-    public class SearchUsersCollection : ObservableCollection<KeyedList<string, object>>, ISupportIncrementalLoading
+    public partial class SearchUsersCollection : ObservableCollection<KeyedList<string, object>>, ISupportIncrementalLoading
     {
         private readonly IClientService _clientService;
         private readonly string _query;
@@ -54,7 +54,7 @@ namespace Telegram.Collections
                             if (user != null)
                             {
                                 _users.Add(id);
-                                _local.Add(new SearchResult(null, user, _query, SearchResultType.Contacts));
+                                _local.Add(new SearchResult(_clientService, user, _query, SearchResultType.Contacts, false));
                             }
                         }
                     }
@@ -75,7 +75,7 @@ namespace Telegram.Collections
                                 }
 
                                 _users.Add(privata.UserId);
-                                _local.Add(new SearchResult(null, chat, _query, SearchResultType.ChatsOnServer));
+                                _local.Add(new SearchResult(_clientService, chat, _query, SearchResultType.ChatsOnServer, false));
                             }
                         }
                     }
@@ -95,7 +95,7 @@ namespace Telegram.Collections
                                     continue;
                                 }
 
-                                _remote.Add(new SearchResult(null, chat, _query, SearchResultType.PublicChats));
+                                _remote.Add(new SearchResult(_clientService, chat, _query, SearchResultType.PublicChats, false));
                             }
                         }
                     }

@@ -14,7 +14,7 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels.Business
 {
-    public class BusinessViewModel : ViewModelBase
+    public partial class BusinessViewModel : ViewModelBase
     {
         private IList<BusinessFeature> _features;
         private Dictionary<Type, Animation> _animations;
@@ -30,19 +30,27 @@ namespace Telegram.ViewModels.Business
         {
             ClientService.Send(new GetUserFullInfo(ClientService.Options.MyId));
 
-            var response = await ClientService.SendAsync(new GetBusinessFeatures());
-            if (response is BusinessFeatures features)
+            if (ClientService.TryGetUserFull(ClientService.Options.MyId, out UserFullInfo fullInfo))
             {
-                _features = features.Features.ToList();
+                Set(ref _hasSponsoredMessagesEnabled, fullInfo.HasSponsoredMessagesEnabled, nameof(HasSponsoredMessagesEnabled));
+            }
 
-                foreach (var feature in features.Features)
+            if (Items.Empty())
+            {
+                var response = await ClientService.SendAsync(new GetBusinessFeatures());
+                if (response is BusinessFeatures features)
                 {
-                    if (feature is BusinessFeatureEmojiStatus or BusinessFeatureChatFolderTags or BusinessFeatureUpgradedStories)
-                    {
-                        continue;
-                    }
+                    _features = features.Features.ToList();
 
-                    Items.Add(feature);
+                    foreach (var feature in features.Features)
+                    {
+                        if (feature is BusinessFeatureEmojiStatus or BusinessFeatureChatFolderTags or BusinessFeatureUpgradedStories)
+                        {
+                            continue;
+                        }
+
+                        Items.Add(feature);
+                    }
                 }
             }
 
@@ -171,6 +179,21 @@ namespace Telegram.ViewModels.Business
                 case BusinessFeatureAccountLinks:
                     NavigationService.Navigate(typeof(BusinessChatLinksPage));
                     break;
+            }
+        }
+
+        private bool _hasSponsoredMessagesEnabled;
+        public bool HasSponsoredMessagesEnabled
+        {
+            get => _hasSponsoredMessagesEnabled;
+            set => SetHasSponsoredMessagesEnabled(value);
+        }
+
+        private void SetHasSponsoredMessagesEnabled(bool value)
+        {
+            if (Set(ref _hasSponsoredMessagesEnabled, value, nameof(HasSponsoredMessagesEnabled)))
+            {
+                ClientService.Send(new ToggleHasSponsoredMessagesEnabled(value));
             }
         }
     }

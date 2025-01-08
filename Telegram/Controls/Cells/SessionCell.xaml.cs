@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -58,6 +58,7 @@ namespace Telegram.Controls.Cells
                 SessionTypeBrave => ("", Color.FromArgb(0xFF, 0xFF, 0x95, 0x00), null),
                 SessionTypeVivaldi => ("", Color.FromArgb(0xFF, 0xFF, 0x3C, 0x30), null),
                 SessionTypeSafari => ("\uE974", Color.FromArgb(0xFF, 0x00, 0x79, 0xFF), "Safari"),
+                SessionTypeApple => ("\uE974", Color.FromArgb(0xFF, 0x00, 0x79, 0xFF), "Safari"),
                 SessionTypeFirefox => ("\uE96F", Color.FromArgb(0xFF, 0xFF, 0x95, 0x00), "Firefox"),
                 SessionTypeOpera => ("", Color.FromArgb(0xFF, 0xFF, 0x3C, 0x30), null),
                 SessionTypeAndroid => ("\uE96C", Color.FromArgb(0xFF, 0x35, 0xC7, 0x59), "Android"),
@@ -67,6 +68,7 @@ namespace Telegram.Controls.Cells
                 SessionTypeUbuntu => ("\uE976", Color.FromArgb(0xFF, 0xFF, 0x95, 0x00), "Ubuntu"),
                 SessionTypeLinux => ("\uE972", Color.FromArgb(0xFF, 0x8E, 0x8E, 0x93), "Linux"),
                 SessionTypeWindows => ("\uE977", Color.FromArgb(0xFF, 0x00, 0x79, 0xFF), "Windows"),
+                SessionTypeEdge => ("\uE96E", Color.FromArgb(0xFF, 0x00, 0x79, 0xFF), "Edge"),
                 _ => ("", Color.FromArgb(0xFF, 0x8E, 0x8E, 0x93), null)
             };
         }

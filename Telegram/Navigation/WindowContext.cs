@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -12,17 +12,18 @@ using System.Threading.Tasks;
 using Telegram.Common;
 using Telegram.Controls;
 using Telegram.Controls.Chats;
+using Telegram.Native;
 using Telegram.Navigation.Services;
 using Telegram.Services;
 using Telegram.Services.Keyboard;
-using Telegram.Services.ViewService;
 using Telegram.Td.Api;
 using Telegram.Views;
 using Telegram.Views.Authorization;
+using Telegram.Views.Calls;
+using Telegram.Views.Host;
 using Telegram.Views.Popups;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
-using Windows.ApplicationModel.Contacts;
 using Windows.ApplicationModel.Core;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
@@ -32,21 +33,32 @@ using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Documents;
-using Windows.UI.Xaml.Media;
 
 namespace Telegram.Navigation
 {
-    public class WindowContext
+    public partial class WindowContext
     {
         private readonly ILifetimeService _lifetime;
 
         private readonly Window _window;
 
+        private bool _consolidated;
+
         private readonly InputListener _inputListener;
         public InputListener InputListener => _inputListener;
 
+        public static implicit operator Window(WindowContext window) => window._window;
+
+        public CoreWindow CoreWindow => _window.CoreWindow;
+
         public int Id { get; }
+
+        private string _persistedId;
+        public string PersistedId
+        {
+            get => _persistedId;
+            set => ApplicationView.GetForCurrentView().PersistedStateId = _persistedId = value;
+        }
 
         public WindowContext(Window window)
         {
@@ -55,6 +67,13 @@ namespace Telegram.Navigation
             Current = this;
             Dispatcher = new DispatcherContext(window.CoreWindow.DispatcherQueue);
             Id = ApplicationView.GetApplicationViewIdForWindow(window.CoreWindow);
+            Bounds = window.Bounds;
+
+            var scaling = SettingsService.Current.Appearance.Scaling;
+            if (scaling is >= 100 and <= 250 && !SettingsService.Current.Appearance.UseDefaultScaling)
+            {
+                NativeUtils.OverrideScaleForCurrentView(scaling);
+            }
 
             if (CoreApplication.MainView == CoreApplication.GetCurrentView())
             {
@@ -71,6 +90,8 @@ namespace Telegram.Navigation
             _inputListener = new InputListener(window);
 
             window.Activated += OnActivated;
+            window.VisibilityChanged += OnVisibilityChanged;
+            window.SizeChanged += OnSizeChanged;
             window.Closed += OnClosed;
             window.CoreWindow.ResizeStarted += OnResizeStarted;
             window.CoreWindow.ResizeCompleted += OnResizeCompleted;
@@ -93,6 +114,11 @@ namespace Telegram.Navigation
 
             ApplicationView.GetForCurrentView().VisibleBoundsChanged += OnVisibleBoundsChanged;
             ApplicationView.GetForCurrentView().Consolidated += OnConsolidated;
+        }
+
+        public void Activate()
+        {
+            _window.Activate();
         }
 
         private void OnVisibleBoundsChanged(ApplicationView sender, object args)
@@ -122,6 +148,13 @@ namespace Telegram.Navigation
 
         public async Task ConsolidateAsync()
         {
+            if (_consolidated)
+            {
+                return;
+            }
+
+            _consolidated = true;
+
             var sender = ApplicationView.GetForCurrentView();
             if (await sender.TryConsolidateAsync())
             {
@@ -138,6 +171,7 @@ namespace Telegram.Navigation
 
         private void OnConsolidated(ApplicationView sender)
         {
+            _consolidated = true;
             _inputListener.Release();
             sender.Consolidated -= OnConsolidated;
 
@@ -158,12 +192,16 @@ namespace Telegram.Navigation
             NavigationServices.Clear();
 
             _window.Activated -= OnActivated;
+            _window.VisibilityChanged -= OnVisibilityChanged;
+            _window.SizeChanged -= OnSizeChanged;
             _window.Closed -= OnClosed;
             _window.CoreWindow.ResizeStarted -= OnResizeStarted;
             _window.CoreWindow.ResizeCompleted -= OnResizeCompleted;
         }
 
         public bool IsInMainView { get; }
+
+        public bool IsCallInProgress { get; private set; }
 
         public UIElement Content
         {
@@ -174,6 +212,8 @@ namespace Telegram.Navigation
 
                 if (value != null)
                 {
+                    IsCallInProgress = value is VoipPage or GroupCallPage or LiveStreamPage;
+
                     if (_locked != null)
                     {
                         value.Visibility = Visibility.Collapsed;
@@ -181,9 +221,20 @@ namespace Telegram.Navigation
 
                     if (value is FrameworkElement element)
                     {
+                        element.Loading += OnLoading;
                         element.Loaded += OnLoaded;
                     }
                 }
+            }
+        }
+
+        private void OnLoading(FrameworkElement sender, object args)
+        {
+            sender.Loading -= OnLoading;
+
+            lock (_allLock)
+            {
+                _mapping[sender.UIContext] = this;
             }
         }
 
@@ -238,9 +289,25 @@ namespace Telegram.Navigation
             }
         }
 
+        public event EventHandler<VisibilityChangedEventArgs> VisibilityChanged;
+
+        private void OnVisibilityChanged(object sender, VisibilityChangedEventArgs e)
+        {
+            VisibilityChanged?.Invoke(sender, e);
+        }
+
+        public event EventHandler<WindowSizeChangedEventArgs> SizeChanged;
+
+        private void OnSizeChanged(object sender, WindowSizeChangedEventArgs e)
+        {
+            Bounds = _window.Bounds;
+            SizeChanged?.Invoke(sender, e);
+        }
+
         private void OnResizeStarted(CoreWindow sender, object args)
         {
             Logger.Debug(sender.Bounds);
+            Bounds = sender.Bounds;
 
             if (_window.Content is FrameworkElement element)
             {
@@ -254,6 +321,7 @@ namespace Telegram.Navigation
         private void OnResizeCompleted(CoreWindow sender, object args)
         {
             Logger.Debug(sender.Bounds);
+            Bounds = sender.Bounds;
 
             if (_window.Content is FrameworkElement element)
             {
@@ -266,6 +334,51 @@ namespace Telegram.Navigation
 
         public DispatcherContext Dispatcher { get; }
         public NavigationServiceList NavigationServices { get; } = new NavigationServiceList();
+
+        public INavigationService GetNavigationService()
+        {
+            return GetNavigationService(_window);
+        }
+
+        public static INavigationService GetNavigationService(UIElement element)
+        {
+            var context = ForXamlRoot(element);
+            if (context != null)
+            {
+                return context.GetNavigationService();
+            }
+
+            return null;
+        }
+
+        public static INavigationService GetNavigationService(XamlRoot xamlRoot)
+        {
+            var context = ForXamlRoot(xamlRoot);
+            if (context != null)
+            {
+                return context.GetNavigationService();
+            }
+
+            return null;
+        }
+
+        public static INavigationService GetNavigationService(Window window)
+        {
+            if (window.Content is RootPage rootPage && rootPage.NavigationService != null)
+            {
+                return rootPage.NavigationService;
+            }
+            else if (window.Content is StandalonePage standalonePage && standalonePage.NavigationService != null)
+            {
+                return standalonePage.NavigationService;
+            }
+            else if (window.Content is Page { DataContext: ViewModelBase viewModel })
+            {
+                return viewModel.NavigationService;
+            }
+
+            return null;
+        }
 
         #region Screen capture
 
@@ -324,8 +437,11 @@ namespace Telegram.Navigation
                 }
             }
 
+            // TODO: WinUI - most likely XamlRoot is going to be null at this stage.
+            // As well, Content may be null too.
+
             _locked.Closing += handler;
-            await _locked.ShowQueuedAsync();
+            await _locked.ShowQueuedAsync(Content?.XamlRoot);
 
             _locked = null;
         }
@@ -337,19 +453,36 @@ namespace Telegram.Navigation
 
         #endregion
 
+        #region Helper methods
+
+        public string Title
+        {
+            get => ApplicationView.GetForCurrentView().Title;
+            set => ApplicationView.GetForCurrentView().Title = value;
+        }
+
+        public Rect Bounds { get; private set; }
+
+        public void SetTitleBar(UIElement element)
+        {
+            _window.SetTitleBar(element);
+        }
+
+        public bool IsFullScreenMode => ApplicationView.GetForCurrentView().IsFullScreenMode;
+
+        public void ExitFullScreenMode()
+        {
+            ApplicationView.GetForCurrentView().ExitFullScreenMode();
+        }
+
+        public void TryEnterFullScreenMode()
+        {
+            ApplicationView.GetForCurrentView().TryEnterFullScreenMode();
+        }
+
+        #endregion
+
         #region Legacy code
-
-        public ContactPanel ContactPanel { get; private set; }
-
-        public void SetContactPanel(ContactPanel panel)
-        {
-            ContactPanel = panel;
-        }
-
-        public bool IsContactPanel()
-        {
-            return ContactPanel != null;
-        }
 
         public async void Activate(IActivatedEventArgs args, INavigationService service, AuthorizationState state)
         {
@@ -380,7 +513,7 @@ namespace Telegram.Navigation
                     case AuthorizationStateWaitPassword waitPassword:
                         if (!string.IsNullOrEmpty(waitPassword.RecoveryEmailAddressPattern))
                         {
-                            await MessagePopup.ShowAsync(string.Format(Strings.RestoreEmailSent, waitPassword.RecoveryEmailAddressPattern), Strings.AppName, Strings.OK);
+                            await service.ShowPopupAsync(string.Format(Strings.RestoreEmailSent, waitPassword.RecoveryEmailAddressPattern), Strings.AppName, Strings.OK);
                         }
 
                         service.Navigate(typeof(AuthorizationPasswordPage), navigationStackEnabled: false);
@@ -390,23 +523,17 @@ namespace Telegram.Navigation
             catch { }
         }
 
-        private async void Activate(IActivatedEventArgs args, INavigationService service)
+        public static async void Activate(ShareTargetActivatedEventArgs args, AuthorizationState state)
         {
-            service ??= Current.NavigationServices.FirstOrDefault();
+            WatchDog.TrackEvent("ShareTarget");
 
-            if (service == null || args == null)
+            if (state is AuthorizationStateReady)
             {
-                return;
-            }
-
-            if (args is ShareTargetActivatedEventArgs share)
-            {
-                WatchDog.TrackEvent("ShareTarget");
                 var package = new DataPackage();
 
                 try
                 {
-                    var operation = share.ShareOperation.Data;
+                    var operation = args.ShareOperation.Data;
                     if (operation.AvailableFormats.Contains(StandardDataFormats.ApplicationLink))
                     {
                         package.SetApplicationLink(await operation.GetApplicationLinkAsync());
@@ -442,70 +569,34 @@ namespace Telegram.Navigation
                 }
                 catch { }
 
-                var query = "tg://";
-                var chatId = 0L;
-
-                try
-                {
-                    var contactId = await ContactsService.GetContactIdAsync(share.ShareOperation.Contacts.FirstOrDefault());
-                    if (contactId is long userId)
-                    {
-                        var response = await _lifetime.ActiveItem.ClientService.SendAsync(new CreatePrivateChat(userId, false));
-                        if (response is Chat chat)
-                        {
-                            query = $"ms-contact-profile://meh?ContactRemoteIds=u" + userId;
-                            chatId = chat.Id;
-                        }
-                    }
-                }
-                catch
-                {
-                    // ShareOperation.Contacts can throw an InvalidCastException
-                }
-
-                App.DataPackages[chatId] = package.GetView();
-
-                App.ShareOperation = share.ShareOperation;
-                App.ShareWindow = _window;
-
-                var options = new Windows.System.LauncherOptions();
-                options.TargetApplicationPackageFamilyName = Package.Current.Id.FamilyName;
-
-                try
-                {
-                    await Windows.System.Launcher.LaunchUriAsync(new Uri(query), options);
-                }
-                catch
-                {
-                    // It's too early?
-                }
+                App.DataPackages[0] = package.GetView();
+                App.ShareOperation = args.ShareOperation;
             }
-            else if (args is ContactPanelActivatedEventArgs contact)
+
+            var options = new Windows.System.LauncherOptions();
+            options.TargetApplicationPackageFamilyName = Package.Current.Id.FamilyName;
+
+            try
             {
-                SetContactPanel(contact.ContactPanel);
+                await Windows.System.Launcher.LaunchUriAsync(new Uri("tg://"), options);
+            }
+            catch
+            {
+                // It's too early?
+            }
+        }
 
-                if (Application.Current.Resources.TryGet("PageHeaderBackgroundBrush", out SolidColorBrush backgroundBrush))
-                {
-                    contact.ContactPanel.HeaderColor = backgroundBrush.Color;
-                }
+        private void Activate(IActivatedEventArgs args, INavigationService service)
+        {
+            service ??= Current.NavigationServices.FirstOrDefault();
 
-                var contactId = await ContactsService.GetContactIdAsync(contact.Contact.Id);
-                if (contactId is long userId)
-                {
-                    var response = await _lifetime.ActiveItem.ClientService.SendAsync(new CreatePrivateChat(userId, false));
-                    if (response is Chat chat)
-                    {
-                        service.NavigateToChat(chat);
-                    }
-                    else
-                    {
-                        ContactPanelFallback(service);
-                    }
-                }
-                else
-                {
-                    ContactPanelFallback(service);
-                }
+            if (service == null || args == null)
+            {
+                return;
+            }
+
+            if (args is ShareTargetActivatedEventArgs share)
+            {
             }
             else if (args is ProtocolActivatedEventArgs protocol)
             {
@@ -527,19 +618,6 @@ namespace Telegram.Navigation
                     }
                     catch { }
                 }
-
-                if (App.ShareWindow != null)
-                {
-                    try
-                    {
-                        await App.ShareWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                        {
-                            App.ShareWindow.Close();
-                            App.ShareWindow = null;
-                        });
-                    }
-                    catch { }
-                }
             }
             else if (args is FileActivatedEventArgs file)
             {
@@ -554,7 +632,10 @@ namespace Telegram.Navigation
 
                 if (file.Files[0] is StorageFile item)
                 {
-                    await new ThemePreviewPopup(item).ShowQueuedAsync();
+                    // TODO: WinUI - most likely XamlRoot is going to be null at this stage.
+                    // As well, Content may be null too.
+
+                    _ = new ThemePreviewPopup(item).ShowQueuedAsync(Content?.XamlRoot);
                 }
             }
             else if (args is CommandLineActivatedEventArgs commandLine)
@@ -583,35 +664,6 @@ namespace Telegram.Navigation
                 service.NavigateToMain(arguments);
             }
         }
-
-        private void ContactPanelFallback(INavigationService service)
-        {
-            if (service == null)
-            {
-                return;
-            }
-
-            var hyper = new Hyperlink();
-            hyper.NavigateUri = new Uri("ms-settings:privacy-contacts");
-            hyper.Inlines.Add(new Run { Text = "Settings" });
-
-            var text = new TextBlock();
-            text.Padding = new Thickness(12);
-            text.VerticalAlignment = VerticalAlignment.Center;
-            text.TextWrapping = TextWrapping.Wrap;
-            text.TextAlignment = TextAlignment.Center;
-            text.Inlines.Add(new Run { Text = "This app is not able to access your contacts. Go to " });
-            text.Inlines.Add(hyper);
-            text.Inlines.Add(new Run { Text = " to check the contacts privacy settings." });
-
-            var page = new ContentControl();
-            page.VerticalAlignment = VerticalAlignment.Center;
-            page.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-            page.Content = text;
-
-            service.Frame.Content = page;
-        }
-
 
         /// <summary>
         /// Update the Title and Status Bars colors.
@@ -682,12 +734,49 @@ namespace Telegram.Navigation
 
         public static bool IsKeyDown(Windows.System.VirtualKey key)
         {
+            //return (InputKeyboardSource.GetKeyStateForCurrentThread(key) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
             return (Window.Current.CoreWindow.GetKeyState(key) & CoreVirtualKeyStates.Down) != 0;
         }
 
         public static bool IsKeyDownAsync(Windows.System.VirtualKey key)
         {
+            //return (InputKeyboardSource.GetKeyStateForCurrentThread(key) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
             return (Window.Current.CoreWindow.GetAsyncKeyState(key) & CoreVirtualKeyStates.Down) != 0;
+        }
+
+        public static Windows.System.VirtualKeyModifiers KeyModifiers()
+        {
+            //return (InputKeyboardSource.GetKeyStateForCurrentThread(key) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+
+            var modifiers = Windows.System.VirtualKeyModifiers.None;
+
+            if ((Window.Current.CoreWindow.GetAsyncKeyState(Windows.System.VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0)
+            {
+                modifiers |= Windows.System.VirtualKeyModifiers.Control;
+            }
+
+            if ((Window.Current.CoreWindow.GetAsyncKeyState(Windows.System.VirtualKey.Menu) & CoreVirtualKeyStates.Down) != 0)
+            {
+                modifiers |= Windows.System.VirtualKeyModifiers.Menu;
+            }
+
+            if ((Window.Current.CoreWindow.GetAsyncKeyState(Windows.System.VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0)
+            {
+                modifiers |= Windows.System.VirtualKeyModifiers.Shift;
+            }
+
+            return modifiers;
+        }
+
+        public static async void Activate(string persistedId)
+        {
+            var oldViewId = WindowContext.Current.Id;
+
+            var already = WindowContext.All.FirstOrDefault(x => x.PersistedId == persistedId);
+            if (already != null)
+            {
+                await already.Dispatcher.DispatchAsync(() => ApplicationViewSwitcher.SwitchAsync(WindowContext.Current.Id, oldViewId).AsTask());
+            }
         }
 
         public static void ForEach(Action<WindowContext> action)
@@ -714,6 +803,45 @@ namespace Telegram.Navigation
             }
 
             return Task.WhenAll(tasks);
+        }
+
+        public static Task ForEachAsync(Action<WindowContext> action)
+        {
+            var tasks = new List<Task>();
+
+            lock (_allLock)
+            {
+                foreach (var window in All)
+                {
+                    tasks.Add(window.Dispatcher.DispatchAsync(() => action(window)));
+                }
+            }
+
+            return Task.WhenAll(tasks);
+        }
+
+        private static readonly Dictionary<UIContext, WindowContext> _mapping = new();
+
+        public static WindowContext ForXamlRoot(XamlRoot xamlRoot)
+        {
+            WindowContext context;
+            lock (_allLock)
+            {
+                _mapping.TryGetValue(xamlRoot.UIContext, out context);
+            }
+
+            return context;
+        }
+
+        public static WindowContext ForXamlRoot(UIElement element)
+        {
+            WindowContext context;
+            lock (_allLock)
+            {
+                _mapping.TryGetValue(element.UIContext, out context);
+            }
+
+            return context;
         }
 
         private static readonly object _allLock = new();

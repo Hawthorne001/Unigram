@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,13 +10,24 @@ using System.Threading.Tasks;
 using Telegram.Services;
 using Telegram.Services.Factories;
 using Telegram.Td.Api;
+using Telegram.ViewModels.Delegates;
 
 namespace Telegram.ViewModels
 {
-    public class DialogBusinessRepliesViewModel : DialogViewModel, IDiffHandler<MessageViewModel>
+    public partial class QuickReplyMessageViewModel : MessageViewModel
     {
-        public DialogBusinessRepliesViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, IVoipGroupService voipGroupService, INetworkService networkService, IStorageService storageService, ITranslateService translateService, IMessageFactory messageFactory)
-            : base(clientService, settingsService, aggregator, locationService, pushService, playbackService, voipService, voipGroupService, networkService, storageService, translateService, messageFactory)
+        public QuickReplyMessageViewModel(IClientService clientService, IPlaybackService playbackService, IMessageDelegate delegato, Chat chat, Message message, bool processText = false)
+            : base(clientService, playbackService, delegato, chat, message, processText)
+        {
+        }
+
+        public bool CanBeEdited { get; set; }
+    }
+
+    public partial class DialogBusinessRepliesViewModel : DialogViewModel, IDiffHandler<MessageViewModel>
+    {
+        public DialogBusinessRepliesViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, ILocationService locationService, INotificationsService pushService, IPlaybackService playbackService, IVoipService voipService, INetworkService networkService, IStorageService storageService, ITranslateService translateService, IMessageFactory messageFactory)
+            : base(clientService, settingsService, aggregator, locationService, pushService, playbackService, voipService, networkService, storageService, translateService, messageFactory)
         {
         }
 
@@ -46,7 +57,16 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            var replied = update.Messages.OrderBy(x => x.Id).Select(x => CreateMessage(new Message(x.Id, new MessageSenderUser(ClientService.Options.MyId), ClientService.Options.MyId, x.SendingState, null, true, false, false, x.CanBeEdited, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, 0, 0, null, null, null, null, null, 0, 0, null, 0, 0, x.ViaBotUserId, 0, 0, string.Empty, x.MediaAlbumId, string.Empty, x.Content, x.ReplyMarkup))).ToList();
+            var replied = update.Messages.OrderBy(x => x.Id).Select(x =>
+            {
+                var message = new Message(x.Id, new MessageSenderUser(ClientService.Options.MyId), ClientService.Options.MyId, x.SendingState, null, true, false, false, false, false, false, false, false, 0, 0, null, null, null, null, null, null, 0, 0, null, 0, 0, x.ViaBotUserId, 0, 0, string.Empty, x.MediaAlbumId, 0, false, string.Empty, x.Content, x.ReplyMarkup);
+                var model = new QuickReplyMessageViewModel(ClientService, PlaybackService, _messageDelegate, _chat, message, true)
+                {
+                    CanBeEdited = x.CanBeEdited
+                };
+
+                return model as MessageViewModel;
+            }).ToList();
 
             BeginOnUIThread(() =>
             {
@@ -90,6 +110,7 @@ namespace Telegram.ViewModels
         public void UpdateItem(MessageViewModel oldItem, MessageViewModel newItem)
         {
             oldItem.UpdateWith(newItem);
+            oldItem.Content = newItem.Content;
         }
     }
 }

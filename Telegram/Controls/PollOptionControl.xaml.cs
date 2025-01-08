@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using System;
 using System.Linq;
 using Telegram.Common;
+using Telegram.Services;
 using Telegram.Td.Api;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
@@ -23,7 +24,7 @@ namespace Telegram.Controls
             InitializeComponent();
         }
 
-        public void UpdatePollOption(Poll poll, PollOption option)
+        public void UpdatePollOption(IClientService clientService, Poll poll, PollOption option)
         {
             var results = poll.IsClosed || poll.Options.Any(x => x.IsChosen);
             var correct = poll.Type is PollTypeQuiz quiz && quiz.CorrectOptionId == poll.Options.IndexOf(option);
@@ -43,12 +44,13 @@ namespace Telegram.Controls
 
             Extensions.SetToolTip(Percentage, results ? votes : null);
 
-            Text.Text = option.Text;
+            CustomEmojiIcon.Add(TextText, Text.Inlines, clientService, option.Text);
 
             Zero.Visibility = results ? Visibility.Visible : Visibility.Collapsed;
 
             Votes.Maximum = results ? Math.Max(poll.Options.Max(x => x.VoterCount), 1) : 1;
             Votes.Value = results ? option.VoterCount : 0;
+            VotesLine.Opacity = results ? 0 : 0.3;
 
             Loading.IsActive = option.IsBeingChosen;
 
@@ -65,11 +67,11 @@ namespace Telegram.Controls
 
             if (results)
             {
-                AutomationProperties.SetName(this, $"{option.Text}, {votes}, {option.VotePercentage}%");
+                AutomationProperties.SetName(this, $"{option.Text.Text}, {votes}, {option.VotePercentage}%");
             }
             else
             {
-                AutomationProperties.SetName(this, option.Text);
+                AutomationProperties.SetName(this, option.Text.Text);
             }
         }
 

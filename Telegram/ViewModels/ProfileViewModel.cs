@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -15,7 +15,6 @@ using Telegram.Controls;
 using Telegram.Converters;
 using Telegram.Navigation.Services;
 using Telegram.Services;
-using Telegram.Streams;
 using Telegram.Td.Api;
 using Telegram.ViewModels.Delegates;
 using Telegram.ViewModels.Profile;
@@ -24,6 +23,7 @@ using Telegram.Views;
 using Telegram.Views.Chats;
 using Telegram.Views.Popups;
 using Telegram.Views.Premium.Popups;
+using Telegram.Views.Stars.Popups;
 using Telegram.Views.Supergroups;
 using Telegram.Views.Supergroups.Popups;
 using Telegram.Views.Users;
@@ -32,22 +32,20 @@ using Windows.UI.Xaml.Navigation;
 
 namespace Telegram.ViewModels
 {
-    public class ProfileViewModel : ProfileTabsViewModel, IDelegable<IProfileDelegate>, IHandle
+    public partial class ProfileViewModel : ProfileTabsViewModel, IDelegable<IProfileDelegate>, IHandle
     {
         public string LastSeen { get; internal set; }
 
         public IProfileDelegate Delegate { get; set; }
 
         private readonly IVoipService _voipService;
-        private readonly IVoipGroupService _voipGroupService;
         private readonly INotificationsService _notificationsService;
         private readonly ITranslateService _translateService;
 
-        public ProfileViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, IPlaybackService playbackService, IVoipService voipService, IVoipGroupService voipGroupService, INotificationsService notificationsService, IStorageService storageService, ITranslateService translateService)
+        public ProfileViewModel(IClientService clientService, ISettingsService settingsService, IEventAggregator aggregator, IPlaybackService playbackService, IVoipService voipService, INotificationsService notificationsService, IStorageService storageService, ITranslateService translateService)
             : base(clientService, settingsService, storageService, aggregator, playbackService)
         {
             _voipService = voipService;
-            _voipGroupService = voipGroupService;
             _notificationsService = notificationsService;
             _translateService = translateService;
 
@@ -57,9 +55,11 @@ namespace Telegram.ViewModels
         public ITranslateService TranslateService => _translateService;
 
         public ProfileSavedChatsTabViewModel SavedChatsTab => _savedChatsViewModel;
-        public ProfileStoriesTabViewModel StoriesTab => _storiesTabViewModel;
+        public ProfileStoriesTabViewModel PinnedStoriesTab => _pinnedStoriesTabViewModel;
+        public ProfileStoriesTabViewModel ArchivedStoriesTab => _archivedStoriesTabViewModel;
         public ProfileGroupsTabViewModel GroupsTab => _groupsTabViewModel;
         public ProfileChannelsTabViewModel ChannelsTab => _channelsTabViewModel;
+        public ProfileGiftsTabViewModel GiftsTab => _giftsTabViewModel;
         public SupergroupMembersViewModel MembersTab => _membersTabVieModel;
 
         protected ObservableCollection<ChatMember> _members;
@@ -73,7 +73,14 @@ namespace Telegram.ViewModels
         public double HeaderHeight
         {
             get => _headerHeight;
-            set => Set(ref _headerHeight, value);
+            set
+            {
+                if (Set(ref _headerHeight, value))
+                {
+                    PinnedStoriesTab.HeaderHeight = value;
+                    ArchivedStoriesTab.HeaderHeight = value;
+                }
+            }
         }
 
         public long LinkedChatId { get; private set; }
@@ -118,14 +125,16 @@ namespace Telegram.ViewModels
                 var cache = ClientService.GetUserFull(privata.UserId);
 
                 Delegate?.UpdateUser(chat, item, false);
+                ClientService.Send(new GetUserFullInfo(privata.UserId));
 
-                if (cache == null)
-                {
-                    ClientService.Send(new GetUserFullInfo(privata.UserId));
-                }
-                else
+                if (cache != null)
                 {
                     Delegate?.UpdateUserFullInfo(chat, item, cache, false, false);
+                }
+
+                if (cache?.BotInfo?.CanGetRevenueStatistics is true || item.Type is UserTypeBot { CanBeEdited: true })
+                {
+                    UpdateBalance(chat.Id, new MessageSenderUser(item.Id));
                 }
             }
             else if (chat.Type is ChatTypeSecret secretType)
@@ -135,13 +144,11 @@ namespace Telegram.ViewModels
                 var cache = ClientService.GetUserFull(secretType.UserId);
 
                 Delegate?.UpdateSecretChat(chat, secret);
-                Delegate?.UpdateUser(chat, item, true);
 
-                if (cache == null)
-                {
-                    ClientService.Send(new GetUserFullInfo(secret.UserId));
-                }
-                else
+                Delegate?.UpdateUser(chat, item, true);
+                ClientService.Send(new GetUserFullInfo(secret.UserId));
+
+                if (cache != null)
                 {
                     Delegate?.UpdateUserFullInfo(chat, item, cache, true, false);
                 }
@@ -152,12 +159,9 @@ namespace Telegram.ViewModels
                 var cache = ClientService.GetBasicGroupFull(basic.BasicGroupId);
 
                 Delegate?.UpdateBasicGroup(chat, item);
+                ClientService.Send(new GetBasicGroupFullInfo(basic.BasicGroupId));
 
-                if (cache == null)
-                {
-                    ClientService.Send(new GetBasicGroupFullInfo(basic.BasicGroupId));
-                }
-                else
+                if (cache != null)
                 {
                     Delegate?.UpdateBasicGroupFullInfo(chat, item, cache);
                 }
@@ -168,14 +172,16 @@ namespace Telegram.ViewModels
                 var cache = ClientService.GetSupergroupFull(super.SupergroupId);
 
                 Delegate?.UpdateSupergroup(chat, item);
+                ClientService.Send(new GetSupergroupFullInfo(super.SupergroupId));
 
-                if (cache == null)
-                {
-                    ClientService.Send(new GetSupergroupFullInfo(super.SupergroupId));
-                }
-                else
+                if (cache != null)
                 {
                     Delegate?.UpdateSupergroupFullInfo(chat, item, cache);
+                }
+
+                if (cache?.CanGetRevenueStatistics is true || cache?.CanGetStarRevenueStatistics is true)
+                {
+                    UpdateBalance(chat.Id, new MessageSenderChat(chat.Id));
                 }
             }
 
@@ -200,7 +206,20 @@ namespace Telegram.ViewModels
                 .Subscribe<UpdateChatNotificationSettings>(Handle);
         }
 
+        private async void UpdateBalance(long chatId, MessageSender senderId)
+        {
+            var response = await ClientService.SendAsync(new GetStarTransactions(senderId, string.Empty, null, string.Empty, 1));
+            if (response is StarTransactions transactions)
+            {
+                StarCount = transactions.StarAmount;
+            }
 
+            var response2 = await ClientService.SendAsync(new GetChatRevenueStatistics(chatId, false));
+            if (response2 is ChatRevenueStatistics statistics)
+            {
+                CryptoCount = statistics.RevenueAmount.BalanceAmount;
+            }
+        }
 
         public void Handle(UpdateUser update)
         {
@@ -231,7 +250,15 @@ namespace Telegram.ViewModels
             if (chat.Type is ChatTypePrivate privata && privata.UserId == update.UserId)
             {
                 LinkedChatId = update.UserFullInfo.PersonalChatId;
-                BeginOnUIThread(() => Delegate?.UpdateUserFullInfo(chat, ClientService.GetUser(update.UserId), update.UserFullInfo, false, false));
+                BeginOnUIThread(() =>
+                {
+                    Delegate?.UpdateUserFullInfo(chat, ClientService.GetUser(update.UserId), update.UserFullInfo, false, false);
+
+                    if (update.UserFullInfo.BotInfo?.CanGetRevenueStatistics is true)
+                    {
+                        UpdateBalance(chat.Id, new MessageSenderUser(update.UserId));
+                    }
+                });
             }
             else if (chat.Type is ChatTypeSecret secret && secret.UserId == update.UserId)
             {
@@ -312,6 +339,11 @@ namespace Telegram.ViewModels
                 {
                     MembersTab.UpdateMembers();
                     Delegate?.UpdateSupergroupFullInfo(chat, ClientService.GetSupergroup(update.SupergroupId), update.SupergroupFullInfo);
+
+                    if (update.SupergroupFullInfo?.CanGetRevenueStatistics is true || update.SupergroupFullInfo?.CanGetStarRevenueStatistics is true)
+                    {
+                        UpdateBalance(chat.Id, new MessageSenderChat(chat.Id));
+                    }
                 });
             }
         }
@@ -523,7 +555,7 @@ namespace Telegram.ViewModels
                 var user = ClientService.GetUser(chat.Type is ChatTypePrivate privata ? privata.UserId : chat.Type is ChatTypeSecret secret ? secret.UserId : 0);
                 if (user != null)
                 {
-                    await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationPostMessage(new InputMessageContact(new Contact(user.PhoneNumber, user.FirstName, user.LastName, string.Empty, user.Id))));
+                    await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationPostMessage(new InputMessageContact(new Contact(user.PhoneNumber, user.FirstName, user.LastName, string.Empty, user.Id))));
                 }
             }
         }
@@ -542,7 +574,7 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            MessageHelper.CopyText(PhoneNumber.Format(user.PhoneNumber));
+            MessageHelper.CopyText(XamlRoot, PhoneNumber.Format(user.PhoneNumber));
         }
 
         public void CopyId()
@@ -555,11 +587,11 @@ namespace Telegram.ViewModels
 
             if (ClientService.TryGetUser(chat, out User user))
             {
-                MessageHelper.CopyText(user.Id.ToString());
+                MessageHelper.CopyText(XamlRoot, user.Id.ToString());
             }
             else
             {
-                MessageHelper.CopyText(chat.Id.ToString());
+                MessageHelper.CopyText(XamlRoot, chat.Id.ToString());
             }
         }
 
@@ -609,7 +641,7 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                MessageHelper.CopyText($"@{username}");
+                MessageHelper.CopyText(XamlRoot, $"@{username}");
             }
             else
             {
@@ -619,7 +651,7 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                MessageHelper.CopyText($"@{username}");
+                MessageHelper.CopyText(XamlRoot, $"@{username}");
             }
         }
 
@@ -639,7 +671,7 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                MessageHelper.CopyLink(ClientService, new InternalLinkTypePublicChat(username, string.Empty));
+                MessageHelper.CopyLink(ClientService, XamlRoot, new InternalLinkTypePublicChat(username, string.Empty, false));
             }
             else
             {
@@ -649,7 +681,7 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                MessageHelper.CopyLink(ClientService, new InternalLinkTypePublicChat(username, string.Empty));
+                MessageHelper.CopyLink(ClientService, XamlRoot, new InternalLinkTypePublicChat(username, string.Empty, false));
             }
         }
 
@@ -661,10 +693,10 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            if (ClientService.TryGetUser(chat, out User user)
-                && ClientService.TryGetUserFull(chat, out UserFullInfo userFull))
+            if (ClientService.TryGetUser(chat, out User user) &&
+                ClientService.TryGetUserFull(chat, out UserFullInfo fullInfo))
             {
-                await ShowPopupAsync(new GiftPopup(ClientService, NavigationService, user, userFull.PremiumGiftOptions));
+                await ShowPopupAsync(new GiftPopup(ClientService, NavigationService, user, fullInfo));
             }
         }
 
@@ -719,11 +751,37 @@ namespace Telegram.ViewModels
                     return;
                 }
 
-                await ShowPopupAsync(typeof(ChooseChatsPopup), new ChooseChatsConfigurationStartBot(user));
+                await ShowPopupAsync(new ChooseChatsPopup(), new ChooseChatsConfigurationStartBot(user));
             }
             else
             {
                 MembersTab.Add();
+            }
+        }
+
+        public void PrivacyPolicy()
+        {
+            var chat = _chat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (ClientService.TryGetUserFull(chat, out UserFullInfo fullInfo))
+            {
+                if (fullInfo.BotInfo?.PrivacyPolicyUrl.Length > 0)
+                {
+                    MessageHelper.OpenUrl(null, null, fullInfo.BotInfo.PrivacyPolicyUrl);
+                }
+                else if (fullInfo.BotInfo.Commands.Any(x => string.Equals(x.Command, "privacy", StringComparison.OrdinalIgnoreCase)))
+                {
+                    ClientService.Send(new SendMessage(chat.Id, 0, null, null, null, new InputMessageText(new FormattedText("/privacy", Array.Empty<TextEntity>()), null, false)));
+                    SendMessage();
+                }
+                else
+                {
+                    MessageHelper.OpenUrl(null, null, Strings.BotDefaultPrivacyPolicy);
+                }
             }
         }
 
@@ -739,7 +797,7 @@ namespace Telegram.ViewModels
 
         public void ToggleMute()
         {
-            ToggleMute(ClientService.Notifications.GetMutedFor(_chat) > 0);
+            ToggleMute(ClientService.Notifications.IsMuted(_chat));
         }
 
         private void ToggleMute(bool unmute)
@@ -750,7 +808,7 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            _notificationsService.SetMuteFor(chat, ClientService.Notifications.GetMutedFor(chat) > 0 ? 0 : 632053052);
+            _notificationsService.SetMuteFor(chat, ClientService.Notifications.IsMuted(chat) ? 0 : 632053052, XamlRoot);
         }
 
         public async void OpenUsernameInfo(string username)
@@ -790,7 +848,7 @@ namespace Telegram.ViewModels
                 if (confirm == ContentDialogResult.Primary)
                 {
                     ClientService.Send(new SetUserPrivacySettingRules(new UserPrivacySettingShowStatus(), new UserPrivacySettingRules(new UserPrivacySettingRule[] { new UserPrivacySettingRuleAllowAll() })));
-                    ToastPopup.Show(Strings.PremiumLastSeenSet, new LocalFileSource("ms-appx:///Assets/Toasts/Info.tgs"));
+                    ShowToast(Strings.PremiumLastSeenSet, ToastPopupIcon.Info);
                 }
                 else if (confirm == ContentDialogResult.Secondary && IsPremiumAvailable && !IsPremium)
                 {
@@ -840,7 +898,7 @@ namespace Telegram.ViewModels
             Call(true);
         }
 
-        private async void Call(bool video)
+        private void Call(bool video)
         {
             var chat = _chat;
             if (chat == null)
@@ -850,15 +908,15 @@ namespace Telegram.ViewModels
 
             if (chat.Type is ChatTypePrivate or ChatTypeSecret)
             {
-                _voipService.Start(chat.Id, video);
+                _voipService.StartPrivateCall(NavigationService, chat, video);
             }
             else if (chat.VideoChat.GroupCallId == 0)
             {
-                await _voipGroupService.CreateAsync(chat.Id);
+                _voipService.CreateGroupCall(NavigationService, chat.Id);
             }
             else
             {
-                await _voipGroupService.JoinAsync(chat.Id);
+                _voipService.JoinGroupCall(NavigationService, chat.Id);
             }
         }
 
@@ -938,6 +996,83 @@ namespace Telegram.ViewModels
             }
 
             ClientService.Send(new JoinChat(chat.Id));
+        }
+
+        public async void ShowPromo()
+        {
+            if (Chat?.EmojiStatus != null)
+            {
+                var response = await ClientService.SendAsync(new GetCustomEmojiStickers(new[] { Chat.EmojiStatus.CustomEmojiId }));
+                if (response is Stickers stickers)
+                {
+                    var second = await ClientService.SendAsync(new GetStickerSet(stickers.StickersValue[0].SetId));
+                    if (second is StickerSet stickerSet)
+                    {
+                        NavigationService.ShowPopup(new PromoPopup(ClientService, Chat, stickerSet));
+                        return;
+                    }
+                }
+            }
+
+            if (ClientService.TryGetUser(Chat, out User user) && user.IsPremium)
+            {
+                NavigationService.ShowPopup(new PromoPopup(ClientService, Chat, null));
+            }
+        }
+
+        public void OpenChat()
+        {
+            var chat = _chat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            NavigationService.NavigateToChat(chat.Id, createNewWindow: true);
+        }
+
+        public async void DeleteChat()
+        {
+            var chat = _chat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            Logger.Info(chat.Type);
+
+            var updated = await ClientService.SendAsync(new GetChat(chat.Id)) as Chat ?? chat;
+            var dialog = new DeleteChatPopup(ClientService, updated, null, false);
+
+            var confirm = await ShowPopupAsync(dialog);
+            if (confirm == ContentDialogResult.Primary)
+            {
+                var check = dialog.IsChecked == true;
+
+                if (updated.Type is ChatTypeSecret secret)
+                {
+                    await ClientService.SendAsync(new CloseSecretChat(secret.SecretChatId));
+                }
+                else if (updated.Type is ChatTypeBasicGroup or ChatTypeSupergroup)
+                {
+                    await ClientService.SendAsync(new LeaveChat(updated.Id));
+                }
+
+                var user = ClientService.GetUser(updated);
+                if (user != null && user.Type is UserTypeRegular)
+                {
+                    ClientService.Send(new DeleteChatHistory(updated.Id, true, check));
+                }
+                else
+                {
+                    if (updated.Type is ChatTypePrivate privata && check)
+                    {
+                        await ClientService.SendAsync(new SetMessageSenderBlockList(new MessageSenderUser(privata.UserId), new BlockListMain()));
+                    }
+
+                    ClientService.Send(new DeleteChatHistory(updated.Id, true, false));
+                }
+            }
         }
 
         public async void Delete()
@@ -1037,11 +1172,11 @@ namespace Telegram.ViewModels
 
             if (value is int update)
             {
-                _notificationsService.SetMuteFor(chat, update);
+                _notificationsService.SetMuteFor(chat, update, XamlRoot);
             }
             else
             {
-                var mutedFor = Settings.Notifications.GetMutedFor(chat);
+                var mutedFor = Settings.Notifications.GetMuteFor(chat);
                 var popup = new ChatMutePopup(mutedFor);
 
                 var confirm = await ShowPopupAsync(popup);
@@ -1052,7 +1187,7 @@ namespace Telegram.ViewModels
 
                 if (mutedFor != popup.Value)
                 {
-                    _notificationsService.SetMuteFor(chat, popup.Value);
+                    _notificationsService.SetMuteFor(chat, popup.Value, XamlRoot);
                 }
             }
         }
@@ -1070,17 +1205,17 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            if (ttl is int value)
+            if (ttl is int value && value != chat.MessageAutoDeleteTime)
             {
                 ClientService.Send(new SetChatMessageAutoDeleteTime(chat.Id, value));
             }
-            else
+            else if (ttl == null)
             {
                 var dialog = new ChatTtlPopup(chat.Type is ChatTypeSecret ? ChatTtlType.Secret : ChatTtlType.Normal);
                 dialog.Value = chat.MessageAutoDeleteTime;
 
                 var confirm = await ShowPopupAsync(dialog);
-                if (confirm != ContentDialogResult.Primary)
+                if (confirm != ContentDialogResult.Primary || chat.MessageAutoDeleteTime == dialog.Value)
                 {
                     return;
                 }
@@ -1090,6 +1225,16 @@ namespace Telegram.ViewModels
         }
 
         #endregion
+
+        public void OpenMainWebApp()
+        {
+            if (_chat == null || !ClientService.TryGetUser(_chat, out User user))
+            {
+                return;
+            }
+
+            MessageHelper.NavigateToMainWebApp(ClientService, NavigationService, user, string.Empty, new WebAppOpenModeFullSize());
+        }
 
         #region Supergroup
 
@@ -1104,6 +1249,38 @@ namespace Telegram.ViewModels
             NavigationService.NavigateToChat(_chat.Id, savedMessagesTopicId: topic.Id);
         }
 
+        private StarAmount _starCount;
+        public StarAmount StarCount
+        {
+            get => _starCount;
+            set => Set(ref _starCount, value);
+        }
+
+        private long _cryptoCount;
+        public long CryptoCount
+        {
+            get => _cryptoCount;
+            set => Set(ref _cryptoCount, value);
+        }
+
+        public void OpenBalance()
+        {
+            var chat = _chat;
+            if (chat == null)
+            {
+                return;
+            }
+
+            if (chat.Type is ChatTypePrivate privata)
+            {
+                NavigationService.Navigate(typeof(ChatRevenuePage), chat.Id);
+            }
+            else if (chat.Type is ChatTypeSupergroup)
+            {
+                NavigationService.Navigate(typeof(RevenuePage), chat.Id, new NavigationState { { "selectedIndex", 2 } });
+            }
+        }
+
         public void OpenAdmins()
         {
             var chat = _chat;
@@ -1113,17 +1290,6 @@ namespace Telegram.ViewModels
             }
 
             NavigationService.Navigate(typeof(SupergroupAdministratorsPage), chat.Id);
-        }
-
-        public void OpenBanned()
-        {
-            var chat = _chat;
-            if (chat == null)
-            {
-                return;
-            }
-
-            NavigationService.Navigate(typeof(SupergroupBannedPage), chat.Id);
         }
 
         public void OpenKicked()
@@ -1148,6 +1314,27 @@ namespace Telegram.ViewModels
             NavigationService.Navigate(typeof(SupergroupMembersPage), chat.Id);
         }
 
+        public async void OpenAffiliate()
+        {
+            var chat = _chat;
+            if (chat == null || !ClientService.TryGetUser(chat, out User user) || !ClientService.TryGetUserFull(user.Id, out UserFullInfo fullInfo))
+            {
+                return;
+            }
+
+            var affiliateType = new AffiliateTypeCurrentUser();
+
+            var response = await ClientService.SendAsync(new GetConnectedAffiliateProgram(affiliateType, user.Id));
+            if (response is ConnectedAffiliateProgram program)
+            {
+                ShowPopup(new ConnectedAffiliateProgramPopup(ClientService, NavigationService, program, affiliateType));
+            }
+            else
+            {
+                ShowPopup(new FoundAffiliateProgramPopup(ClientService, NavigationService, new FoundAffiliateProgram(user.Id, fullInfo.BotInfo.AffiliateProgram), affiliateType));
+            }
+        }
+
         public virtual ChatMemberCollection CreateMembers(long supergroupId)
         {
             return new ChatMemberCollection(ClientService, supergroupId, new SupergroupMembersFilterRecent());
@@ -1165,7 +1352,7 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            NavigationService.ShowPopupAsync(typeof(SupergroupEditAdministratorPopup), new SupergroupEditMemberArgs(chat.Id, member.MemberId));
+            NavigationService.ShowPopupAsync(new SupergroupEditAdministratorPopup(), new SupergroupEditMemberArgs(chat.Id, member.MemberId));
         }
 
         public void RestrictMember(ChatMember member)
@@ -1176,7 +1363,7 @@ namespace Telegram.ViewModels
                 return;
             }
 
-            NavigationService.ShowPopupAsync(typeof(SupergroupEditRestrictedPopup), new SupergroupEditMemberArgs(chat.Id, member.MemberId));
+            NavigationService.ShowPopupAsync(new SupergroupEditRestrictedPopup(), new SupergroupEditMemberArgs(chat.Id, member.MemberId));
         }
 
         public async void RemoveMember(ChatMember member)
@@ -1202,7 +1389,7 @@ namespace Telegram.ViewModels
 
     }
 
-    public class ChatMemberCollection : LegacyIncrementalCollection<ChatMember>
+    public partial class ChatMemberCollection : LegacyIncrementalCollection<ChatMember>
     {
         private readonly IClientService _clientService;
         private readonly long _chatId;
@@ -1276,7 +1463,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class ChatMemberGroupedCollection : LegacyIncrementalCollection<object>
+    public partial class ChatMemberGroupedCollection : LegacyIncrementalCollection<object>
     {
         private readonly IClientService _clientService;
         private readonly long _chatId;
@@ -1434,7 +1621,7 @@ namespace Telegram.ViewModels
         }
     }
 
-    public class ChatMemberComparer : IComparer<ChatMember>
+    public partial class ChatMemberComparer : IComparer<ChatMember>
     {
         private readonly IClientService _clientService;
         private readonly bool _epoch;

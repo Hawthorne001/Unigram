@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino & Contributors 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -10,7 +10,6 @@ using System.Numerics;
 using Telegram.Common;
 using Telegram.Native.Calls;
 using Telegram.Services.Settings;
-using Windows.Globalization;
 using Windows.Storage;
 using Windows.System.Profile;
 
@@ -62,8 +61,6 @@ namespace Telegram.Services
         bool IsLaunchMinimized { get; set; }
         bool IsSendByEnterEnabled { get; set; }
         bool IsReplaceEmojiEnabled { get; set; }
-        bool IsContactsSyncEnabled { get; set; }
-        bool IsContactsSyncRequested { get; set; }
         bool IsContactsSortedByEpoch { get; set; }
         bool IsSecretPreviewsEnabled { get; set; }
         bool AutoPlayAnimations { get; set; }
@@ -118,7 +115,7 @@ namespace Telegram.Services
         Miles
     }
 
-    public class SettingsServiceBase
+    public partial class SettingsServiceBase
     {
         protected readonly ApplicationDataContainer _container;
 
@@ -200,7 +197,7 @@ namespace Telegram.Services
         }
     }
 
-    public class SettingsService : SettingsServiceBase, ISettingsService
+    public partial class SettingsService : SettingsServiceBase, ISettingsService
     {
         private static SettingsService _current;
         public static SettingsService Current => _current ??= new SettingsService();
@@ -511,20 +508,6 @@ namespace Telegram.Services
             set => AddOrUpdateValue(ref _isReplaceEmojiEnabled, "IsReplaceEmojiEnabled", value);
         }
 
-        private bool? _isContactsSyncEnabled;
-        public bool IsContactsSyncEnabled
-        {
-            get => _isContactsSyncEnabled ??= GetValueOrDefault("IsContactsSyncEnabled", true);
-            set => AddOrUpdateValue(ref _isContactsSyncEnabled, "IsContactsSyncEnabled", value);
-        }
-
-        private bool? _isContactsSyncRequested;
-        public bool IsContactsSyncRequested
-        {
-            get => _isContactsSyncRequested ??= GetValueOrDefault("IsContactsSyncRequested", false);
-            set => AddOrUpdateValue(ref _isContactsSyncRequested, "IsContactsSyncRequested", value);
-        }
-
         private bool? _isContactsSortedByEpoch;
         public bool IsContactsSortedByEpoch
         {
@@ -670,21 +653,21 @@ namespace Telegram.Services
         private string _languagePackId;
         public string LanguagePackId
         {
-            get => _languagePackId ??= GetValueOrDefault(_local, "LanguagePackId", ApplicationLanguages.Languages[0].Split('-').First());
+            get => _languagePackId ??= GetValueOrDefault(_local, "LanguagePackId", LocaleService.SystemLanguageId());
             set => AddOrUpdateValue(ref _languagePackId, _local, "LanguagePackId", value);
         }
 
         private string _languagePluralId;
         public string LanguagePluralId
         {
-            get => _languagePluralId ??= GetValueOrDefault(_local, "LanguagePluralId", ApplicationLanguages.Languages[0].Split('-').First());
+            get => _languagePluralId ??= GetValueOrDefault(_local, "LanguagePluralId", LocaleService.SystemLanguageId());
             set => AddOrUpdateValue(ref _languagePluralId, _local, "LanguagePluralId", value);
         }
 
         private string _languageBaseId;
         public string LanguageBaseId
         {
-            get => _languageBaseId ??= GetValueOrDefault(_local, "LanguageBaseId", ApplicationLanguages.Languages[0].Split('-').First());
+            get => _languageBaseId ??= GetValueOrDefault(_local, "LanguageBaseId", LocaleService.SystemLanguageId());
             set => AddOrUpdateValue(ref _languageBaseId, _local, "LanguageBaseId", value);
         }
 
@@ -729,14 +712,18 @@ namespace Telegram.Services
 
         public new void Clear()
         {
+            var useTestDC = UseTestDC;
+
             _container.Values.Clear();
 
             _own?.Values.Clear();
             _local?.Values.Remove($"User{UserId}");
+
+            UseTestDC = useTestDC;
         }
     }
 
-    public class ChatSettingsBase : SettingsServiceBase
+    public partial class ChatSettingsBase : SettingsServiceBase
     {
         public ChatSettingsBase(ApplicationDataContainer container = null)
             : base(container)

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Telegram.Common;
@@ -28,11 +29,26 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls
 {
-    public class FormattedTextBox : RichEditBox
+    [Flags]
+    public enum FormattedTextEntity
+    {
+        None = 0,
+        Bold = 1,
+        Italic = 2,
+        Underline = 4,
+        Strikethrough = 8,
+        Mono = 16,
+        Spoiler = 32,
+        Quote = 64,
+        TextUrl = 128,
+        CustomEmoji = 256,
+        All = Bold | Italic | Underline | Strikethrough | Mono | Spoiler | Quote | TextUrl | CustomEmoji
+    }
+
+    public partial class FormattedTextBox : RichEditBox
     {
         private readonly FormattedTextFlyout _selectionFlyout;
         private readonly MenuFlyoutSubItem _proofingFlyout;
@@ -47,6 +63,8 @@ namespace Telegram.Controls
         public CustomEmojiCanvas CustomEmoji { get; set; }
         private Grid Blocks;
         private ScrollViewer ContentElement;
+
+        protected int _blockPadding = 24;
 
         public FormattedTextBox()
         {
@@ -91,8 +109,8 @@ namespace Telegram.Controls
             CreateKeyboardAccelerator(VirtualKey.K);
             CreateKeyboardAccelerator(VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
 
-            // Overridden but not used
-            CreateKeyboardAccelerator(VirtualKey.E);
+            // Used for special characters
+            CreateKeyboardAccelerator(VirtualKey.X, VirtualKeyModifiers.Menu);
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
@@ -110,7 +128,7 @@ namespace Telegram.Controls
 
             if (Document.Selection.Length != 0)
             {
-                MessageHelper.CopyText(GetFormattedText(Document.Selection), false);
+                MessageHelper.CopyText(null, GetFormattedText(Document.Selection));
             }
         }
 
@@ -120,7 +138,7 @@ namespace Telegram.Controls
 
             if (Document.Selection.Length != 0)
             {
-                MessageHelper.CopyText(GetFormattedText(Document.Selection, true), false);
+                MessageHelper.CopyText(null, GetFormattedText(Document.Selection, true));
             }
         }
 
@@ -132,6 +150,13 @@ namespace Telegram.Controls
 
             if (args.IsContentChanging)
             {
+                // Fixes insertion of some fully qualified emoji from WIN+.
+                var inserted = Document.GetRange(Document.Selection.StartPosition - 1, Document.Selection.StartPosition);
+                if (inserted.Text.EndsWith('\uFE0F'))
+                {
+                    inserted.Text = inserted.Text;
+                }
+
                 UpdateFormat();
             }
         }
@@ -183,6 +208,7 @@ namespace Telegram.Controls
         protected override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
+            this.CreateInsetClip();
 
             CustomEmoji ??= GetTemplateChild(nameof(CustomEmoji)) as CustomEmojiCanvas;
             Blocks = GetTemplateChild(nameof(Blocks)) as Grid;
@@ -220,8 +246,6 @@ namespace Telegram.Controls
         {
             Window.Current.CoreWindow.CharacterReceived -= OnCharacterReceived;
         }
-
-        public bool IsFormattingEnabled { get; set; } = true;
 
         public bool IsReplaceEmojiEnabled { get; set; } = true;
 
@@ -283,14 +307,12 @@ namespace Telegram.Controls
                 EndUndoGroup();
                 return;
             }
-            else if (e.Key == VirtualKey.Enter)
+            else if (e.Key == VirtualKey.Enter && CanAccept())
             {
-                var ctrl = Window.Current.CoreWindow.GetKeyState(VirtualKey.Control);
-                var shift = Window.Current.CoreWindow.GetKeyState(VirtualKey.Shift);
-
+                var modifiers = WindowContext.KeyModifiers();
                 var send = SettingsService.Current.IsSendByEnterEnabled
-                    ? !ctrl.HasFlag(CoreVirtualKeyStates.Down) && !shift.HasFlag(CoreVirtualKeyStates.Down)
-                    : ctrl.HasFlag(CoreVirtualKeyStates.Down) && !shift.HasFlag(CoreVirtualKeyStates.Down);
+                    ? modifiers == VirtualKeyModifiers.None
+                    : modifiers == VirtualKeyModifiers.Control;
 
                 AcceptsReturn = !send;
                 e.Handled = send;
@@ -313,13 +335,14 @@ namespace Telegram.Controls
                     OnAccept();
                 }
             }
+            else if (e.Key == VirtualKey.Enter)
+            {
+                AcceptsReturn = true;
+            }
             else if (e.Key == VirtualKey.Z)
             {
-                var alt = WindowContext.IsKeyDown(VirtualKey.Menu);
-                var ctrl = WindowContext.IsKeyDown(VirtualKey.Control);
-                var shift = WindowContext.IsKeyDown(VirtualKey.Shift);
-
-                if (ctrl && shift && !alt)
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == (VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift))
                 {
                     if (Document.CanRedo())
                     {
@@ -329,11 +352,32 @@ namespace Telegram.Controls
                     e.Handled = true;
                 }
             }
+            else if (e.Key is VirtualKey.A or VirtualKey.L || (int)e.Key is 188 or 190)
+            {
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == (VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift))
+                {
+                    return;
+                }
+            }
+            else if (e.Key is VirtualKey.E or VirtualKey.L or VirtualKey.R or VirtualKey.J or VirtualKey.Q)
+            {
+                var modifiers = WindowContext.KeyModifiers();
+                if (modifiers == VirtualKeyModifiers.Control)
+                {
+                    return;
+                }
+            }
 
             if (!e.Handled)
             {
                 base.OnKeyDown(e);
             }
+        }
+
+        protected virtual bool CanAccept()
+        {
+            return true;
         }
 
         protected virtual void OnAccept()
@@ -368,7 +412,7 @@ namespace Telegram.Controls
             clone.StartOf(TextRangeUnit.Link, true);
             var mention = TryGetUserId(clone, out long userId);
 
-            flyout.CreateFlyoutItem(Document.CanUndo(), ContextUndo_Click, Strings.Undo, Icons.ArrowUndo, VirtualKey.Z);
+            flyout.CreateFlyoutItem(Document.CanUndo(), ContextUndo_Click, Strings.TextUndo, Icons.ArrowUndo, VirtualKey.Z);
             flyout.CreateFlyoutItem(Document.CanRedo(), ContextRedo_Click, Strings.Redo, Icons.ArrowRedo, VirtualKey.Y);
             flyout.CreateFlyoutSeparator();
             flyout.CreateFlyoutItem(length && Document.CanCopy(), ContextCut_Click, Strings.Cut, Icons.Cut, VirtualKey.X);
@@ -377,7 +421,8 @@ namespace Telegram.Controls
             flyout.CreateFlyoutItem(length, ContextDelete_Click, Strings.Delete);
             flyout.CreateFlyoutSeparator();
 
-            if (IsFormattingEnabled)
+            var entities = AllowedEntities & ~FormattedTextEntity.CustomEmoji;
+            if (entities != FormattedTextEntity.None)
             {
                 var formatting = new MenuFlyoutSubItem
                 {
@@ -385,15 +430,48 @@ namespace Telegram.Controls
                     Icon = MenuFlyoutHelper.CreateIcon(Icons.TextFont)
                 };
 
-                formatting.CreateFlyoutItem(length, ToggleQuote, Strings.Quote, Icons.QuoteBlock);
-                formatting.CreateFlyoutItem(length, ToggleBold, Strings.Bold, Icons.TextBold, VirtualKey.B);
-                formatting.CreateFlyoutItem(length, ToggleItalic, Strings.Italic, Icons.TextItalic, VirtualKey.I);
-                formatting.CreateFlyoutItem(length, ToggleUnderline, Strings.Underline, Icons.TextUnderline, VirtualKey.U);
-                formatting.CreateFlyoutItem(length, ToggleStrikethrough, Strings.Strike, Icons.TextStrikethrough, VirtualKey.X, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
-                formatting.CreateFlyoutItem(length && format.Name != "Consolas", ToggleMonospace, Strings.Mono, Icons.Code, VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
-                formatting.CreateFlyoutItem(length, ToggleSpoiler, Strings.Spoiler, Icons.TabInPrivate, VirtualKey.P, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
+                if ((entities & FormattedTextEntity.Quote) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleQuote, Strings.Quote, Icons.QuoteBlock);
+                }
+
+                if ((entities & FormattedTextEntity.Bold) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleBold, Strings.Bold, Icons.TextBold, VirtualKey.B);
+                }
+
+                if ((entities & FormattedTextEntity.Italic) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleItalic, Strings.Italic, Icons.TextItalic, VirtualKey.I);
+                }
+
+                if ((entities & FormattedTextEntity.Underline) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleUnderline, Strings.Underline, Icons.TextUnderline, VirtualKey.U);
+                }
+
+                if ((entities & FormattedTextEntity.Strikethrough) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleStrikethrough, Strings.Strike, Icons.TextStrikethrough, VirtualKey.X, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
+                }
+
+                if ((entities & FormattedTextEntity.Mono) != 0)
+                {
+                    formatting.CreateFlyoutItem(length && format.Name != "Consolas", ToggleMonospace, Strings.Mono, Icons.Code, VirtualKey.M, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
+                }
+
+                if ((entities & FormattedTextEntity.Spoiler) != 0)
+                {
+                    formatting.CreateFlyoutItem(length, ToggleSpoiler, Strings.Spoiler, Icons.Spoiler, VirtualKey.P, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
+                }
+
                 formatting.CreateFlyoutSeparator();
-                formatting.CreateFlyoutItem(!mention, CreateLink, clone.Link.Length > 0 ? Strings.EditLink : Strings.CreateLink, Icons.Link, VirtualKey.K);
+
+                if ((entities & FormattedTextEntity.TextUrl) != 0)
+                {
+                    formatting.CreateFlyoutItem(!mention, CreateLink, clone.Link.Length > 0 ? Strings.EditLink : Strings.CreateLink, Icons.Link, VirtualKey.K);
+                }
+
                 formatting.CreateFlyoutSeparator();
                 formatting.CreateFlyoutItem(length && !IsDefaultFormat(selection), ToggleRegular, Strings.Regular, null, VirtualKey.N, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift);
 
@@ -429,7 +507,7 @@ namespace Telegram.Controls
         {
             InsertBlockquote(Document.Selection);
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleBold()
@@ -439,7 +517,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.Bold = FormatEffect.Toggle;
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleItalic()
@@ -449,7 +527,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.Italic = FormatEffect.Toggle;
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleUnderline()
@@ -459,7 +537,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.Underline = Document.Selection.CharacterFormat.Underline != UnderlineType.Single ? UnderlineType.Single : UnderlineType.None;
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleStrikethrough()
@@ -469,7 +547,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.Strikethrough = FormatEffect.Toggle;
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleMonospace()
@@ -479,7 +557,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.Name = "Consolas";
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleSpoiler()
@@ -489,7 +567,7 @@ namespace Telegram.Controls
             Document.Selection.CharacterFormat.BackgroundColor = Colors.Gray;
             Document.ApplyDisplayUpdates();
 
-            _selectionFlyout.Update(Document.Selection.CharacterFormat);
+            _selectionFlyout.Update(Document.Selection);
         }
 
         public void ToggleRegular()
@@ -540,8 +618,8 @@ namespace Telegram.Controls
             popup.Width = popup.MinWidth = popup.MaxWidth = 314;
             popup.IsLightDismissEnabled = true;
 
-            var confirm = await popup.ShowQueuedAsync();
-            if (confirm != true)
+            var confirm = await popup.ShowQueuedAsync(XamlRoot);
+            if (confirm != true || !IsSafe(popup.Text))
             {
                 return;
             }
@@ -552,15 +630,7 @@ namespace Telegram.Controls
 
             range.SetText(end > start ? TextSetOptions.Unlink : TextSetOptions.None, popup.Text);
             range.SetRange(start, start + popup.Text.Length);
-
-            if (IsSafe(popup.Text))
-            {
-                range.Link = $"\"{popup.Link}\"";
-            }
-            else
-            {
-                range.Link = string.Empty;
-            }
+            range.Link = $"\"{popup.Link}\"";
 
             Document.Selection.SetRange(range.EndPosition, range.EndPosition);
             Document.ApplyDisplayUpdates();
@@ -810,6 +880,17 @@ namespace Telegram.Controls
             {
                 ToggleRegular();
             }
+            else if (sender.Key == VirtualKey.X && sender.Modifiers == VirtualKeyModifiers.Menu && Math.Abs(Document.Selection.Length) == 4)
+            {
+                args.Handled = true;
+
+                Document.Selection.GetText(TextGetOptions.NoHidden, out string hex);
+
+                if (int.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int result))
+                {
+                    Document.Selection.SetText(TextSetOptions.None, new string((char)result, 1));
+                }
+            }
         }
 
         #endregion
@@ -851,12 +932,13 @@ namespace Telegram.Controls
             TextEntityType type = default;
 
             var hidden = 0;
+            var flags = default(TextStyle);
 
             for (int i = 0; i < value.Length; i++)
             {
-                var range = Document.GetRange(i, i + 1);
-                var flags = default(TextStyle);
+                flags = default;
 
+                var range = Document.GetRange(i, i + 1);
                 if (range.ParagraphFormat.SpaceAfter != 0)
                 {
                     flags = TextStyle.Quote;
@@ -1001,12 +1083,13 @@ namespace Telegram.Controls
             TextEntityType type = default;
 
             var hidden = 0;
+            var flags = default(TextStyle);
 
             for (int i = 0; i < value.Length; i++)
             {
-                var range = Document.GetRange(selection.StartPosition + i, selection.StartPosition + i + 1);
-                var flags = default(TextStyle);
+                flags = default;
 
+                var range = Document.GetRange(selection.StartPosition + i, selection.StartPosition + i + 1);
                 if (range.ParagraphFormat.SpaceAfter != 0)
                 {
                     flags = TextStyle.Quote;
@@ -1282,7 +1365,7 @@ namespace Telegram.Controls
 
                         var range = Document.GetRange(index + entity.Offset, index + entity.Offset + entity.Length);
 
-                        if (entity.Type is TextEntityTypeBlockQuote)
+                        if (entity.Type is TextEntityTypeBlockQuote or TextEntityTypeExpandableBlockQuote)
                         {
                             InsertBlockquote(range, false);
                         }
@@ -1412,14 +1495,16 @@ namespace Telegram.Controls
         {
             if (sticker.FullType is StickerFullTypeCustomEmoji customEmoji)
             {
-                InsertEmoji(Document.Selection, sticker.Emoji, customEmoji.CustomEmojiId);
-                Document.Selection.StartPosition = Document.Selection.EndPosition + 1;
+                var range = Document.GetRange(Document.Selection.StartPosition, Document.Selection.EndPosition);
+                InsertEmoji(range, sticker.Emoji, customEmoji.CustomEmojiId);
+                Document.Selection.StartPosition = range.EndPosition + 1;
             }
         }
 
         public void InsertEmoji(ITextRange range, string emoji, long customEmojiId)
         {
             BeginUndoGroup();
+            Document.BatchDisplayUpdates();
 
             var plain = range.GetClone();
             plain.Move(TextRangeUnit.Hidden, -1);
@@ -1429,10 +1514,11 @@ namespace Telegram.Controls
                 plain.Delete(TextRangeUnit.Hidden, 1);
             }
 
-            range.SetText(TextSetOptions.None, $"{emoji};{customEmojiId}\uEA4F");
+            range.SetText(TextSetOptions.None, $"{emoji};{customEmojiId:X16}\uEA4F");
             range.SetRange(range.StartPosition, range.EndPosition - 1);
             range.CharacterFormat.Hidden = FormatEffect.On;
 
+            Document.ApplyDisplayUpdates();
             EndUndoGroup();
         }
 
@@ -1572,12 +1658,27 @@ namespace Telegram.Controls
 
         private bool IsCustomEmoji(ITextRange range, out string emoji, out long customEmojiId)
         {
-            var split = range.Text.Split(';');
-
-            emoji = split[0];
+            emoji = range.Text;
             customEmojiId = 0;
 
-            return split.Length == 2 && long.TryParse(split[1], out customEmojiId);
+            var index = emoji.IndexOf(';');
+            if (index == -1)
+            {
+                return false;
+            }
+
+            var customEmoji = emoji.Substring(index + 1);
+            if (customEmoji.Length < 16)
+            {
+                return false;
+            }
+
+            range.EndPosition -= customEmoji.Length - 16;
+
+            emoji = emoji.Substring(0, index);
+            customEmoji = customEmoji.Substring(0, 16);
+
+            return long.TryParse(customEmoji, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out customEmojiId);
         }
 
         private void UpdateFormat()
@@ -1595,10 +1696,13 @@ namespace Telegram.Controls
                 {
                     range.Expand(TextRangeUnit.Hidden);
 
-                    var follow = Document.GetRange(range.EndPosition, range.EndPosition);
-                    if (follow.Character != '\uEA4F' && IsCustomEmoji(range, out _, out _))
+                    if (IsCustomEmoji(range, out _, out _))
                     {
-                        range.Delete(TextRangeUnit.Hidden, 1);
+                        var follow = Document.GetRange(range.EndPosition, range.EndPosition);
+                        if (follow.Character != '\uEA4F')
+                        {
+                            range.Delete(TextRangeUnit.Hidden, 1);
+                        }
                     }
                 }
 
@@ -1635,7 +1739,7 @@ namespace Telegram.Controls
                 if (range.StartPosition == 0)
                 {
                     //ContentElement.Padding = new Thickness(48, range.ParagraphFormat.SpaceAfter == 0 ? 13 : 7, 0, 15);
-                    ContentElement.Padding = new Thickness(48, 13, 0, 15);
+                    ContentElement.Padding = new Thickness(0, 13, 0, 15);
                     ContentElement.Margin = new Thickness(0, range.ParagraphFormat.SpaceAfter == 0 ? 0 : -6, 0, 0);
                     Blocks.Margin = new Thickness(0, range.ParagraphFormat.SpaceAfter == 0 ? 0 : -6, 0, 0);
                 }
@@ -1652,8 +1756,8 @@ namespace Telegram.Controls
                     else if (Blocks.Children[rects - 1] is FrameworkElement block)
                     {
                         block.Margin = new Thickness(0, rect.Y + 2, 8, 0);
-                        block.Height = rect.Height - 6;
-                        block.Width = ActualWidth - 48;
+                        block.Height = Math.Max(0, rect.Height - 6);
+                        block.Width = Math.Max(0, ActualWidth - _blockPadding);
                     }
                 }
             } while (range.MoveStart(TextRangeUnit.HardParagraph, 1) > 0);
@@ -1666,42 +1770,14 @@ namespace Telegram.Controls
 
         private UIElement CreateBlock(Rect rect)
         {
-            var field = new Grid
-            {
-                CornerRadius = new CornerRadius(4),
-                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0xe5, 0xf1, 0xff)),
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(-3, rect.Y + 4, 8, 0),
-                Height = rect.Height - 4,
-                Width = ActualWidth - 48,
-                IsHitTestVisible = false
-            };
-
-            field.Children.Add(new TextBlock
-            {
-                Text = "\uE9B1",
-                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x7a, 0xff)),
-                FontFamily = new FontFamily("Segoe Fluent Icons"),
-                FontSize = 24,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(4)
-            });
-
-            field.Children.Add(new Border
-            {
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x7a, 0xff)),
-                BorderThickness = new Thickness(3, 0, 0, 0)
-            });
-
             return new BlockQuote
             {
                 Glyph = Icons.QuoteBlockFilled16,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, rect.Y + 4, 8, 0),
-                Height = rect.Height - 4,
-                Width = ActualWidth - 48,
+                Margin = new Thickness(0, rect.Y + 2, 8, 0),
+                Height = Math.Max(0, rect.Height - 6),
+                Width = Math.Max(0, ActualWidth - _blockPadding),
                 IsHitTestVisible = false
             };
         }
@@ -1775,5 +1851,18 @@ namespace Telegram.Controls
                 }
             }
         }
+
+        #region AllowedEntities
+
+        public FormattedTextEntity AllowedEntities
+        {
+            get { return (FormattedTextEntity)GetValue(AllowedEntitiesProperty); }
+            set { SetValue(AllowedEntitiesProperty, value); }
+        }
+
+        public static readonly DependencyProperty AllowedEntitiesProperty =
+            DependencyProperty.Register("AllowedEntities", typeof(FormattedTextEntity), typeof(FormattedTextBox), new PropertyMetadata(FormattedTextEntity.All));
+
+        #endregion
     }
 }

@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -22,7 +22,7 @@ using Windows.UI.Xaml.Media.Imaging;
 
 namespace Telegram.Controls.Chats
 {
-    public class ChatBackgroundPresenter : ControlEx
+    public partial class ChatBackgroundPresenter : ControlEx
     {
         private readonly ChatBackgroundFreeform _freeform = new();
         private readonly DispatcherTimer _freeformTimer;
@@ -77,9 +77,13 @@ namespace Telegram.Controls.Chats
         private void OnRasterizationScaleChanged(XamlRoot sender, XamlRootChangedEventArgs args)
         {
             var value = sender.RasterizationScale;
-            if (value != _rasterizationScale && _background?.Type is BackgroundTypePattern pattern && _background?.Document?.DocumentValue != null)
+            if (value != _rasterizationScale && _vector && _background?.Type is BackgroundTypePattern pattern && _background?.Document?.DocumentValue != null)
             {
                 UpdatePattern(pattern, _background.Document.DocumentValue, value);
+            }
+            else
+            {
+                _rasterizationScale = value;
             }
         }
 
@@ -176,11 +180,9 @@ namespace Telegram.Controls.Chats
                 _thumbnail = thumbnail;
                 _vector = thumbnail is false && background.Document.MimeType == "application/x-tgwallpattern";
 
-                if (file.Local.IsDownloadingCompleted)
-                {
-                    UpdatePattern(typePattern, file, WindowContext.Current.RasterizationScale);
-                }
-                else if (clientService != null)
+                UpdatePattern(typePattern, file, WindowContext.Current.RasterizationScale);
+
+                if (clientService != null && !file.Local.IsDownloadingCompleted)
                 {
                     if (file.Local.CanBeDownloaded && !file.Local.IsDownloadingActive)
                     {
@@ -272,7 +274,15 @@ namespace Telegram.Controls.Chats
 
         private async void UpdatePattern(BackgroundTypePattern pattern, File file, double scale)
         {
-            if (_pattern == null || _patternPath != file.Local.Path || _rasterizationScale != scale)
+            if (_pattern != null && _patternPath == file.Local.Path && _rasterizationScale == scale)
+            {
+                UpdatePattern(pattern, 1);
+                return;
+            }
+
+            //UpdatePattern(pattern, 0);
+
+            if (file.Local.IsDownloadingCompleted)
             {
                 if (_negative)
                 {
@@ -298,12 +308,13 @@ namespace Telegram.Controls.Chats
                     if (_backgroundId == file.Id && !IsDisconnected)
                     {
                         BorderBrush = null;
-                        UpdatePattern(pattern);
+                        UpdatePattern(pattern, 1);
                     }
-                    else
-                    {
-                        s.Dispose();
-                    }
+                    // TODO: Dispose here shouldn't be needed
+                    //else
+                    //{
+                    //    s.Dispose();
+                    //}
                 }
 
                 if (_pattern != null)
@@ -317,23 +328,53 @@ namespace Telegram.Controls.Chats
             }
             else
             {
-                UpdatePattern(pattern);
+                UpdatePattern(pattern, 0);
             }
         }
 
-        private void UpdatePattern(BackgroundTypePattern pattern)
+        private void UpdatePattern(BackgroundTypePattern pattern, double opacity)
         {
-            Background = pattern.ToBrush(_freeform.Phase);
+            var fill = pattern.Fill;
+            if (fill is BackgroundFillSolid solid)
+            {
+                Background = new SolidColorBrush(solid.Color.ToColor());
+            }
+            else if (fill is BackgroundFillGradient gradient)
+            {
+                Background = TdBackground.GetGradient(gradient.TopColor, gradient.BottomColor, gradient.RotationAngle);
+            }
+            else if (fill is BackgroundFillFreeformGradient freeformGradient)
+            {
+                if (Background is ImageBrush brush && brush.ImageSource is WriteableBitmap bitmap)
+                {
+                    ChatBackgroundFreeform.Update(bitmap, freeformGradient, _freeform.Phase);
+                    bitmap.Invalidate();
+                }
+                else
+                {
+                    Background = new ImageBrush
+                    {
+                        ImageSource = ChatBackgroundFreeform.Create(freeformGradient, _freeform.Phase),
+                        Stretch = Stretch.UniformToFill
+                    };
+                }
+            }
 
+            UpdateTiledBrush(opacity);
+        }
+
+        private void UpdateTiledBrush(double opacity)
+        {
             if (Foreground is TiledBrush tiledBrush)
             {
                 tiledBrush.ImageSource = _pattern;
                 tiledBrush.Intensity = _intensity;
                 tiledBrush.IsNegative = _negative;
+                tiledBrush.Opacity = opacity;
 
                 tiledBrush.Update();
             }
-            else
+            else if (_pattern != null)
             {
                 Foreground = new TiledBrush
                 {
@@ -342,14 +383,6 @@ namespace Telegram.Controls.Chats
                     IsNegative = _negative,
                 };
             }
-
-            //var visual = ElementComposition.GetElementVisual(Canvas);
-            //var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
-            //animation.InsertKeyFrame(0, 0);
-            //animation.InsertKeyFrame(1, 1);
-            //animation.Duration = Constants.FastAnimation;
-
-            //visual.StartAnimation("Opacity", animation);
         }
 
         private SpriteVisual _blurVisual;
@@ -367,7 +400,7 @@ namespace Telegram.Controls.Chats
                     Source = new CompositionEffectSourceParameter("Backdrop")
                 };
 
-                var compositor = Window.Current.Compositor;
+                var compositor = BootStrapper.Current.Compositor;
                 var effectFactory = compositor.CreateEffectFactory(graphicsEffect, new[] { "Blur.BlurAmount" });
                 var effectBrush = effectFactory.CreateBrush();
                 var backdrop = compositor.CreateBackdropBrush();

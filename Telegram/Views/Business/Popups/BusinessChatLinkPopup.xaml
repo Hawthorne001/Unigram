@@ -9,9 +9,7 @@
                        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                        xmlns:drawers="using:Telegram.Controls.Drawers"
                        mc:Ignorable="d"
-                       Title="TITLE"
-                       PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
-                       SecondaryButtonClick="ContentDialog_SecondaryButtonClick"
+                       IsDismissButtonVisible="True"
                        Padding="0,12,0,0">
 
     <Grid>
@@ -87,16 +85,15 @@
                                          Background="Transparent"
                                          Padding="24,0,0,0"
                                          BorderThickness="0"
-                                         MinHeight="48"
-                                         Grid.Row="1">
-                </controls:CaptionTextBox>
+                                         MinHeight="48" />
 
                 <messages:CustomEmojiCanvas x:Name="CustomEmoji"
                                             IsHitTestVisible="False"
-                                            Margin="10,4,-2,-2" />
+                                            Margin="22,11,0,0" />
 
                 <controls:GlyphButton Click="Emoji_Click"
                                       Glyph="&#xE76E;"
+                                      AutomationProperties.Name="{CustomResource Emoji}"
                                       AllowFocusOnInteraction="False"
                                       HorizontalAlignment="Right"
                                       VerticalAlignment="Bottom"
@@ -107,24 +104,17 @@
                                       Foreground="{ThemeResource TelegramBackgroundAccentBrush}"
                                       VerticalAlignment="Bottom"
                                       FontSize="24"
-                                      Glyph="&#xEC61;"
+                                      Glyph="&#xE9F4;"
                                       Margin="-8,0,0,0"
                                       Grid.Column="2" />
             </Grid>
 
         </StackPanel>
 
-        <controls:GlyphButton Click="{x:Bind Close}"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Top"
-                              Margin="0,-52,0,0"
-                              Glyph="&#xE711;"
-                              CornerRadius="20" />
-
         <controls:MoreButton Click="More_Click"
                              HorizontalAlignment="Right"
                              VerticalAlignment="Top"
-                             Margin="0,-16,0,0"
+                             Margin="0,-50,40,0"
                              CornerRadius="20" />
     </Grid>
 </controls:ContentPopup>

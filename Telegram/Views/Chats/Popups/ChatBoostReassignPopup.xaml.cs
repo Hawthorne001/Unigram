@@ -1,5 +1,5 @@
 ﻿//
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -82,7 +82,7 @@ namespace Telegram.Views.Chats.Popups
                 var diff = slot.CooldownUntilDate - DateTime.Now.ToTimestamp();
                 if (diff > 0)
                 {
-                    content.Subtitle = string.Format(Strings.BoostingAvailableIn, diff.GetDuration());
+                    content.Subtitle = string.Format(Strings.BoostingAvailableIn, diff.ToDuration());
                     stop = false;
                 }
                 else
@@ -138,7 +138,7 @@ namespace Telegram.Views.Chats.Popups
 
         private void PurchaseShadow_Loaded(object sender, Windows.UI.Xaml.RoutedEventArgs e)
         {
-            DropShadowEx.Attach(PurchaseShadow);
+            VisualUtilities.DropShadow(PurchaseShadow);
         }
 
         private async void Purchase_Click(object sender, Windows.UI.Xaml.RoutedEventArgs e)
@@ -158,7 +158,7 @@ namespace Telegram.Views.Chats.Popups
             }
         }
 
-        private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
+        private void OnUnloaded(object sender, RoutedEventArgs args)
         {
             _cooldownTimer?.Stop();
         }

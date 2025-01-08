@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -9,9 +9,12 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Telegram.Controls.Media;
+using Telegram.Navigation;
 using Windows.UI.Composition;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Automation.Provider;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Hosting;
 
@@ -34,9 +37,11 @@ namespace Telegram.Controls
         Theme,
     }
 
-    public class FileButton : GlyphHyperlinkButton
+    public partial class FileButton : GlyphHyperlinkButton
     {
         private Grid RootGrid;
+
+        private ProgressBarRing ProgressBar;
 
         private TextBlock ContentPresenter1;
         private TextBlock ContentPresenter2;
@@ -52,15 +57,28 @@ namespace Telegram.Controls
         public FileButton()
         {
             DefaultStyleKey = typeof(FileButton);
+            Connected += OnConnected;
+        }
+
+        private void OnConnected(object sender, RoutedEventArgs e)
+        {
+            // Used to enable FrameworkElementEx
         }
 
         public MessageContentState State => _state;
 
         public bool IsSmall { get; set; }
 
+        protected override AutomationPeer OnCreateAutomationPeer()
+        {
+            return new FileButtonAutomationPeer(this);
+        }
+
         protected override void OnApplyTemplate()
         {
             RootGrid = GetTemplateChild(nameof(RootGrid)) as Grid;
+
+            ProgressBar = GetTemplateChild(nameof(ProgressBar)) as ProgressBarRing;
 
             ContentPresenter1 = GetTemplateChild(nameof(ContentPresenter1)) as TextBlock;
             ContentPresenter2 = GetTemplateChild(nameof(ContentPresenter2)) as TextBlock;
@@ -69,30 +87,12 @@ namespace Telegram.Controls
             ContentPresenter2.Text = string.Empty;
 
             _label = ContentPresenter1;
-        }
 
-        #region Progress
-
-        public double InternalProgress
-        {
-            get => (double)GetValue(InternalProgressProperty);
-            set
+            if (ProgressBar != null)
             {
-                try
-                {
-                    SetValue(InternalProgressProperty, value);
-                }
-                catch
-                {
-                    // All the remote procedure calls must be wrapped in a try-catch block
-                }
+                ProgressBar.Value = _progress;
             }
         }
-
-        public static readonly DependencyProperty InternalProgressProperty =
-            DependencyProperty.Register("InternalProgress", typeof(double), typeof(FileButton), new PropertyMetadata(0.0));
-
-        #endregion
 
         #region ProgressVisibility
 
@@ -107,22 +107,32 @@ namespace Telegram.Controls
 
         #endregion
 
+        private double _progress;
         public double Progress
         {
+            get => _progress;
             set
             {
-                if (_shouldEnqueueProgress)
+                if (_shouldEnqueueProgress || ProgressBar == null || !IsConnected)
                 {
                     _enqueuedProgress = value;
                 }
                 else if (_state is MessageContentState.Downloading or MessageContentState.Uploading)
                 {
-                    InternalProgress = Math.Max(0.05, value);
+                    ProgressBar.Value = Math.Max(0.05, value);
                 }
                 else
                 {
-                    InternalProgress = value;
+                    ProgressBar.Value = value;
                 }
+
+                if (AutomationPeer.ListenerExists(AutomationEvents.PropertyChanged))
+                {
+                    var peer = FrameworkElementAutomationPeer.FromElement(this);
+                    peer?.RaisePropertyChangedEvent(ValuePatternIdentifiers.ValueProperty, _progress, value);
+                }
+
+                _progress = value;
             }
         }
 
@@ -239,10 +249,10 @@ namespace Telegram.Controls
 
             _label.Text = newValue;
 
-            if (_hasContainer && (clearContainer || !animate))
+            if (_hasContainer && (clearContainer || !animate) && IsConnected)
             {
                 _hasContainer = false;
-                ElementCompositionPreview.SetElementChildVisual(RootGrid, null);
+                ElementComposition.SetElementChildVisual(RootGrid, null);
             }
         }
 
@@ -269,7 +279,7 @@ namespace Telegram.Controls
 
             OnGlyphChanged(string.Empty, Glyph, animate, Strings.AccActionCancelDownload, false);
 
-            var compositor = Window.Current.Compositor;
+            var compositor = BootStrapper.Current.Compositor;
             var diameter = 48f; // min(bounds.size.width, bounds.size.height)
             var factor = diameter / 48f;
 
@@ -320,7 +330,7 @@ namespace Telegram.Controls
             visual3.Shapes.Add(arrowShape);
             visual3.Size = new Vector2(48, 48);
 
-            var container = Window.Current.Compositor.CreateContainerVisual();
+            var container = BootStrapper.Current.Compositor.CreateContainerVisual();
             container.Children.InsertAtTop(visual1);
             container.Children.InsertAtTop(visual3);
             container.Size = new Vector2(48, 48);
@@ -367,14 +377,21 @@ namespace Telegram.Controls
 
         private void OnDownloadingCompleted(object sender, CompositionBatchCompletedEventArgs args)
         {
-            if (_state == MessageContentState.Downloading && this.IsConnected())
+            try
             {
-                OnGlyphChanged(Icons.Cancel, Icons.ArrowDownload, true, Strings.AccActionCancelDownload, false);
-                InternalProgress = _enqueuedProgress;
-            }
+                if (_state == MessageContentState.Downloading && ProgressBar != null && IsConnected)
+                {
+                    OnGlyphChanged(Icons.Cancel, Icons.ArrowDownload, true, Strings.AccActionCancelDownload, false);
+                    ProgressBar.Value = _enqueuedProgress;
+                }
 
-            _shouldEnqueueProgress = false;
-            //_container.Children.RemoveAll();
+                _shouldEnqueueProgress = false;
+                //_container.Children.RemoveAll();
+            }
+            catch
+            {
+                // May throw MissingInteropDataException, kind of unexplicable as no reflection is involved.
+            }
         }
 
         private CompositionPath GetArrowShape()
@@ -391,5 +408,40 @@ namespace Telegram.Controls
             }
             return new CompositionPath(result);
         }
+    }
+
+    public class FileButtonAutomationPeer : HyperlinkButtonAutomationPeer, IValueProvider
+    {
+        private readonly FileButton _owner;
+
+        public FileButtonAutomationPeer(FileButton owner)
+            : base(owner)
+        {
+            _owner = owner;
+        }
+
+        protected override object GetPatternCore(PatternInterface patternInterface)
+        {
+            if (patternInterface == PatternInterface.Value)
+            {
+                return this;
+            }
+
+            return base.GetPatternCore(patternInterface);
+        }
+
+        protected override AutomationControlType GetAutomationControlTypeCore()
+        {
+            return AutomationControlType.Button;
+        }
+
+        public void SetValue(string value)
+        {
+            // Not implemented
+        }
+
+        public bool IsReadOnly => true;
+
+        public string Value => _owner.Progress.ToString("P0");
     }
 }

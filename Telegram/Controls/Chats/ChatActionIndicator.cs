@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using Microsoft.UI.Xaml.Controls;
 using System.Numerics;
 using Telegram.Assets.Icons;
+using Telegram.Navigation;
 using Telegram.Td.Api;
 using Windows.UI;
 using Windows.UI.Composition;
@@ -16,7 +17,7 @@ using Windows.UI.Xaml.Media;
 
 namespace Telegram.Controls.Chats
 {
-    public class ChatActionIndicator : FrameworkElement
+    public partial class ChatActionIndicator : FrameworkElement
     {
         // This should be held in memory, or animation will stop
         private CompositionPropertySet _props;
@@ -44,7 +45,7 @@ namespace Telegram.Controls.Chats
             }
 
             var color = Fill?.Color ?? Colors.Black;
-            var visual = GetVisual(type, Window.Current.Compositor, color, out _props);
+            var visual = GetVisual(type, BootStrapper.Current.Compositor, color, out _props);
 
             _action = type;
             _previous = visual;

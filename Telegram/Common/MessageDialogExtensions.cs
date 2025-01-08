@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -7,6 +7,7 @@
 using System;
 using System.Threading.Tasks;
 using Telegram.Controls;
+using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
 namespace Telegram.Common
@@ -29,7 +30,7 @@ namespace Telegram.Common
         /// <param name="dialog">The dialog.</param>
         /// <returns></returns>
         /// <exception cref="InvalidOperationException">This method can only be invoked from UI thread.</exception>
-        public static async Task<ContentDialogResult> ShowQueuedAsync(this ContentDialog dialog)
+        public static async Task<ContentDialogResult> ShowQueuedAsync(this ContentDialog dialog, XamlRoot xamlRoot)
         {
             while (_currentDialogShowRequest != null)
             {
@@ -42,6 +43,8 @@ namespace Telegram.Common
             {
                 popup.OnCreate();
             }
+
+            dialog.XamlRoot = xamlRoot;
 
             var request = _currentDialogShowRequest = new TaskCompletionSource<ContentDialog>();
             var result = await dialog.ShowAsync();

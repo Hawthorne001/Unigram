@@ -1,5 +1,5 @@
 //
-// Copyright Fela Ameghino 2015-2024
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -65,7 +65,7 @@ namespace Telegram.Views.Profile
                 flyout.CreateFlyoutItem(MemberRestrict_Loaded, ViewModel.MembersTab.RestrictMember, chat, status, member, member.Status is ChatMemberStatusRestricted ? Strings.ChangePermissions : Strings.KickFromSupergroup, Icons.LockClosed);
             }
 
-            flyout.CreateFlyoutItem(MemberRemove_Loaded, ViewModel.MembersTab.RemoveMember, chat, status, member, Strings.KickFromGroup, Icons.Block);
+            flyout.CreateFlyoutItem(MemberRemove_Loaded, ViewModel.MembersTab.RemoveMember, chat, status, member, chat.Type is ChatTypeSupergroup { IsChannel: true } ? Strings.ChannelRemoveUser : Strings.KickFromGroup, Icons.Block);
 
             flyout.ShowAt(sender, args);
         }

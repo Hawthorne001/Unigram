@@ -5,9 +5,6 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:common="using:Telegram.Common"
              xmlns:controls="using:Telegram.Controls"
-             xmlns:chats="using:Telegram.Controls.Chats"
-             xmlns:messages="using:Telegram.Controls.Messages"
-             xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
              mc:Ignorable="d"
              Padding="0">
 
@@ -38,7 +35,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
     </UserControl.Resources>
 
     <controls:HeaderedControl x:Name="ProfileColor">
@@ -91,8 +87,7 @@
                     </controls:ActiveStoriesSegments.RenderTransform>
                     <controls:ProfilePicture x:Name="Photo"
                                              Width="140"
-                                             Height="140"
-                                             IsEnabled="False" />
+                                             Height="140" />
                 </controls:ActiveStoriesSegments>
             </Grid>
 
@@ -101,21 +96,27 @@
                     Grid.Row="1">
                 <Grid x:Name="LabelTitle">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <controls:CustomEmojiIcon x:Name="BotVerified"
+                                              VerticalAlignment="Bottom"
+                                              Margin="0,0,4,4" />
+
                     <TextBlock x:Name="Title"
                                TextWrapping="NoWrap"
                                TextTrimming="CharacterEllipsis"
                                TextAlignment="Center"
                                IsTextSelectionEnabled="True"
                                Style="{StaticResource SubtitleTextBlockStyle}"
-                               FontFamily="{ThemeResource EmojiThemeFontFamily}" />
+                               FontFamily="{ThemeResource EmojiThemeFontFamily}"
+                               Grid.Column="1" />
 
                     <controls:IdentityIcon x:Name="Identity"
                                            VerticalAlignment="Bottom"
                                            Margin="4,0,0,4"
-                                           Grid.Column="1" />
+                                           Grid.Column="2" />
                 </Grid>
             </Border>
             <Border VerticalAlignment="Top"
@@ -136,7 +137,6 @@
                   SelectionChanged="OnSelectionChanged"
                   ChoosingItemContainer="OnChoosingItemContainer"
                   ContainerContentChanging="OnContainerContentChanging"
-                  ItemContainerTransitions="{x:Null}"
                   Padding="10,10,0,10"
                   common:FluidGridView.OrientationOnly="False"
                   common:FluidGridView.Padding="0,0,10,0"
@@ -162,6 +162,9 @@
                     </Grid>
                 </DataTemplate>
             </GridView.ItemTemplate>
+            <GridView.ItemContainerTransitions>
+                <TransitionCollection />
+            </GridView.ItemContainerTransitions>
             <GridView.ItemContainerStyle>
                 <Style TargetType="GridViewItem"
                        BasedOn="{StaticResource DefaultGridViewItemStyle}">

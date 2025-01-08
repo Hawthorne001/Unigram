@@ -1,70 +1,34 @@
-//
-// Copyright Fela Ameghino 2015-2024
+﻿//
+// Copyright Fela Ameghino 2015-2025
 //
 // Distributed under the GNU General Public License v3.0. (See accompanying
 // file LICENSE or copy at https://www.gnu.org/licenses/gpl-3.0.txt)
 //
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using Telegram.Common;
 using Telegram.Native;
 using Telegram.Services;
 using Telegram.Td.Api;
-using Windows.Globalization.DateTimeFormatting;
-using Windows.System.UserProfile;
 
 namespace Telegram.Converters
 {
     public static class Formatter
     {
-        public static DateTimeFormatter ShortDate { get; private set; }
-        public static DateTimeFormatter ShortTime { get; private set; }
-        public static DateTimeFormatter LongDate { get; private set; }
-        public static DateTimeFormatter LongTime { get; private set; }
+        //public static IList<string> Languages { get; }
 
-        public static DateTimeFormatter MonthFull { get; private set; }
-        public static DateTimeFormatter MonthAbbreviatedDay { get; private set; }
-        public static DateTimeFormatter MonthFullYear { get; private set; }
-        public static DateTimeFormatter DayMonthFull { get; private set; }
-        public static DateTimeFormatter DayMonthFullYear { get; private set; }
-        public static DateTimeFormatter MonthAbbreviatedYear { get; private set; }
-        public static DateTimeFormatter DayMonthAbbreviated { get; private set; }
-        public static DateTimeFormatter DayMonthAbbreviatedYear { get; private set; }
-        public static DateTimeFormatter DayOfWeekAbbreviated { get; private set; }
+        //static Formatter()
+        //{
+        //    var culture = NativeUtils.GetCurrentCulture();
+        //    var languages = GlobalizationPreferences.Languages.ToList();
 
-        public static IList<string> Languages { get; }
+        //    if (Windows.Globalization.Language.IsWellFormed(culture) && !languages.Contains(culture))
+        //    {
+        //        languages.Insert(0, culture);
+        //    }
 
-        static Formatter()
-        {
-            var culture = NativeUtils.GetCurrentCulture();
-            var languages = GlobalizationPreferences.Languages.ToList();
-            var region = GlobalizationPreferences.HomeGeographicRegion;
-            var calendar = GlobalizationPreferences.Calendars.FirstOrDefault();
-            var clock = GlobalizationPreferences.Clocks.FirstOrDefault();
-
-            if (Windows.Globalization.Language.IsWellFormed(culture))
-            {
-                languages.Insert(0, culture);
-            }
-
-            Languages = languages;
-
-            ShortDate = new DateTimeFormatter("shortdate", languages, region, calendar, clock);
-            ShortTime = new DateTimeFormatter("shorttime", languages, region, calendar, clock);
-            LongDate = new DateTimeFormatter("longdate", languages, region, calendar, clock);
-            LongTime = new DateTimeFormatter("longtime", languages, region, calendar, clock);
-            MonthFull = new DateTimeFormatter("month.full", languages, region, calendar, clock);
-            MonthAbbreviatedDay = new DateTimeFormatter("month.abbreviated day", languages, region, calendar, clock);
-            MonthFullYear = new DateTimeFormatter("month.full year", languages, region, calendar, clock);
-            DayMonthFull = new DateTimeFormatter("day month.full", languages, region, calendar, clock);
-            DayMonthFullYear = new DateTimeFormatter("day month.full year", languages, region, calendar, clock);
-            MonthAbbreviatedYear = new DateTimeFormatter("month.abbreviated year", languages, region, calendar, clock);
-            DayMonthAbbreviated = new DateTimeFormatter("day month.abbreviated", languages, region, calendar, clock);
-            DayMonthAbbreviatedYear = new DateTimeFormatter("day month.abbreviated year", languages, region, calendar, clock);
-            DayOfWeekAbbreviated = new DateTimeFormatter("dayofweek.abbreviated", languages, region, calendar, clock);
-        }
+        //    Languages = languages;
+        //}
 
         public static string UtcTimeOffset(int value)
         {
@@ -82,41 +46,22 @@ namespace Telegram.Converters
             return string.Format("UTC-{0:hh\\:mm}", span);
         }
 
-        public static string MonthGrouping(int value)
-        {
-            var date = ToLocalTime(value);
-            var now = DateTime.Now;
-
-            var difference = Math.Abs(date.Month - now.Month + 12 * (date.Year - now.Year));
-            if (difference >= 12)
-            {
-                return MonthFullYear.Format(date);
-            }
-
-            return MonthFull.Format(date);
-        }
-
         public static string DayGrouping(int value)
         {
-            //if (SettingsService.Current.Diagnostics.NativeTimeFormatter)
-            //{
-            //    return NativeUtils.FormatDate(value);
-            //}
-
             var date = ToLocalTime(value);
             var now = DateTime.Now;
 
             var difference = Math.Abs(date.Month - now.Month + 12 * (date.Year - now.Year));
             if (difference >= 12)
             {
-                return DayMonthFullYear.Format(date);
+                return Date(value, Strings.chatFullDate);
             }
             else if (date.Date == now.Date)
             {
                 return Strings.MessageScheduleToday;
             }
 
-            return DayMonthFull.Format(date);
+            return Date(value, Strings.chatDate);
         }
 
         public static string Distance(float distance, bool away = true)
@@ -195,8 +140,7 @@ namespace Telegram.Converters
 
         public static string BannedUntil(int date)
         {
-            var banned = ToLocalTime(date);
-            return ShortDate.Format(banned) + ", " + ShortTime.Format(banned);
+            return DateAt(date);
 
             //try
             //{
@@ -280,6 +224,7 @@ namespace Telegram.Converters
                 case "XAF":
                 case "XOF":
                 case "XPF":
+                case "XTR":
                     return 1.0d;
                 case "MRO":
                     return 10.0d;
@@ -307,57 +252,105 @@ namespace Telegram.Converters
 
             if (dateTime.Date == DateTime.Now.Date)
             {
-                return string.Format(Strings.PmReadTodayAt, ShortTime.Format(dateTime));
+                return string.Format(Strings.PmReadTodayAt, Time(dateTime));
             }
             else if (dateTime.Date == DateTime.Now.Date.AddDays(-1))
             {
-                return string.Format(Strings.PmReadYesterdayAt, ShortTime.Format(dateTime));
+                return string.Format(Strings.PmReadYesterdayAt, Time(dateTime));
             }
 
-            return string.Format(Strings.PmReadDateTimeAt, ShortDate.Format(dateTime), ShortTime.Format(dateTime));
+            return string.Format(Strings.PmReadDateTimeAt, Date(dateTime), Time(dateTime));
+        }
+
+        public static string EditDate(int value)
+        {
+            var dateTime = ToLocalTime(value);
+
+            if (dateTime.Date == DateTime.Now.Date)
+            {
+                return string.Format(Strings.PmEditedTodayAt, Time(dateTime));
+            }
+            else if (dateTime.Date == DateTime.Now.Date.AddDays(-1))
+            {
+                return string.Format(Strings.PmEditedYesterdayAt, Time(dateTime));
+            }
+
+            return string.Format(Strings.PmEditedDateTimeAt, Date(dateTime), Time(dateTime));
+        }
+
+        public static string ForwardDate(int value)
+        {
+            var dateTime = ToLocalTime(value);
+
+            if (dateTime.Date == DateTime.Now.Date)
+            {
+                return string.Format(Strings.PmFwdOriginalTodayAt, Time(dateTime));
+            }
+            else if (dateTime.Date == DateTime.Now.Date.AddDays(-1))
+            {
+                return string.Format(Strings.PmFwdOriginalYesterdayAt, Time(dateTime));
+            }
+
+            return string.Format(Strings.PmFwdOriginalDateTimeAt, Date(dateTime), Time(dateTime));
         }
 
         public static string DateExtended(int value)
         {
             var dateTime = ToLocalTime(value);
 
-            //Today
             if (dateTime.Date == DateTime.Now.Date)
             {
-                //TimeLabel.Text = dateTime.ToString(string.Format("{0}", shortTimePattern), cultureInfo);
-                return ShortTime.Format(dateTime);
+                return Time(dateTime);
             }
-
-            //Week
-            if (dateTime.Date.AddDays(6) >= DateTime.Now.Date)
+            else if (dateTime.Date.AddDays(6) >= DateTime.Now.Date)
             {
-                return DayOfWeekAbbreviated.Format(dateTime);
+                return Date(value, Strings.formatterWeek);
             }
-
-            //Year
-            if (dateTime.Date.Year == DateTime.Now.Year)
+            else if (dateTime.Date.Year == DateTime.Now.Year)
             {
-                // TODO: no idea about how to get a short date without year
+                return Date(value, Strings.formatterMonth);
             }
 
-            //Long long time ago
-            //TimeLabel.Text = dateTime.ToString(string.Format("d.MM.yyyy", shortTimePattern), cultureInfo);
-            return ShortDate.Format(dateTime);
+            return Date(value, Strings.formatterYear);
+        }
+
+        public static string Duration(int value)
+        {
+            var duration = TimeSpan.FromSeconds(value);
+            if (duration.TotalHours >= 1)
+            {
+                return duration.ToString("h\\:mm\\:ss");
+            }
+            else
+            {
+                return duration.ToString("mm\\:ss");
+            }
         }
 
         public static string Time(int value)
         {
+            // "۰۱:۵۹ ق.ظ"
             return NativeUtils.FormatTime(value);
         }
 
         public static string Time(DateTime value)
         {
-            return ShortTime.Format(value);
+            return NativeUtils.FormatTime(value);
         }
 
         public static string Date(int value)
         {
-            return ShortDate.Format(ToLocalTime(value));
+            return NativeUtils.FormatDate(value, "DATE_SHORTDATE");
+        }
+
+        public static string Date(int value, string format)
+        {
+            return NativeUtils.FormatDate(value, format);
+        }
+
+        public static string Date(DateTime value)
+        {
+            return NativeUtils.FormatDate(value, "DATE_SHORTDATE");
         }
 
         public static DateTime ToLocalTime(long value)
@@ -373,8 +366,12 @@ namespace Telegram.Converters
 
         public static string DateAt(int value)
         {
-            var date = ToLocalTime(value);
-            return string.Format(Strings.formatDateAtTime, ShortDate.Format(date), ShortTime.Format(date));
+            return string.Format(Strings.formatDateAtTime, Date(value), Time(value));
+        }
+
+        public static string DateAt(DateTime value)
+        {
+            return string.Format(Strings.formatDateAtTime, Date(value), Time(value));
         }
 
         public static string ShortNumber(int number)
@@ -418,12 +415,50 @@ namespace Telegram.Converters
                 return string.Empty;
             }
 
-            if (birthdate.Year == 0)
+            string formatted;
+            try
             {
-                return DayMonthFull.Format(new DateTime(2020, birthdate.Month, birthdate.Day));
+                // We sanitize the date by adding months and days to 01/01/year.
+                // This prevents fails when the received date is something like 31/11/2024 or 29/02/2025.
+                static DateTime CreateDate(int year, int month, int day)
+                {
+                    var date = new DateTime(year, 1, 1, 12, 0, 0, DateTimeKind.Local);
+                    date = date.AddMonths(month - 1);
+                    date = date.AddDays(day - 1);
+
+                    return date;
+                }
+
+                DateTime date;
+                string format;
+
+                // GetDateFormatEx doesn't support dates earlier than 01/01/1601
+                if (birthdate.Year < 1601)
+                {
+                    // Must use a leap year because users can set 29/02 as their birthdate.
+                    date = CreateDate(2024, birthdate.Month, birthdate.Day);
+                    format = Strings.formatterMonth;
+                }
+                else
+                {
+                    date = CreateDate(birthdate.Year, birthdate.Month, birthdate.Day);
+                    format = Strings.formatterBoostExpired;
+                }
+
+                formatted = NativeUtils.FormatDate(date.Year, date.Month, date.Day, format);
+            }
+            catch
+            {
+                formatted = null;
             }
 
-            return DayMonthAbbreviatedYear.Format(new DateTime(birthdate.Year, birthdate.Month, birthdate.Day));
+            // The string is going to be empty if GetDateFormatEx fails.
+            if (string.IsNullOrEmpty(formatted))
+            {
+                formatted = string.Format("{0}/{1}/{2}", birthdate.Day, birthdate.Month, birthdate.Year);
+            }
+
+            return formatted;
         }
     }
 }
