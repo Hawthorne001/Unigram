@@ -1495,8 +1495,8 @@ namespace Telegram.Controls
                     Interlocked.Exchange(ref _backgroundNext, _foregroundPrev);
                 }
 
-                //_surface ??= PlaceholderImageHelper.Current.Create(_task.PixelWidth, _task.PixelHeight);
-                //PlaceholderImageHelper.Current.Invalidate(_surface, next);
+                //_surface ??= Direct2D.Current.Create(_task.PixelWidth, _task.PixelHeight);
+                //Direct2D.Current.Invalidate(_surface, next);
 
                 next.Source.Invalidate();
 
